@@ -110,12 +110,21 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
     renderPills(participantsMeta, []);
     return;
   }
-  const { points, url, fromCache } = data;
-  renderPills(participantsMeta, [
+  const { points, urls, counts, includeSchool, includeOrg } = data;
+  const pills = [
     { label: `punten: ${points.length}` },
-    url ? { label: "local-participants", href: url, title: url } : null,
-    fromCache ? { label: `cache: ${fromCache}`, kind: "cache" } : null,
-  ].filter(Boolean));
+    counts ? { label: `type=1: ${counts.school} · isorg: ${counts.org} · uniek: ${counts.merged}` } : null,
+    includeSchool === false ? { label: "type=1 uit", kind: "warn" } : null,
+    includeOrg === false ? { label: "isorg uit", kind: "warn" } : null,
+  ].filter(Boolean);
+
+  (urls ?? []).forEach((u) => {
+    if (!u?.url) return;
+    pills.push({ label: u.label ?? "local-participants", href: u.url, title: u.url });
+    if (u.fromCache) pills.push({ label: `cache: ${u.fromCache}`, kind: "cache" });
+  });
+
+  renderPills(participantsMeta, pills);
 
   if (!points.length) {
     text(participantsBox, "Geen punten gevonden voor deze PC4/jaar.");
@@ -137,6 +146,46 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
   }
 }
 
+export function renderCandidates(candidatesBox, candidatesMeta, data) {
+  clear(candidatesBox);
+  if (!data) {
+    text(candidatesBox, "Nog geen data.");
+    renderPills(candidatesMeta, []);
+    return;
+  }
+  const { candidates, urls } = data;
+  const pills = [{ label: `kandidaten: ${candidates.length}` }];
+  (urls ?? []).forEach((u) => {
+    if (!u?.url) return;
+    pills.push({ label: u.label ?? "local-participants", href: u.url, title: u.url });
+    if (u.fromCache) pills.push({ label: `cache: ${u.fromCache}`, kind: "cache" });
+  });
+  renderPills(candidatesMeta, pills);
+
+  if (!candidates.length) {
+    text(candidatesBox, "Geen kandidaten (binnen radius of topN).");
+    return;
+  }
+
+  const rows = candidates.map((c) => {
+    const birds = (c.topBirds ?? []).slice(0, 8);
+    const birdsText = birds.map((b) => `${b.name} (${b.number})`).join(", ");
+    const link = document.createElement("a");
+    link.href = c.entryUrl;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = String(c.id);
+
+    return [link, fmtMeters(c.distance_m), c.lat.toFixed(6), c.lng.toFixed(6), birdsText || "(geen data)"];
+  });
+
+  const table = makeTable({
+    columns: ["id", "afstand", "lat", "lng", "top birds (max 8)"],
+    rows,
+  });
+  candidatesBox.appendChild(table);
+}
+
 export function renderComputed(computedBox, computedMeta, computedProgress, data) {
   clear(computedBox);
   if (!data) {
@@ -144,7 +193,6 @@ export function renderComputed(computedBox, computedMeta, computedProgress, data
     renderPills(computedMeta, []);
     return;
   }
-  // After combining the top tables, this section is mainly for progress/status.
   const { status, totalEntries, okCount, failCount, cacheHits, done } = data;
   const isDone = status === "done";
   const isRunning = status === "running";
@@ -175,44 +223,6 @@ export function renderComputed(computedBox, computedMeta, computedProgress, data
 
 export function setComputedProgress(computedProgress, msg) {
   text(computedProgress, msg ?? "");
-}
-
-export function renderCandidates(candidatesBox, candidatesMeta, data) {
-  clear(candidatesBox);
-  if (!data) {
-    text(candidatesBox, "Nog geen data.");
-    renderPills(candidatesMeta, []);
-    return;
-  }
-  const { candidates, url, fromCache } = data;
-  renderPills(candidatesMeta, [
-    { label: `kandidaten: ${candidates.length}` },
-    url ? { label: "local-participants", href: url, title: url } : null,
-    fromCache ? { label: `cache: ${fromCache}`, kind: "cache" } : null,
-  ].filter(Boolean));
-
-  if (!candidates.length) {
-    text(candidatesBox, "Geen kandidaten (binnen radius of topN).");
-    return;
-  }
-
-  const rows = candidates.map((c) => {
-    const birds = (c.topBirds ?? []).slice(0, 8);
-    const birdsText = birds.map((b) => `${b.name} (${b.number})`).join(", ");
-    const link = document.createElement("a");
-    link.href = c.entryUrl;
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.textContent = String(c.id);
-
-    return [link, fmtMeters(c.distance_m), c.lat.toFixed(6), c.lng.toFixed(6), birdsText || "(geen data)"];
-  });
-
-  const table = makeTable({
-    columns: ["id", "afstand", "lat", "lng", "top birds (max 8)"],
-    rows,
-  });
-  candidatesBox.appendChild(table);
 }
 
 function getComputedTotalByName(computed, name) {
