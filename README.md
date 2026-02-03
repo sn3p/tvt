@@ -36,3 +36,44 @@ Praktische consequentie:
   fetchen en `data-id` eruit te parsen.
 - Daarnaast lijken uuid-links niet altijd (historisch) te werken, bv. bij anonieme inzendingen of oudere jaren.
 
+## Kaartweergave (Leaflet + OSM) — draft
+
+Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen en per entry details kunnen openen.
+
+### MVP scope (eerst PC4=9721)
+- Haal inzendingen op voor één PC4 (start met `9721`), later uitbreiden naar meerdere PC4.
+- Toon alle inzendingen als markers (cirkel):
+  - regulier (`type=1`) = oranje
+  - school/organisatie (`isorg=true`) = blauw
+  - witte outline
+- Zoom: fit bounds op alle markers (geen echte PC4 polygon nodig in MVP).
+- Per marker: popup met entry details:
+  - laad `entry-top-birds` voor die entry
+  - sorteer op aantal desc en toon als lijst: `1. Koolmees (3)` etc.
+
+### Databronnen / API calls
+- Participants (punten met lat/lng + id):
+  - `list-local-participants?year=YYYY&zipcode=PC4&type=1`
+  - `list-local-participants?year=YYYY&zipcode=PC4&isorg=true`
+- Entry details:
+  - `entry-top-birds?year=YYYY&id=<entryId>&limit=9999`
+
+### Performance & rate-limit strategie
+- Markers direct renderen (2 participants calls).
+- Entry details lazy-load bij click (popup toont `Loading…`).
+- Optioneel: background prefetch van `entry-top-birds` voor alle ids in het geselecteerde PC4 gebied:
+  - concurrency limiter (bijv. 4–5 tegelijk)
+  - progress + stop knop
+- Caching:
+  - per `(year,id)` entry-top-birds cachen (bijv. memory/IndexedDB later)
+  - popup toont direct data als al gecached.
+
+### OSM attribution (verplicht)
+- Zorg dat de Leaflet tile layer zichtbaar attribution toont:
+  - `© OpenStreetMap contributors`
+- Let op: default OSM tiles zijn niet bedoeld voor heavy production use; later evt. eigen tile provider.
+
+### Later (out of scope MVP)
+- Alle PC4 gebieden / heel NL (mogelijk scraping + eigen DB).
+- Soortenlijst interactief maken (klik soort → visualisatie op kaart: heatmap/aantallen).
+- Marker clustering of canvas rendering voor schaal.

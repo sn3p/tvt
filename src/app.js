@@ -88,10 +88,10 @@ function createSettingsStore(key) {
 }
 
 async function fetchParticipantsMerged(cache, { year, pc4, includeSchool, includeOrg, signal }) {
-  const toPoints = (json) => {
+  const toPoints = (json, source) => {
     const ptsRaw = Array.isArray(json?.data) ? json.data : [];
     return ptsRaw
-      .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
+      .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng), source }))
       .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
   };
 
@@ -109,12 +109,19 @@ async function fetchParticipantsMerged(cache, { year, pc4, includeSchool, includ
       : Promise.resolve(null),
   ]);
 
-  const schoolPoints = schoolR ? toPoints(schoolR.value.json) : [];
-  const orgPoints = orgR ? toPoints(orgR.value.json) : [];
+  const schoolPoints = schoolR ? toPoints(schoolR.value.json, "school") : [];
+  const orgPoints = orgR ? toPoints(orgR.value.json, "org") : [];
 
   const byId = new Map();
   for (const p of schoolPoints) byId.set(p.id, p);
-  for (const p of orgPoints) if (!byId.has(p.id)) byId.set(p.id, p);
+  for (const p of orgPoints) {
+    const existing = byId.get(p.id);
+    if (!existing) {
+      byId.set(p.id, p);
+    } else {
+      byId.set(p.id, { ...existing, source: existing.source === p.source ? existing.source : "both" });
+    }
+  }
   const points = Array.from(byId.values());
 
   const urls = [];

@@ -76,6 +76,34 @@ code { font-family: var(--mono); }
   color: rgba(255, 255, 255, 0.92);
 }
 
+.subtabs {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+
+.subtab-btn {
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.20);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.subtab-btn[aria-pressed="true"] {
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.12);
+}
+
+.map-box {
+  height: 440px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
 h1 {
   margin: 0 0 6px;
   font-size: 22px;

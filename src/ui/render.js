@@ -110,7 +110,7 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
     renderPills(participantsMeta, []);
     return;
   }
-  const { points, urls, counts, includeSchool, includeOrg } = data;
+  const { points, urls, counts, includeSchool, includeOrg, year } = data;
   const pills = [
     { label: `punten: ${points.length}` },
     counts ? { label: `type=1: ${counts.school} · isorg: ${counts.org} · uniek: ${counts.merged}` } : null,
@@ -131,19 +131,145 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
     return;
   }
 
-  const table = makeTable({
-    columns: ["id", "lat", "lng"],
-    rows: points.slice(0, 200).map((p) => [String(p.id), p.lat.toFixed(6), p.lng.toFixed(6)]),
-  });
-  participantsBox.appendChild(table);
+  const viewKey = "mvt:participantsView";
+  const getView = () => window.localStorage.getItem(viewKey) || "list";
+  const setView = (v) => window.localStorage.setItem(viewKey, v);
 
-  if (points.length > 200) {
-    const note = document.createElement("div");
-    note.className = "muted";
-    note.style.marginTop = "10px";
-    note.textContent = `Toont eerste 200 van ${points.length} punten.`;
-    participantsBox.appendChild(note);
+  const tabs = document.createElement("div");
+  tabs.className = "subtabs";
+
+  const btnList = document.createElement("button");
+  btnList.type = "button";
+  btnList.className = "subtab-btn";
+  btnList.textContent = "Lijst";
+
+  const btnMap = document.createElement("button");
+  btnMap.type = "button";
+  btnMap.className = "subtab-btn";
+  btnMap.textContent = "Kaart";
+
+  tabs.appendChild(btnList);
+  tabs.appendChild(btnMap);
+  participantsBox.appendChild(tabs);
+
+  const panelList = document.createElement("div");
+  const panelMap = document.createElement("div");
+  panelMap.className = "map-box";
+  panelMap.setAttribute("aria-label", "Kaart met inzendingen");
+  participantsBox.appendChild(panelList);
+  participantsBox.appendChild(panelMap);
+
+  function entryTopBirdsUrl(id) {
+    const y = year != null ? String(year) : "";
+    return `https://vbn-tvt.northsea.cloud/v1/report/entry-top-birds?year=${encodeURIComponent(y)}&id=${encodeURIComponent(
+      String(id)
+    )}&limit=9999`;
   }
+
+  function sourceLabel(p) {
+    if (p.source === "org") return "isorg";
+    if (p.source === "both") return "beide";
+    return "type=1";
+  }
+
+  function renderList() {
+    clear(panelList);
+
+    const rows = points.slice(0, 200).map((p) => {
+      const link = document.createElement("a");
+      link.href = entryTopBirdsUrl(p.id);
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = String(p.id);
+      link.title = link.href;
+      return [link, p.lat.toFixed(6), p.lng.toFixed(6), sourceLabel(p)];
+    });
+
+    const table = makeTable({
+      columns: ["id", "lat", "lng", "bron"],
+      rows,
+    });
+    panelList.appendChild(table);
+
+    if (points.length > 200) {
+      const note = document.createElement("div");
+      note.className = "muted";
+      note.style.marginTop = "10px";
+      note.textContent = `Toont eerste 200 van ${points.length} punten.`;
+      panelList.appendChild(note);
+    }
+  }
+
+  function initMap() {
+    if (panelMap._leafletMap) return;
+    const L = window.L;
+    if (!L) {
+      panelMap.textContent = "Leaflet is nog niet geladen.";
+      return;
+    }
+
+    const map = L.map(panelMap, { preferCanvas: true });
+    panelMap._leafletMap = map;
+
+    // OpenStreetMap tiles: attribution is required by OSM.
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const colorSchool = "#fb923c"; // orange
+    const colorOrg = "#60a5fa"; // blue
+    const colorBoth = "#a78bfa"; // purple
+
+    const markers = [];
+    for (const p of points) {
+      const fillColor = p.source === "org" ? colorOrg : p.source === "both" ? colorBoth : colorSchool;
+      const m = L.circleMarker([p.lat, p.lng], {
+        radius: 6,
+        color: "#ffffff",
+        weight: 2,
+        opacity: 0.9,
+        fillColor,
+        fillOpacity: 0.9,
+      });
+      m.bindPopup(
+        `<div style="font-family: ui-sans-serif, system-ui; font-size: 13px; line-height: 1.35;">
+          <div><strong>id</strong>: <a href="${entryTopBirdsUrl(p.id)}" target="_blank" rel="noreferrer">${String(p.id)}</a></div>
+          <div><strong>bron</strong>: ${sourceLabel(p)}</div>
+        </div>`
+      );
+      m.addTo(map);
+      markers.push(m);
+    }
+
+    if (markers.length) {
+      const group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds().pad(0.12));
+    } else {
+      map.setView([52.1, 5.3], 7);
+    }
+
+    // Leaflet needs a resize tick when shown.
+    setTimeout(() => map.invalidateSize(), 0);
+  }
+
+  function setActive(view) {
+    const isList = view === "list";
+    btnList.setAttribute("aria-pressed", isList ? "true" : "false");
+    btnMap.setAttribute("aria-pressed", isList ? "false" : "true");
+    panelList.hidden = !isList;
+    panelMap.hidden = isList;
+    setView(view);
+    if (!isList) initMap();
+  }
+
+  btnList.addEventListener("click", () => setActive("list"));
+  btnMap.addEventListener("click", () => setActive("map"));
+
+  renderList();
+  setActive(getView());
+
 }
 
 export function renderCandidates(candidatesBox, candidatesMeta, data) {
