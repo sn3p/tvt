@@ -10,7 +10,7 @@ import {
   renderComputed,
   renderGeocode,
   renderParticipants,
-  renderRemoteTop,
+  renderTopBirdsCombined,
   setComputedProgress,
   setStatus,
   showError,
@@ -20,6 +20,7 @@ const TTL_24H = 24 * 60 * 60 * 1000;
 const TTL_7D = 7 * 24 * 60 * 60 * 1000;
 
 const SETTINGS_KEY = "mvt:settings";
+const LOCAL_PARTICIPANTS_TYPE = 1; // `type` lijkt geen effect te hebben; houd vast op 1.
 
 function normalizePc4(value) {
   const m = String(value ?? "").match(/(\d{4})/);
@@ -82,7 +83,6 @@ export function initApp() {
   const yearInput = $("yearInput");
   const pc4Input = $("pc4Input");
   const addressInput = $("addressInput");
-  const typeSelect = $("typeSelect");
   const topNInput = $("topNInput");
   const radiusInput = $("radiusInput");
 
@@ -139,7 +139,7 @@ export function initApp() {
 
   function renderAll() {
     renderGeocode(geocodeBox, geocodeMeta, state.geocode);
-    renderRemoteTop(remoteTopBox, remoteTopMeta, state.remoteTop);
+    renderTopBirdsCombined(remoteTopBox, remoteTopMeta, state.remoteTop, state.computed);
     renderParticipants(participantsBox, participantsMeta, state.participants);
     renderComputed(computedBox, computedMeta, computedProgress, state.computed);
     renderCandidates(candidatesBox, candidatesMeta, state.candidates);
@@ -150,10 +150,9 @@ export function initApp() {
     setStatus(statusBar, "Bezig met ophalen…");
 
     const year = readNumber(yearInput.value, new Date().getFullYear());
-    const type = readNumber(typeSelect.value, 1);
     const address = String(addressInput.value ?? "").trim();
 
-    saveSettings({ year, pc4: pc4Input.value, address, type, topN: topNInput.value, radius: radiusInput.value });
+    saveSettings({ year, pc4: pc4Input.value, address, topN: topNInput.value, radius: radiusInput.value });
 
     // Optional: geocode address
     let center = null;
@@ -200,16 +199,16 @@ export function initApp() {
     // Local participants
     try {
       setStatus(statusBar, "Deelnemers (lokaal)…");
-      const key = cacheKey(["vbn", "participants", year, pc4, type]);
+      const key = cacheKey(["vbn", "participants", year, pc4]);
       const r = await cached(cache, key, TTL_24H, () =>
-        listLocalParticipants({ year, zipcode: pc4, type, limit: 9999, signal })
+        listLocalParticipants({ year, zipcode: pc4, type: LOCAL_PARTICIPANTS_TYPE, limit: 9999, signal })
       );
       const ptsRaw = Array.isArray(r.value.json?.data) ? r.value.json.data : [];
       const points = ptsRaw
         .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
         .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
 
-      state.participants = { url: r.value.url, points, fromCache: r.fromCache, year, pc4, type };
+      state.participants = { url: r.value.url, points, fromCache: r.fromCache, year, pc4 };
     } catch (err) {
       state.participants = null;
       showError(errorBox, `${err}\n\n${explainCorsHint()}`);
@@ -228,14 +227,13 @@ export function initApp() {
     resetOutputs();
     const year = readNumber(yearInput.value, new Date().getFullYear());
     const pc4 = normalizePc4(pc4Input.value);
-    const type = readNumber(typeSelect.value, 1);
 
     if (!pc4) {
       showError(errorBox, "Vul eerst een PC4 in.");
       return;
     }
 
-    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4 || state.participants.type !== type) {
+    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4) {
       // Ensure we have participants loaded for the current params
       await runLookup({ signal });
       if (!state.participants) return;
@@ -245,9 +243,13 @@ export function initApp() {
     const totals = new Map();
     const startedAt = Date.now();
     let cacheHits = 0;
+    let okCount = 0;
+    let failCount = 0;
 
-    setComputedProgress(computedProgress, `Start… (0/${ids.length})`);
+    state.computed = { status: "running", totalEntries: ids.length, done: 0, okCount: 0, failCount: 0, cacheHits: 0 };
+    setComputedProgress(computedProgress, "Start…");
     setStatus(statusBar, "Berekent totals uit alle entries…");
+    renderAll();
 
     const results = await promisePool(
       ids,
@@ -265,14 +267,18 @@ export function initApp() {
           const elapsed = (Date.now() - startedAt) / 1000;
           const rate = done > 0 ? done / Math.max(1, elapsed) : 0;
           const remaining = rate > 0 ? (total - done) / rate : null;
-          const eta = remaining != null ? `, ETA ~${remaining.toFixed(0)}s` : "";
-          setComputedProgress(computedProgress, `Bezig… (${done}/${total}${eta})`);
+          const eta = remaining != null ? `ETA ~${remaining.toFixed(0)}s` : "";
+          setComputedProgress(computedProgress, eta ? `Bezig… ${eta}` : "Bezig…");
+          if (state.computed && state.computed.status === "running") {
+            state.computed.done = done;
+            state.computed.totalEntries = total;
+            state.computed.cacheHits = cacheHits;
+          }
+          renderAll();
         },
       }
     );
 
-    let okCount = 0;
-    let failCount = 0;
     for (const r of results) {
       if (r.status === "fulfilled") {
         okCount += 1;
@@ -283,16 +289,19 @@ export function initApp() {
     }
 
     state.computed = {
-      topList: sortTopList(totals, 20),
+      status: "done",
+      // keep enough rows so remote-top-10 species are very likely present for comparisons
+      topList: sortTopList(totals, 50),
+      totalsByName: Object.fromEntries(totals.entries()),
       totalEntries: ids.length,
       okCount,
       failCount,
-      fromCacheHint: cacheHits ? `cache hits: ${cacheHits}` : "",
+      cacheHits,
     };
 
-    setComputedProgress(computedProgress, `Klaar. (${okCount}/${ids.length})`);
+    setComputedProgress(computedProgress, "");
     renderAll();
-    setStatus(statusBar, "Klaar met berekenen.");
+    setStatus(statusBar, failCount ? "Klaar (onvolledig)." : "Klaar.");
   }
 
   async function runFindMine({ signal } = {}) {
@@ -300,7 +309,6 @@ export function initApp() {
 
     const year = readNumber(yearInput.value, new Date().getFullYear());
     const pc4 = normalizePc4(pc4Input.value);
-    const type = readNumber(typeSelect.value, 1);
     const topN = readNumber(topNInput.value, 10);
     const radius = readNumber(radiusInput.value, 300);
 
@@ -322,7 +330,7 @@ export function initApp() {
     }
 
     // Ensure participants loaded
-    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4 || state.participants.type !== type) {
+    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4) {
       await runLookup({ signal });
       if (!state.participants) return;
     }
@@ -361,7 +369,6 @@ export function initApp() {
   yearInput.value = String(settings.year ?? new Date().getFullYear());
   if (settings.pc4) pc4Input.value = settings.pc4;
   if (settings.address) addressInput.value = settings.address;
-  if (settings.type) typeSelect.value = String(settings.type);
   if (settings.topN) topNInput.value = String(settings.topN);
   if (settings.radius) radiusInput.value = String(settings.radius);
 

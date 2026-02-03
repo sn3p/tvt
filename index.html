@@ -42,14 +42,12 @@
           <small class="muted">Best-guess via PDOK. We gebruiken lat/lng om deelnemers te rangschikken.</small>
         </label>
 
-        <label class="field">
+        <div class="field">
           <span>Type</span>
-          <select id="typeSelect" name="type">
-            <option value="1" selected>1 – inzending</option>
-            <option value="2">2 – (onbekend)</option>
-            <option value="3">3 – (onbekend)</option>
-          </select>
-        </label>
+          <div class="muted" style="padding: 10px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.15);">
+            1 (vast) — `type` lijkt geen effect te hebben op `list-local-participants`
+          </div>
+        </div>
 
         <label class="field">
           <span>Kandidaten (topN)</span>
@@ -81,7 +79,7 @@
     </section>
 
     <section class="card">
-      <h2>Top soorten (snel)</h2>
+      <h2>Top soorten</h2>
       <div id="remoteTopMeta" class="meta"></div>
       <div id="remoteTopBox" class="muted">Nog geen data.</div>
     </section>
@@ -93,7 +91,7 @@
     </section>
 
     <section class="card">
-      <h2>Top soorten (berekend uit alle entries)</h2>
+      <h2>Berekening (uit alle entries)</h2>
       <div id="computedMeta" class="meta"></div>
       <div id="computedProgress" class="muted">Nog niet gestart.</div>
       <div id="computedBox" class="muted">Nog geen data.</div>

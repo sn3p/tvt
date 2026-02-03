@@ -87,7 +87,7 @@ export function renderRemoteTop(remoteTopBox, remoteTopMeta, data) {
   }
   const { list, url, fromCache } = data;
   renderPills(remoteTopMeta, [
-    url ? { label: url } : null,
+    url ? { label: "remote-top-results", href: url, title: url } : null,
     fromCache ? { label: `cache: ${fromCache}`, kind: "cache" } : null,
   ].filter(Boolean));
 
@@ -113,7 +113,7 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
   const { points, url, fromCache } = data;
   renderPills(participantsMeta, [
     { label: `punten: ${points.length}` },
-    url ? { label: url } : null,
+    url ? { label: "local-participants", href: url, title: url } : null,
     fromCache ? { label: `cache: ${fromCache}`, kind: "cache" } : null,
   ].filter(Boolean));
 
@@ -144,24 +144,33 @@ export function renderComputed(computedBox, computedMeta, computedProgress, data
     renderPills(computedMeta, []);
     return;
   }
-  const { topList, totalEntries, okCount, failCount, fromCacheHint } = data;
+  // After combining the top tables, this section is mainly for progress/status.
+  const { status, totalEntries, okCount, failCount, cacheHits, done } = data;
+  const isDone = status === "done";
+  const isRunning = status === "running";
+  const complete = isDone && failCount === 0 && okCount === totalEntries;
+
+  const entriesLabel = isRunning
+    ? `entries: ${done}/${totalEntries}`
+    : complete
+      ? `entries: ${totalEntries}`
+      : isDone
+        ? `entries: ${okCount}/${totalEntries}`
+        : `entries: ${totalEntries}`;
+
   renderPills(computedMeta, [
-    { label: `entries: ${totalEntries}` },
-    { label: `ok: ${okCount}`, kind: "ok" },
-    failCount ? { label: `fail: ${failCount}`, kind: "warn" } : null,
-    fromCacheHint ? { label: fromCacheHint, kind: "cache" } : null,
+    { label: entriesLabel, kind: complete ? "ok" : (isDone && failCount ? "warn" : null) },
+    cacheHits ? { label: `cache hits: ${cacheHits}`, kind: "cache" } : null,
+    failCount ? { label: `missing: ${failCount}`, kind: "warn" } : null,
   ].filter(Boolean));
 
-  if (!topList?.length) {
-    text(computedBox, "Geen data om te tonen.");
-    return;
+  if (isRunning) {
+    text(computedBox, "Bezig met berekenen… (resultaten verschijnen in de Top soorten tabel)");
+  } else if (isDone) {
+    text(computedBox, complete ? "Klaar." : "Klaar (onvolledig door errors/timeouts).");
+  } else {
+    text(computedBox, "Nog niet gestart.");
   }
-
-  const table = makeTable({
-    columns: ["#", "Soort", "Totaal"],
-    rows: topList.map((b, i) => [String(i + 1), b.name, String(b.total)]),
-  });
-  computedBox.appendChild(table);
 }
 
 export function setComputedProgress(computedProgress, msg) {
@@ -178,7 +187,7 @@ export function renderCandidates(candidatesBox, candidatesMeta, data) {
   const { candidates, url, fromCache } = data;
   renderPills(candidatesMeta, [
     { label: `kandidaten: ${candidates.length}` },
-    url ? { label: url } : null,
+    url ? { label: "local-participants", href: url, title: url } : null,
     fromCache ? { label: `cache: ${fromCache}`, kind: "cache" } : null,
   ].filter(Boolean));
 
@@ -204,5 +213,98 @@ export function renderCandidates(candidatesBox, candidatesMeta, data) {
     rows,
   });
   candidatesBox.appendChild(table);
+}
+
+function getComputedTotalByName(computed, name) {
+  if (!computed) return null;
+  const byName = computed.totalsByName;
+  if (byName && Object.prototype.hasOwnProperty.call(byName, name)) return byName[name];
+  return null;
+}
+
+function isComputedComplete(computed) {
+  return (
+    computed &&
+    computed.status === "done" &&
+    computed.failCount === 0 &&
+    computed.okCount === computed.totalEntries
+  );
+}
+
+function countCell({ remoteCount, computedCount, mismatch }) {
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.alignItems = "center";
+  wrap.style.gap = "8px";
+
+  const span = document.createElement("span");
+  span.textContent = mismatch ? `${computedCount}/${remoteCount}` : String(remoteCount);
+  wrap.appendChild(span);
+
+  if (mismatch) {
+    const warn = document.createElement("span");
+    warn.className = "pill warn";
+    warn.textContent = "!";
+    warn.title = `Verschil: berekend=${computedCount}, snel=${remoteCount}`;
+    wrap.appendChild(warn);
+  }
+  return wrap;
+}
+
+export function renderTopBirdsCombined(topBox, metaBox, remote, computed) {
+  clear(topBox);
+
+  const pills = [];
+  if (remote?.url) pills.push({ label: "remote-top-results", href: remote.url, title: remote.url });
+  if (remote?.fromCache) pills.push({ label: `cache: ${remote.fromCache}`, kind: "cache" });
+
+  const complete = isComputedComplete(computed);
+  if (computed) {
+    if (computed.status === "running") {
+      pills.push({ label: `entries: ${computed.done}/${computed.totalEntries}` });
+    } else if (computed.status === "done") {
+      const entriesLabel = complete ? `entries: ${computed.totalEntries}` : `entries: ${computed.okCount}/${computed.totalEntries}`;
+      pills.push({ label: entriesLabel, kind: complete ? "ok" : (computed.failCount ? "warn" : null) });
+      if (computed.failCount) pills.push({ label: `missing: ${computed.failCount}`, kind: "warn" });
+    }
+  }
+
+  renderPills(metaBox, pills);
+
+  const remoteTop10 = remote?.list ?? [];
+  if (!remoteTop10.length) {
+    text(topBox, "Nog geen data.");
+    return;
+  }
+
+  const rows = [];
+
+  // Rows 1–10: always from remote, optionally show mismatch if computed is complete.
+  for (let i = 0; i < remoteTop10.length; i++) {
+    const r = remoteTop10[i];
+    const computedTotal = complete ? getComputedTotalByName(computed, r.name) : null;
+    const mismatch = complete && typeof computedTotal === "number" && computedTotal !== r.number;
+    const cell =
+      mismatch && typeof computedTotal === "number"
+        ? countCell({ remoteCount: r.number, computedCount: computedTotal, mismatch: true })
+        : String(r.number);
+    rows.push([String(i + 1), r.name, cell]);
+  }
+
+  // Rows 11+: only show when computed is complete (avoid misleading partial data).
+  if (complete) {
+    const remoteNames = new Set(remoteTop10.map((x) => x.name));
+    const computedList = computed?.topList ?? [];
+    for (const c of computedList) {
+      if (remoteNames.has(c.name)) continue;
+      rows.push([String(rows.length + 1), c.name, String(c.total)]);
+    }
+  }
+
+  const table = makeTable({
+    columns: ["#", "Soort", "Aantal"],
+    rows,
+  });
+  topBox.appendChild(table);
 }
 

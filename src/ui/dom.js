@@ -17,10 +17,10 @@ export function setHidden(node, hidden) {
 }
 
 export function pill({ label, kind } = {}) {
-  const span = document.createElement("span");
-  span.className = `pill${kind ? ` ${kind}` : ""}`;
-  span.textContent = label ?? "";
-  return span;
+  const el = document.createElement("span");
+  el.className = `pill${kind ? ` ${kind}` : ""}`;
+  el.textContent = label ?? "";
+  return el;
 }
 
 export function renderPills(node, pills) {
@@ -30,7 +30,24 @@ export function renderPills(node, pills) {
   wrap.style.display = "flex";
   wrap.style.flexWrap = "wrap";
   wrap.style.gap = "8px";
-  pills.forEach((p) => wrap.appendChild(pill(p)));
+  pills.forEach((p) => {
+    if (!p) return;
+    const { href, title, ...rest } = p;
+    const base = pill(rest);
+    if (title) base.title = title;
+    if (href) {
+      const a = document.createElement("a");
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.className = base.className;
+      a.textContent = base.textContent;
+      if (title) a.title = title;
+      wrap.appendChild(a);
+    } else {
+      wrap.appendChild(base);
+    }
+  });
   node.appendChild(wrap);
 }
 
