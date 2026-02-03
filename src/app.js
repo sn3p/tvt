@@ -1,5 +1,6 @@
 import { geocodeAddress } from "./api/pdok.js";
-import { entryTopBirds, listLocalParticipants, listRemoteTopResults } from "./api/vbn.js";
+import { listLocalParticipants, listRemoteTopResults } from "./api/vbn.js";
+import { getEntryTopBirdsCached } from "./api/vbnCache.js";
 import { normalizeEntryTopBirds, aggregateTotals, sortTopList } from "./lib/birds.js";
 import { cacheKey, createCache } from "./lib/cache.js";
 import { rankByDistance } from "./lib/geo.js";
@@ -331,10 +332,10 @@ export function initApp() {
       ids,
       5,
       async (id) => {
-        const key = cacheKey(["vbn", "entryTopBirds", year, id]);
-        const r = await cached(cache, key, TTL_24H, () => entryTopBirds({ year, id, limit: 9999, signal }));
-        if (r.fromCache) cacheHits += 1;
-        const birds = normalizeEntryTopBirds(r.value.json);
+        const r = await getEntryTopBirdsCached({ year, id, limit: 9999, signal });
+        // For this cache, treat every re-use as a cache hit (best-effort metric).
+        cacheHits += 1;
+        const birds = normalizeEntryTopBirds(r.json);
         return { id, birds };
       },
       {
@@ -509,10 +510,9 @@ export function initApp() {
       ranked,
       4,
       async (c) => {
-        const k = cacheKey(["vbn", "entryTopBirds", year, c.id]);
-        const r = await cached(cache, k, TTL_24H, () => entryTopBirds({ year, id: c.id, limit: 9999, signal }));
-        const topBirds = normalizeEntryTopBirds(r.value.json);
-        return { ...c, entryUrl: r.value.url, topBirds };
+        const r = await getEntryTopBirdsCached({ year, id: c.id, limit: 9999, signal });
+        const topBirds = normalizeEntryTopBirds(r.json);
+        return { ...c, entryUrl: r.url, topBirds };
       },
       { signal }
     );

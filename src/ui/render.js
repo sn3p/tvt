@@ -1,4 +1,69 @@
 import { clear, renderPills, setHidden, text } from "./dom.js";
+import { getEntryTopBirdsCached } from "../api/vbnCache.js";
+
+function entryTopBirdsUrl({ year, id, limit = 9999 }) {
+  return `https://vbn-tvt.northsea.cloud/v1/report/entry-top-birds?year=${encodeURIComponent(
+    String(year)
+  )}&id=${encodeURIComponent(String(id))}&limit=${encodeURIComponent(String(limit))}`;
+}
+
+function birdImageBase() {
+  // Observed in Vogelbescherming DOM & data json:
+  // https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/<filename>.png
+  return "https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/";
+}
+
+function birdFallbackFilename() {
+  return "niet-herkend.png";
+}
+
+function guessImageFilename(name) {
+  // best-effort: lowercase, strip diacritics, spaces -> underscore
+  // (only used as fallback when we can't map id->image)
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .concat(".png");
+}
+
+function makeImg({ filename, alt }) {
+  const base = birdImageBase();
+  const fallback = birdFallbackFilename();
+
+  const wrap = document.createElement("div");
+  wrap.className = "mvt-img";
+
+  const img = document.createElement("img");
+  img.alt = alt || "";
+  img.loading = "lazy";
+  img.decoding = "async";
+
+  const setToNA = () => {
+    wrap.innerHTML = "";
+    const na = document.createElement("div");
+    na.className = "mvt-img-na";
+    na.textContent = "N/A";
+    wrap.appendChild(na);
+  };
+
+  let triedFallback = false;
+  img.onerror = () => {
+    if (!triedFallback && fallback) {
+      triedFallback = true;
+      img.src = `${base}${fallback}`;
+      return;
+    }
+    setToNA();
+  };
+
+  img.src = `${base}${String(filename || "")}`;
+  wrap.appendChild(img);
+  return wrap;
+}
 
 function fmtMeters(m) {
   if (!Number.isFinite(m)) return "";
@@ -159,13 +224,6 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
   participantsBox.appendChild(panelList);
   participantsBox.appendChild(panelMap);
 
-  function entryTopBirdsUrl(id) {
-    const y = year != null ? String(year) : "";
-    return `https://vbn-tvt.northsea.cloud/v1/report/entry-top-birds?year=${encodeURIComponent(y)}&id=${encodeURIComponent(
-      String(id)
-    )}&limit=9999`;
-  }
-
   function kindLabel(p) {
     // If an entry is present in both lists, treat it as "schoolinzending" for coloring/labeling.
     if (p.source === "org" || p.source === "both") return "Schoolinzending";
@@ -180,7 +238,7 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
       kind.textContent = kindLabel(p);
 
       const link = document.createElement("a");
-      link.href = entryTopBirdsUrl(p.id);
+      link.href = entryTopBirdsUrl({ year, id: p.id, limit: 9999 });
       link.target = "_blank";
       link.rel = "noreferrer";
       link.textContent = "open endpoint";
@@ -226,6 +284,86 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
     const colorOrg = "#60a5fa"; // blue
 
     const markers = [];
+
+    const popupCache = new Map(); // entryId -> Promise<void> load guard
+
+    function setPopupLoading(node) {
+      node.innerHTML = "";
+      const title = document.createElement("div");
+      title.className = "mvt-popup-title";
+      title.textContent = "Loading…";
+      node.appendChild(title);
+      const body = document.createElement("div");
+      body.className = "mvt-popup-body muted";
+      body.textContent = "Loading…";
+      node.appendChild(body);
+      return { title, body };
+    }
+
+    async function loadEntryDetailsInto({ entryId, kind, titleEl, bodyEl }) {
+      const r = await getEntryTopBirdsCached({ year, id: entryId, limit: 9999 });
+      const arr = Array.isArray(r.json?.data) ? r.json.data : [];
+      const birds = arr
+        .map((b) => ({ id: Number(b?.id), name: b?.name ?? b?.vogelnaam ?? "", number: Number(b?.number ?? 0) }))
+        .filter((b) => b.name && Number.isFinite(b.number))
+        .sort((a, b) => b.number - a.number);
+
+      titleEl.textContent = kind;
+      bodyEl.classList.remove("muted");
+      bodyEl.innerHTML = "";
+
+      const link = document.createElement("a");
+      link.href = r.url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = "Open endpoint";
+      link.className = "muted";
+      link.style.display = "inline-block";
+      link.style.marginBottom = "10px";
+      bodyEl.appendChild(link);
+
+      if (!birds.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "Geen vogels gevonden.";
+        bodyEl.appendChild(empty);
+        return;
+      }
+
+      const list = document.createElement("div");
+      list.className = "mvt-popup-list";
+      bodyEl.appendChild(list);
+
+      birds.forEach((b, idx) => {
+        const row = document.createElement("div");
+        row.className = "mvt-bird-row";
+
+        const left = document.createElement("div");
+        left.className = "mvt-bird-left";
+
+        const rank = document.createElement("div");
+        rank.className = "mvt-rank";
+        rank.textContent = String(idx + 1);
+        left.appendChild(rank);
+
+        const filename = guessImageFilename(b.name);
+        left.appendChild(makeImg({ filename, alt: b.name }));
+
+        const name = document.createElement("div");
+        name.className = "mvt-bird-name";
+        name.textContent = b.name;
+        left.appendChild(name);
+
+        const count = document.createElement("div");
+        count.className = "mvt-bird-count";
+        count.textContent = String(b.number);
+
+        row.appendChild(left);
+        row.appendChild(count);
+        list.appendChild(row);
+      });
+    }
+
     for (const p of points) {
       const fillColor = p.source === "org" || p.source === "both" ? colorOrg : colorSchool;
       const m = L.circleMarker([p.lat, p.lng], {
@@ -236,12 +374,23 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
         fillColor,
         fillOpacity: 0.9,
       });
-      m.bindPopup(
-        `<div style="font-family: ui-sans-serif, system-ui; font-size: 13px; line-height: 1.35;">
-          <div><strong>${kindLabel(p)}</strong></div>
-          <div><a href="${entryTopBirdsUrl(p.id)}" target="_blank" rel="noreferrer">Open entry-top-birds endpoint</a></div>
-        </div>`
-      );
+      const popup = document.createElement("div");
+      popup.className = "mvt-popup";
+      const { title, body } = setPopupLoading(popup);
+
+      m.bindPopup(popup, { maxWidth: 380, closeButton: true, autoPan: true });
+
+      m.on("popupopen", () => {
+        if (popupCache.has(p.id)) return;
+        popupCache.set(
+          p.id,
+          loadEntryDetailsInto({ entryId: p.id, kind: kindLabel(p), titleEl: title, bodyEl: body }).catch((err) => {
+            title.textContent = kindLabel(p);
+            body.className = "mvt-popup-body muted";
+            body.textContent = `Error: ${String(err?.message ?? err)}`;
+          })
+        );
+      });
       m.addTo(map);
       markers.push(m);
     }

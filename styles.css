@@ -104,6 +104,108 @@ code { font-family: var(--mono); }
   overflow: hidden;
 }
 
+.mvt-popup {
+  font-family: ui-sans-serif, system-ui;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 14px;
+}
+.leaflet-popup-content {
+  width: 240px;
+  margin: 14px 16px;
+}
+
+.mvt-popup-title {
+  font-weight: 800;
+  font-size: 14px;
+  margin: 2px 0 10px;
+  color: #0b1020;
+}
+
+.mvt-popup-body {
+  margin: 0;
+  color: #0b1020;
+}
+
+.mvt-popup-list {
+  max-height: 260px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+}
+
+.mvt-bird-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-top: 1px solid rgba(11, 16, 32, 0.10);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mvt-bird-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.mvt-rank {
+  width: 18px;
+  text-align: right;
+  color: rgba(11, 16, 32, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.mvt-bird-name {
+  font-weight: 700;
+  color: rgba(11, 16, 32, 0.90);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: none;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.mvt-bird-count {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(11, 16, 32, 0.92);
+  flex: 0 0 auto;
+}
+
+.mvt-img {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.mvt-img img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+
+.mvt-img-na {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(11, 16, 32, 0.55);
+}
+
 h1 {
   margin: 0 0 6px;
   font-size: 22px;
