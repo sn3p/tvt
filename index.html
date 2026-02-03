@@ -42,11 +42,17 @@
           <small class="muted">Best-guess via PDOK. We gebruiken lat/lng om deelnemers te rangschikken.</small>
         </label>
 
-        <div class="field">
-          <span>Type</span>
-          <div class="muted" style="padding: 10px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.15);">
-            1 (vast) — `type` lijkt geen effect te hebben op `list-local-participants`
-          </div>
+        <div class="field field-wide">
+          <span>Deelnemers</span>
+          <label class="check">
+            <input id="includeSchoolInput" name="includeSchool" type="checkbox" checked />
+            <span>Inzending (type=1)</span>
+          </label>
+          <label class="check">
+            <input id="includeOrgInput" name="includeOrg" type="checkbox" checked />
+            <span>Schoolinzending (isorg=true)</span>
+          </label>
+          <small class="muted">We halen beide lijsten op en voegen ze samen (dedupe op entry id).</small>
         </div>
 
         <label class="field">

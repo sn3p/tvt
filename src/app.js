@@ -20,7 +20,16 @@ const TTL_24H = 24 * 60 * 60 * 1000;
 const TTL_7D = 7 * 24 * 60 * 60 * 1000;
 
 const SETTINGS_KEY = "mvt:settings";
-const LOCAL_PARTICIPANTS_TYPE = 1; // `type` lijkt geen effect te hebben; houd vast op 1.
+
+function normalizeBool(v, fallback = false) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true" || s === "1" || s === "yes" || s === "on") return true;
+    if (s === "false" || s === "0" || s === "no" || s === "off") return false;
+  }
+  return fallback;
+}
 
 function normalizePc4(value) {
   const m = String(value ?? "").match(/(\d{4})/);
@@ -83,6 +92,8 @@ export function initApp() {
   const yearInput = $("yearInput");
   const pc4Input = $("pc4Input");
   const addressInput = $("addressInput");
+  const includeSchoolInput = $("includeSchoolInput");
+  const includeOrgInput = $("includeOrgInput");
   const topNInput = $("topNInput");
   const radiusInput = $("radiusInput");
 
@@ -151,8 +162,18 @@ export function initApp() {
 
     const year = readNumber(yearInput.value, new Date().getFullYear());
     const address = String(addressInput.value ?? "").trim();
+    const includeSchool = Boolean(includeSchoolInput.checked);
+    const includeOrg = Boolean(includeOrgInput.checked);
 
-    saveSettings({ year, pc4: pc4Input.value, address, topN: topNInput.value, radius: radiusInput.value });
+    saveSettings({
+      year,
+      pc4: pc4Input.value,
+      address,
+      includeSchool,
+      includeOrg,
+      topN: topNInput.value,
+      radius: radiusInput.value,
+    });
 
     // Optional: geocode address
     let center = null;
@@ -199,16 +220,49 @@ export function initApp() {
     // Local participants
     try {
       setStatus(statusBar, "Deelnemers (lokaal)…");
-      const key = cacheKey(["vbn", "participants", year, pc4]);
-      const r = await cached(cache, key, TTL_24H, () =>
-        listLocalParticipants({ year, zipcode: pc4, type: LOCAL_PARTICIPANTS_TYPE, limit: 9999, signal })
-      );
-      const ptsRaw = Array.isArray(r.value.json?.data) ? r.value.json.data : [];
-      const points = ptsRaw
-        .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
-        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
+      const toPoints = (json) => {
+        const ptsRaw = Array.isArray(json?.data) ? json.data : [];
+        return ptsRaw
+          .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
+          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
+      };
 
-      state.participants = { url: r.value.url, points, fromCache: r.fromCache, year, pc4 };
+      const [schoolR, orgR] = await Promise.all([
+        includeSchool
+          ? cached(cache, cacheKey(["vbn", "participants", "school", year, pc4]), TTL_24H, () =>
+              listLocalParticipants({ year, zipcode: pc4, type: 1, isorg: false, limit: 9999, signal })
+            )
+          : Promise.resolve(null),
+        includeOrg
+          ? cached(cache, cacheKey(["vbn", "participants", "org", year, pc4]), TTL_24H, () =>
+              // For org/school we omit `type` (pass `null`) to mirror Vogelbescherming usage.
+              listLocalParticipants({ year, zipcode: pc4, type: null, isorg: true, limit: 9999, signal })
+            )
+          : Promise.resolve(null),
+      ]);
+
+      const schoolPoints = schoolR ? toPoints(schoolR.value.json) : [];
+      const orgPoints = orgR ? toPoints(orgR.value.json) : [];
+
+      // Merge and dedupe by id.
+      const byId = new Map();
+      for (const p of schoolPoints) byId.set(p.id, p);
+      for (const p of orgPoints) if (!byId.has(p.id)) byId.set(p.id, p);
+      const points = Array.from(byId.values());
+
+      const urls = [];
+      if (schoolR?.value?.url) urls.push({ label: "type=1", url: schoolR.value.url, fromCache: schoolR.fromCache });
+      if (orgR?.value?.url) urls.push({ label: "isorg=true", url: orgR.value.url, fromCache: orgR.fromCache });
+
+      state.participants = {
+        points,
+        urls,
+        year,
+        pc4,
+        includeSchool,
+        includeOrg,
+        counts: { school: schoolPoints.length, org: orgPoints.length, merged: points.length },
+      };
     } catch (err) {
       state.participants = null;
       showError(errorBox, `${err}\n\n${explainCorsHint()}`);
@@ -227,13 +281,21 @@ export function initApp() {
     resetOutputs();
     const year = readNumber(yearInput.value, new Date().getFullYear());
     const pc4 = normalizePc4(pc4Input.value);
+    const includeSchool = Boolean(includeSchoolInput.checked);
+    const includeOrg = Boolean(includeOrgInput.checked);
 
     if (!pc4) {
       showError(errorBox, "Vul eerst een PC4 in.");
       return;
     }
 
-    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4) {
+    if (
+      !state.participants ||
+      state.participants.year !== year ||
+      state.participants.pc4 !== pc4 ||
+      state.participants.includeSchool !== includeSchool ||
+      state.participants.includeOrg !== includeOrg
+    ) {
       // Ensure we have participants loaded for the current params
       await runLookup({ signal });
       if (!state.participants) return;
@@ -309,6 +371,8 @@ export function initApp() {
 
     const year = readNumber(yearInput.value, new Date().getFullYear());
     const pc4 = normalizePc4(pc4Input.value);
+    const includeSchool = Boolean(includeSchoolInput.checked);
+    const includeOrg = Boolean(includeOrgInput.checked);
     const topN = readNumber(topNInput.value, 10);
     const radius = readNumber(radiusInput.value, 300);
 
@@ -330,7 +394,13 @@ export function initApp() {
     }
 
     // Ensure participants loaded
-    if (!state.participants || state.participants.year !== year || state.participants.pc4 !== pc4) {
+    if (
+      !state.participants ||
+      state.participants.year !== year ||
+      state.participants.pc4 !== pc4 ||
+      state.participants.includeSchool !== includeSchool ||
+      state.participants.includeOrg !== includeOrg
+    ) {
       await runLookup({ signal });
       if (!state.participants) return;
     }
@@ -359,7 +429,7 @@ export function initApp() {
       .filter((r) => r.status === "fulfilled")
       .map((r) => r.value);
 
-    state.candidates = { candidates, url: state.participants.url, fromCache: state.participants.fromCache };
+    state.candidates = { candidates, urls: state.participants.urls };
     renderAll();
     setStatus(statusBar, "Klaar met kandidaten.");
   }
@@ -369,6 +439,8 @@ export function initApp() {
   yearInput.value = String(settings.year ?? new Date().getFullYear());
   if (settings.pc4) pc4Input.value = settings.pc4;
   if (settings.address) addressInput.value = settings.address;
+  includeSchoolInput.checked = normalizeBool(settings.includeSchool, true);
+  includeOrgInput.checked = normalizeBool(settings.includeOrg, true);
   if (settings.topN) topNInput.value = String(settings.topN);
   if (settings.radius) radiusInput.value = String(settings.radius);
 
