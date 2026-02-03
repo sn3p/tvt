@@ -132,24 +132,24 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
   }
 
   const viewKey = "mvt:participantsView";
-  const getView = () => window.localStorage.getItem(viewKey) || "list";
+  const getView = () => window.localStorage.getItem(viewKey) || "map";
   const setView = (v) => window.localStorage.setItem(viewKey, v);
 
   const tabs = document.createElement("div");
   tabs.className = "subtabs";
-
-  const btnList = document.createElement("button");
-  btnList.type = "button";
-  btnList.className = "subtab-btn";
-  btnList.textContent = "Lijst";
 
   const btnMap = document.createElement("button");
   btnMap.type = "button";
   btnMap.className = "subtab-btn";
   btnMap.textContent = "Kaart";
 
-  tabs.appendChild(btnList);
   tabs.appendChild(btnMap);
+
+  const btnList = document.createElement("button");
+  btnList.type = "button";
+  btnList.className = "subtab-btn";
+  btnList.textContent = "Lijst";
+  tabs.appendChild(btnList);
   participantsBox.appendChild(tabs);
 
   const panelList = document.createElement("div");
@@ -166,27 +166,31 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
     )}&limit=9999`;
   }
 
-  function sourceLabel(p) {
-    if (p.source === "org") return "isorg";
-    if (p.source === "both") return "beide";
-    return "type=1";
+  function kindLabel(p) {
+    // If an entry is present in both lists, treat it as "schoolinzending" for coloring/labeling.
+    if (p.source === "org" || p.source === "both") return "Schoolinzending";
+    return "Inzending";
   }
 
   function renderList() {
     clear(panelList);
 
     const rows = points.slice(0, 200).map((p) => {
+      const kind = document.createElement("strong");
+      kind.textContent = kindLabel(p);
+
       const link = document.createElement("a");
       link.href = entryTopBirdsUrl(p.id);
       link.target = "_blank";
       link.rel = "noreferrer";
-      link.textContent = String(p.id);
+      link.textContent = "open endpoint";
       link.title = link.href;
-      return [link, p.lat.toFixed(6), p.lng.toFixed(6), sourceLabel(p)];
+
+      return [kind, p.lat.toFixed(6), p.lng.toFixed(6), link];
     });
 
     const table = makeTable({
-      columns: ["id", "lat", "lng", "bron"],
+      columns: ["", "lat", "lng", ""],
       rows,
     });
     panelList.appendChild(table);
@@ -220,11 +224,10 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
 
     const colorSchool = "#fb923c"; // orange
     const colorOrg = "#60a5fa"; // blue
-    const colorBoth = "#a78bfa"; // purple
 
     const markers = [];
     for (const p of points) {
-      const fillColor = p.source === "org" ? colorOrg : p.source === "both" ? colorBoth : colorSchool;
+      const fillColor = p.source === "org" || p.source === "both" ? colorOrg : colorSchool;
       const m = L.circleMarker([p.lat, p.lng], {
         radius: 6,
         color: "#ffffff",
@@ -235,13 +238,50 @@ export function renderParticipants(participantsBox, participantsMeta, data) {
       });
       m.bindPopup(
         `<div style="font-family: ui-sans-serif, system-ui; font-size: 13px; line-height: 1.35;">
-          <div><strong>id</strong>: <a href="${entryTopBirdsUrl(p.id)}" target="_blank" rel="noreferrer">${String(p.id)}</a></div>
-          <div><strong>bron</strong>: ${sourceLabel(p)}</div>
+          <div><strong>${kindLabel(p)}</strong></div>
+          <div><a href="${entryTopBirdsUrl(p.id)}" target="_blank" rel="noreferrer">Open entry-top-birds endpoint</a></div>
         </div>`
       );
       m.addTo(map);
       markers.push(m);
     }
+
+    // Legend
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create("div", "pill");
+      div.style.display = "grid";
+      div.style.gap = "6px";
+      div.style.padding = "10px 10px";
+      div.style.background = "rgba(0, 0, 0, 0.45)";
+      div.style.backdropFilter = "blur(8px)";
+      div.style.borderRadius = "12px";
+      div.style.color = "rgba(255, 255, 255, 0.9)";
+      div.style.maxWidth = "220px";
+
+      const row = (label, color) => {
+        const r = document.createElement("div");
+        r.style.display = "flex";
+        r.style.alignItems = "center";
+        r.style.gap = "8px";
+        const dot = document.createElement("span");
+        dot.style.width = "12px";
+        dot.style.height = "12px";
+        dot.style.borderRadius = "999px";
+        dot.style.border = "2px solid #fff";
+        dot.style.background = color;
+        const t = document.createElement("span");
+        t.textContent = label;
+        r.appendChild(dot);
+        r.appendChild(t);
+        return r;
+      };
+
+      div.appendChild(row("Inzending", colorSchool));
+      div.appendChild(row("Schoolinzending", colorOrg));
+      return div;
+    };
+    legend.addTo(map);
 
     if (markers.length) {
       const group = L.featureGroup(markers);
