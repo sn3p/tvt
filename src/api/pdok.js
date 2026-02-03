@@ -46,7 +46,9 @@ export async function geocodeAddress(address, { rows = 5, signal } = {}) {
     })
     .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
-  const best = candidates[0] ?? null;
+  // PDOK may return a "weg" result first, which has lat/lng but no postcode.
+  // Prefer a candidate that actually contains a PC4 (derived from postcode).
+  const best = candidates.find((c) => c.pc4) ?? candidates[0] ?? null;
   return { url, json, best, candidates };
 }
 

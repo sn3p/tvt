@@ -7,11 +7,8 @@ import { AbortError, promisePool } from "./lib/promisePool.js";
 import { $ } from "./ui/dom.js";
 import {
   renderCandidates,
-  renderComputed,
-  renderGeocode,
   renderParticipants,
   renderTopBirdsCombined,
-  setComputedProgress,
   setStatus,
   showError,
 } from "./ui/render.js";
@@ -20,6 +17,7 @@ const TTL_24H = 24 * 60 * 60 * 1000;
 const TTL_7D = 7 * 24 * 60 * 60 * 1000;
 
 const SETTINGS_KEY = "mvt:settings";
+const MY_SETTINGS_KEY = "mvt:mySettings";
 
 function normalizeBool(v, fallback = false) {
   if (typeof v === "boolean") return v;
@@ -49,26 +47,6 @@ function readNumber(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function loadSettings() {
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) || {};
-  } catch {
-    return {};
-  }
-}
-
-function saveSettings(partial) {
-  const current = loadSettings();
-  const next = { ...current, ...partial };
-  try {
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-  } catch {
-    // ignore
-  }
-}
-
 async function cached(cache, key, ttlMs, fn) {
   const hit = cache.get(key);
   if (hit.hit) return { value: hit.value, fromCache: hit.from, savedAt: hit.savedAt, expiresAt: hit.expiresAt };
@@ -85,21 +63,116 @@ function explainCorsHint() {
   ].join("\n");
 }
 
+function createSettingsStore(key) {
+  function load() {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return {};
+      return JSON.parse(raw) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function save(partial) {
+    const current = load();
+    const next = { ...current, ...partial };
+    try {
+      window.localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }
+
+  return { load, save };
+}
+
+async function fetchParticipantsMerged(cache, { year, pc4, includeSchool, includeOrg, signal }) {
+  const toPoints = (json) => {
+    const ptsRaw = Array.isArray(json?.data) ? json.data : [];
+    return ptsRaw
+      .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
+  };
+
+  const [schoolR, orgR] = await Promise.all([
+    includeSchool
+      ? cached(cache, cacheKey(["vbn", "participants", "school", year, pc4]), TTL_24H, () =>
+        listLocalParticipants({ year, zipcode: pc4, type: 1, isorg: false, limit: 9999, signal })
+      )
+      : Promise.resolve(null),
+    includeOrg
+      ? cached(cache, cacheKey(["vbn", "participants", "org", year, pc4]), TTL_24H, () =>
+        // For org/school we omit `type` (pass `null`) to mirror Vogelbescherming usage.
+        listLocalParticipants({ year, zipcode: pc4, type: null, isorg: true, limit: 9999, signal })
+      )
+      : Promise.resolve(null),
+  ]);
+
+  const schoolPoints = schoolR ? toPoints(schoolR.value.json) : [];
+  const orgPoints = orgR ? toPoints(orgR.value.json) : [];
+
+  const byId = new Map();
+  for (const p of schoolPoints) byId.set(p.id, p);
+  for (const p of orgPoints) if (!byId.has(p.id)) byId.set(p.id, p);
+  const points = Array.from(byId.values());
+
+  const urls = [];
+  if (schoolR?.value?.url) urls.push({ label: "type=1", url: schoolR.value.url, fromCache: schoolR.fromCache });
+  if (orgR?.value?.url) urls.push({ label: "isorg=true", url: orgR.value.url, fromCache: orgR.fromCache });
+
+  return {
+    points,
+    urls,
+    includeSchool,
+    includeOrg,
+    counts: { school: schoolPoints.length, org: orgPoints.length, merged: points.length },
+  };
+}
+
+function applyRoute(route) {
+  const a = route === "mijn" ? "mijn" : "vogeltelling";
+  const b = a === "mijn" ? "vogeltelling" : "mijn";
+  const aEl = document.getElementById(`route-${a}`);
+  const bEl = document.getElementById(`route-${b}`);
+  if (aEl) aEl.hidden = false;
+  if (bEl) bEl.hidden = true;
+
+  document.querySelectorAll(".tab[data-route]").forEach((el) => {
+    const isCurrent = el.getAttribute("data-route") === a;
+    if (isCurrent) el.setAttribute("aria-current", "page");
+    else el.removeAttribute("aria-current");
+  });
+}
+
 export function initApp() {
   const cache = createCache();
+  const settings = createSettingsStore(SETTINGS_KEY);
+  const mySettings = createSettingsStore(MY_SETTINGS_KEY);
 
+  // --- Router (hash-based) ---
+  function currentRoute() {
+    const h = String(window.location.hash || "");
+    if (h.startsWith("#/mijn")) return "mijn";
+    return "vogeltelling";
+  }
+  function syncRoute() {
+    applyRoute(currentRoute());
+  }
+  window.addEventListener("hashchange", syncRoute);
+  if (!window.location.hash) window.location.hash = "#/vogeltelling";
+  syncRoute();
+
+  // --- View 1: Vogeltelling (postcode) ---
   // Form elements
   const yearInput = $("yearInput");
   const pc4Input = $("pc4Input");
   const addressInput = $("addressInput");
   const includeSchoolInput = $("includeSchoolInput");
   const includeOrgInput = $("includeOrgInput");
-  const topNInput = $("topNInput");
-  const radiusInput = $("radiusInput");
 
   const btnLookup = $("btnLookup");
   const btnCompute = $("btnCompute");
-  const btnFindMine = $("btnFindMine");
   const btnStop = $("btnStop");
   const btnClearCache = $("btnClearCache");
 
@@ -107,29 +180,17 @@ export function initApp() {
   const statusBar = $("statusBar");
   const errorBox = $("errorBox");
 
-  const geocodeMeta = $("geocodeMeta");
-  const geocodeBox = $("geocodeBox");
-
   const remoteTopMeta = $("remoteTopMeta");
   const remoteTopBox = $("remoteTopBox");
 
   const participantsMeta = $("participantsMeta");
   const participantsBox = $("participantsBox");
 
-  const computedMeta = $("computedMeta");
-  const computedProgress = $("computedProgress");
-  const computedBox = $("computedBox");
-
-  const candidatesMeta = $("candidatesMeta");
-  const candidatesBox = $("candidatesBox");
-
   // State
   const state = {
-    geocode: null,
     remoteTop: null,
     participants: null,
     computed: null,
-    candidates: null,
   };
 
   let currentAbort = null;
@@ -149,11 +210,8 @@ export function initApp() {
   }
 
   function renderAll() {
-    renderGeocode(geocodeBox, geocodeMeta, state.geocode);
     renderTopBirdsCombined(remoteTopBox, remoteTopMeta, state.remoteTop, state.computed);
     renderParticipants(participantsBox, participantsMeta, state.participants);
-    renderComputed(computedBox, computedMeta, computedProgress, state.computed);
-    renderCandidates(candidatesBox, candidatesMeta, state.candidates);
   }
 
   async function runLookup({ signal } = {}) {
@@ -165,37 +223,27 @@ export function initApp() {
     const includeSchool = Boolean(includeSchoolInput.checked);
     const includeOrg = Boolean(includeOrgInput.checked);
 
-    saveSettings({
+    settings.save({
       year,
       pc4: pc4Input.value,
       address,
       includeSchool,
       includeOrg,
-      topN: topNInput.value,
-      radius: radiusInput.value,
     });
 
-    // Optional: geocode address
-    let center = null;
+    // Optional: geocode address (only to derive PC4)
     if (address) {
       setStatus(statusBar, "Adres lookup (PDOK)…");
       const key = cacheKey(["pdok", "geocode", normalizeAddressKey(address)]);
       try {
         const r = await cached(cache, key, TTL_7D, () => geocodeAddress(address, { signal }));
         const best = r.value.best;
-        state.geocode = { ...r.value, fromCache: r.fromCache };
         if (best?.pc4 && !normalizePc4(pc4Input.value)) {
           pc4Input.value = best.pc4;
         }
-        if (best?.lat != null && best?.lng != null) {
-          center = { lat: best.lat, lng: best.lng };
-        }
       } catch (err) {
-        state.geocode = null;
         showError(errorBox, `${err}\n\n${explainCorsHint()}`);
       }
-    } else {
-      state.geocode = null;
     }
 
     const pc4 = normalizePc4(pc4Input.value);
@@ -220,48 +268,11 @@ export function initApp() {
     // Local participants
     try {
       setStatus(statusBar, "Deelnemers (lokaal)…");
-      const toPoints = (json) => {
-        const ptsRaw = Array.isArray(json?.data) ? json.data : [];
-        return ptsRaw
-          .map((p) => ({ id: p.id, lat: Number(p.lat), lng: Number(p.lng) }))
-          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.id != null);
-      };
-
-      const [schoolR, orgR] = await Promise.all([
-        includeSchool
-          ? cached(cache, cacheKey(["vbn", "participants", "school", year, pc4]), TTL_24H, () =>
-              listLocalParticipants({ year, zipcode: pc4, type: 1, isorg: false, limit: 9999, signal })
-            )
-          : Promise.resolve(null),
-        includeOrg
-          ? cached(cache, cacheKey(["vbn", "participants", "org", year, pc4]), TTL_24H, () =>
-              // For org/school we omit `type` (pass `null`) to mirror Vogelbescherming usage.
-              listLocalParticipants({ year, zipcode: pc4, type: null, isorg: true, limit: 9999, signal })
-            )
-          : Promise.resolve(null),
-      ]);
-
-      const schoolPoints = schoolR ? toPoints(schoolR.value.json) : [];
-      const orgPoints = orgR ? toPoints(orgR.value.json) : [];
-
-      // Merge and dedupe by id.
-      const byId = new Map();
-      for (const p of schoolPoints) byId.set(p.id, p);
-      for (const p of orgPoints) if (!byId.has(p.id)) byId.set(p.id, p);
-      const points = Array.from(byId.values());
-
-      const urls = [];
-      if (schoolR?.value?.url) urls.push({ label: "type=1", url: schoolR.value.url, fromCache: schoolR.fromCache });
-      if (orgR?.value?.url) urls.push({ label: "isorg=true", url: orgR.value.url, fromCache: orgR.fromCache });
-
+      const merged = await fetchParticipantsMerged(cache, { year, pc4, includeSchool, includeOrg, signal });
       state.participants = {
-        points,
-        urls,
+        ...merged,
         year,
         pc4,
-        includeSchool,
-        includeOrg,
-        counts: { school: schoolPoints.length, org: orgPoints.length, merged: points.length },
       };
     } catch (err) {
       state.participants = null;
@@ -270,11 +281,9 @@ export function initApp() {
 
     // Reset derived outputs
     state.computed = null;
-    setComputedProgress(computedProgress, "Nog niet gestart.");
-    state.candidates = null;
 
     renderAll();
-    setStatus(statusBar, center ? "Klaar (met adres)." : "Klaar.");
+    setStatus(statusBar, address ? "Klaar (PC4 afgeleid uit adres)." : "Klaar.");
   }
 
   async function runCompute({ signal } = {}) {
@@ -285,7 +294,7 @@ export function initApp() {
     const includeOrg = Boolean(includeOrgInput.checked);
 
     if (!pc4) {
-      showError(errorBox, "Vul eerst een PC4 in.");
+      showError(errorBox, "Vul eerst een PC4 in (of gebruik adres om PC4 af te leiden).");
       return;
     }
 
@@ -296,7 +305,6 @@ export function initApp() {
       state.participants.includeSchool !== includeSchool ||
       state.participants.includeOrg !== includeOrg
     ) {
-      // Ensure we have participants loaded for the current params
       await runLookup({ signal });
       if (!state.participants) return;
     }
@@ -309,7 +317,6 @@ export function initApp() {
     let failCount = 0;
 
     state.computed = { status: "running", totalEntries: ids.length, done: 0, okCount: 0, failCount: 0, cacheHits: 0 };
-    setComputedProgress(computedProgress, "Start…");
     setStatus(statusBar, "Berekent totals uit alle entries…");
     renderAll();
 
@@ -330,7 +337,7 @@ export function initApp() {
           const rate = done > 0 ? done / Math.max(1, elapsed) : 0;
           const remaining = rate > 0 ? (total - done) / rate : null;
           const eta = remaining != null ? `ETA ~${remaining.toFixed(0)}s` : "";
-          setComputedProgress(computedProgress, eta ? `Bezig… ${eta}` : "Bezig…");
+          setStatus(statusBar, eta ? `Berekent totals… ${eta}` : "Berekent totals…");
           if (state.computed && state.computed.status === "running") {
             state.computed.done = done;
             state.computed.totalEntries = total;
@@ -352,7 +359,6 @@ export function initApp() {
 
     state.computed = {
       status: "done",
-      // keep enough rows so remote-top-10 species are very likely present for comparisons
       topList: sortTopList(totals, 50),
       totalsByName: Object.fromEntries(totals.entries()),
       totalEntries: ids.length,
@@ -361,88 +367,17 @@ export function initApp() {
       cacheHits,
     };
 
-    setComputedProgress(computedProgress, "");
     renderAll();
     setStatus(statusBar, failCount ? "Klaar (onvolledig)." : "Klaar.");
   }
 
-  async function runFindMine({ signal } = {}) {
-    resetOutputs();
-
-    const year = readNumber(yearInput.value, new Date().getFullYear());
-    const pc4 = normalizePc4(pc4Input.value);
-    const includeSchool = Boolean(includeSchoolInput.checked);
-    const includeOrg = Boolean(includeOrgInput.checked);
-    const topN = readNumber(topNInput.value, 10);
-    const radius = readNumber(radiusInput.value, 300);
-
-    if (!pc4) {
-      showError(errorBox, "Vul eerst een PC4 in of zoek een adres.");
-      return;
-    }
-
-    const address = String(addressInput.value ?? "").trim();
-    if (!address) {
-      showError(errorBox, "Vul een adres in (nodig voor distance ranking).");
-      return;
-    }
-
-    // Ensure geocode exists for current address
-    if (!state.geocode || !state.geocode.best || state.geocode.best.lat == null || state.geocode.best.lng == null) {
-      await runLookup({ signal });
-      if (!state.geocode?.best) return;
-    }
-
-    // Ensure participants loaded
-    if (
-      !state.participants ||
-      state.participants.year !== year ||
-      state.participants.pc4 !== pc4 ||
-      state.participants.includeSchool !== includeSchool ||
-      state.participants.includeOrg !== includeOrg
-    ) {
-      await runLookup({ signal });
-      if (!state.participants) return;
-    }
-
-    const center = { lat: state.geocode.best.lat, lng: state.geocode.best.lng };
-    const ranked = rankByDistance(state.participants.points, center, {
-      topN,
-      maxDistanceMeters: radius > 0 ? radius : Infinity,
-    });
-
-    setStatus(statusBar, `Haalt entry details op voor ${ranked.length} kandidaten…`);
-
-    const results = await promisePool(
-      ranked,
-      4,
-      async (c) => {
-        const key = cacheKey(["vbn", "entryTopBirds", year, c.id]);
-        const r = await cached(cache, key, TTL_24H, () => entryTopBirds({ year, id: c.id, limit: 9999, signal }));
-        const topBirds = normalizeEntryTopBirds(r.value.json);
-        return { ...c, entryUrl: r.value.url, topBirds };
-      },
-      { signal }
-    );
-
-    const candidates = results
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value);
-
-    state.candidates = { candidates, urls: state.participants.urls };
-    renderAll();
-    setStatus(statusBar, "Klaar met kandidaten.");
-  }
-
   // Wire up UI events
-  const settings = loadSettings();
-  yearInput.value = String(settings.year ?? new Date().getFullYear());
-  if (settings.pc4) pc4Input.value = settings.pc4;
-  if (settings.address) addressInput.value = settings.address;
-  includeSchoolInput.checked = normalizeBool(settings.includeSchool, true);
-  includeOrgInput.checked = normalizeBool(settings.includeOrg, true);
-  if (settings.topN) topNInput.value = String(settings.topN);
-  if (settings.radius) radiusInput.value = String(settings.radius);
+  const s = settings.load();
+  yearInput.value = String(s.year ?? new Date().getFullYear());
+  if (s.pc4) pc4Input.value = s.pc4;
+  if (s.address) addressInput.value = s.address;
+  includeSchoolInput.checked = normalizeBool(s.includeSchool, true);
+  includeOrgInput.checked = normalizeBool(s.includeOrg, true);
 
   $("searchForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -471,29 +406,13 @@ export function initApp() {
     }
   });
 
-  btnFindMine.addEventListener("click", async () => {
-    const controller = new AbortController();
-    setAbort(controller);
-    try {
-      await runFindMine({ signal: controller.signal });
-    } catch (err) {
-      if (err instanceof AbortError) setStatus(statusBar, "Gestopt.");
-      else showError(errorBox, err);
-    } finally {
-      setAbort(null);
-    }
-  });
-
   btnStop.addEventListener("click", () => stopCurrent());
 
   btnClearCache.addEventListener("click", () => {
     const n = cache.clearAll();
-    state.geocode = null;
     state.remoteTop = null;
     state.participants = null;
     state.computed = null;
-    state.candidates = null;
-    setComputedProgress(computedProgress, "Nog niet gestart.");
     renderAll();
     setStatus(statusBar, `Cache geleegd (${n} items).`);
   });
@@ -501,5 +420,134 @@ export function initApp() {
   // Initial render
   renderAll();
   setStatus(statusBar, "Klaar. Vul een PC4 of adres in.");
+
+  // --- View 2: Mijn Vogeltelling (adres) ---
+  const myYearInput = $("myYearInput");
+  const myAddressInput = $("myAddressInput");
+  const myIncludeSchoolInput = $("myIncludeSchoolInput");
+  const myIncludeOrgInput = $("myIncludeOrgInput");
+  const myTopNInput = $("myTopNInput");
+  const myRadiusInput = $("myRadiusInput");
+
+  const myBtnFindMine = $("myBtnFindMine");
+  const myBtnStop = $("myBtnStop");
+  const myBtnClearCache = $("myBtnClearCache");
+
+  const myStatusBar = $("myStatusBar");
+  const myErrorBox = $("myErrorBox");
+  const myCandidatesMeta = $("myCandidatesMeta");
+  const myCandidatesBox = $("myCandidatesBox");
+
+  const myState = { candidates: null, participants: null };
+  let myAbort = null;
+
+  function mySetAbort(controller) {
+    myAbort = controller;
+    myBtnStop.disabled = !controller;
+  }
+  function myStop() {
+    if (myAbort) myAbort.abort();
+  }
+  function myReset() {
+    showError(myErrorBox, null);
+    setStatus(myStatusBar, "");
+  }
+  function myRenderAll() {
+    // We reuse renderCandidates as "mijn tellingen" output.
+    renderCandidates(myCandidatesBox, myCandidatesMeta, myState.candidates);
+  }
+
+  async function runMy({ signal } = {}) {
+    myReset();
+    setStatus(myStatusBar, "Bezig…");
+
+    const year = readNumber(myYearInput.value, new Date().getFullYear());
+    const address = String(myAddressInput.value ?? "").trim();
+    const includeSchool = Boolean(myIncludeSchoolInput.checked);
+    const includeOrg = Boolean(myIncludeOrgInput.checked);
+    const topN = readNumber(myTopNInput.value, 10);
+    const radius = readNumber(myRadiusInput.value, 300);
+
+    mySettings.save({ year, address, includeSchool, includeOrg, topN: myTopNInput.value, radius: myRadiusInput.value });
+
+    if (!address) {
+      showError(myErrorBox, "Vul een adres in.");
+      return;
+    }
+
+    setStatus(myStatusBar, "Adres lookup (PDOK)…");
+    const key = cacheKey(["pdok", "geocode", normalizeAddressKey(address)]);
+    const geo = await cached(cache, key, TTL_7D, () => geocodeAddress(address, { signal }));
+    const best = geo.value.best;
+    // Robust: derive PC4 from pc4/postcode/label
+    const pc4 = normalizePc4(best?.pc4 ?? best?.postcode ?? best?.label ?? "");
+    if (!pc4) {
+      showError(myErrorBox, "Kon geen PC4 afleiden uit het adres.");
+      return;
+    }
+    if (best?.lat == null || best?.lng == null) {
+      showError(myErrorBox, "Kon geen lat/lng afleiden uit het adres.");
+      return;
+    }
+
+    setStatus(myStatusBar, `Deelnemers ophalen (PC4=${pc4})…`);
+    const merged = await fetchParticipantsMerged(cache, { year, pc4, includeSchool, includeOrg, signal });
+    myState.participants = { ...merged, year, pc4 };
+
+    const center = { lat: best.lat, lng: best.lng };
+    const ranked = rankByDistance(merged.points, center, { topN, maxDistanceMeters: radius > 0 ? radius : Infinity });
+    setStatus(myStatusBar, `Haalt entry details op voor ${ranked.length} kandidaten…`);
+
+    const results = await promisePool(
+      ranked,
+      4,
+      async (c) => {
+        const k = cacheKey(["vbn", "entryTopBirds", year, c.id]);
+        const r = await cached(cache, k, TTL_24H, () => entryTopBirds({ year, id: c.id, limit: 9999, signal }));
+        const topBirds = normalizeEntryTopBirds(r.value.json);
+        return { ...c, entryUrl: r.value.url, topBirds };
+      },
+      { signal }
+    );
+
+    const candidates = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    myState.candidates = { candidates, urls: merged.urls };
+    myRenderAll();
+    setStatus(myStatusBar, "Klaar.");
+  }
+
+  const ms = mySettings.load();
+  myYearInput.value = String(ms.year ?? new Date().getFullYear());
+  if (ms.address) myAddressInput.value = ms.address;
+  myIncludeSchoolInput.checked = normalizeBool(ms.includeSchool, true);
+  myIncludeOrgInput.checked = normalizeBool(ms.includeOrg, true);
+  if (ms.topN) myTopNInput.value = String(ms.topN);
+  if (ms.radius) myRadiusInput.value = String(ms.radius);
+
+  $("myForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const controller = new AbortController();
+    mySetAbort(controller);
+    try {
+      await runMy({ signal: controller.signal });
+    } catch (err) {
+      if (err instanceof AbortError) setStatus(myStatusBar, "Gestopt.");
+      else showError(myErrorBox, err);
+    } finally {
+      mySetAbort(null);
+    }
+  });
+
+  myBtnStop.addEventListener("click", () => myStop());
+  myBtnClearCache.addEventListener("click", () => {
+    const n = cache.clearAll();
+    myState.candidates = null;
+    myState.participants = null;
+    myRenderAll();
+    setStatus(myStatusBar, `Cache geleegd (${n} items).`);
+  });
+
+  myRenderAll();
+  setStatus(myStatusBar, "Klaar. Vul een adres in.");
 }
 
