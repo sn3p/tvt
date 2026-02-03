@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="nl">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mijn Vogeltelling</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script defer type="module" src="./main.js"></script>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="container">
+      <h1>Mijn Vogeltelling</h1>
+      <p class="muted">
+        Lightweight viewer voor postcode- en adres-lookup. Werkt zonder login, puur op publieke endpoints.
+      </p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Zoek</h2>
+
+      <form id="searchForm" class="grid" autocomplete="off">
+        <label class="field">
+          <span>Jaar</span>
+          <input id="yearInput" name="year" type="number" min="2010" max="2100" step="1" required />
+        </label>
+
+        <label class="field">
+          <span>PC4 postcode</span>
+          <input id="pc4Input" name="pc4" type="text" inputmode="numeric" placeholder="9721" minlength="4" maxlength="4"
+            pattern="[0-9]{4}" />
+          <small class="muted">4 cijfers. Als je een adres zoekt, vullen we dit (indien mogelijk) automatisch.</small>
+        </label>
+
+        <label class="field field-wide">
+          <span>Adres (optioneel)</span>
+          <input id="addressInput" name="address" type="text" placeholder="Straat 1, Plaats" />
+          <small class="muted">Best-guess via PDOK. We gebruiken lat/lng om deelnemers te rangschikken.</small>
+        </label>
+
+        <label class="field">
+          <span>Type</span>
+          <select id="typeSelect" name="type">
+            <option value="1" selected>1 – inzending</option>
+            <option value="2">2 – (onbekend)</option>
+            <option value="3">3 – (onbekend)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Kandidaten (topN)</span>
+          <input id="topNInput" name="topN" type="number" min="1" max="50" step="1" value="10" />
+        </label>
+
+        <label class="field">
+          <span>Radius (m)</span>
+          <input id="radiusInput" name="radius" type="number" min="0" max="5000" step="10" value="300" />
+        </label>
+
+        <div class="actions field-wide">
+          <button id="btnLookup" type="submit" class="btn primary">Haal data op</button>
+          <button id="btnCompute" type="button" class="btn">Bereken uit alle entries</button>
+          <button id="btnFindMine" type="button" class="btn">Vind mijn entry (op afstand)</button>
+          <button id="btnStop" type="button" class="btn danger" disabled>Stop</button>
+          <button id="btnClearCache" type="button" class="btn subtle">Clear cache</button>
+        </div>
+      </form>
+
+      <div id="statusBar" class="status" aria-live="polite"></div>
+      <div id="errorBox" class="error" hidden></div>
+    </section>
+
+    <section class="card">
+      <h2>Adres lookup</h2>
+      <div id="geocodeMeta" class="meta"></div>
+      <div id="geocodeBox" class="muted">Geen adres gezocht.</div>
+    </section>
+
+    <section class="card">
+      <h2>Top soorten (snel)</h2>
+      <div id="remoteTopMeta" class="meta"></div>
+      <div id="remoteTopBox" class="muted">Nog geen data.</div>
+    </section>
+
+    <section class="card">
+      <h2>Deelnemers (lokaal)</h2>
+      <div id="participantsMeta" class="meta"></div>
+      <div id="participantsBox" class="muted">Nog geen data.</div>
+    </section>
+
+    <section class="card">
+      <h2>Top soorten (berekend uit alle entries)</h2>
+      <div id="computedMeta" class="meta"></div>
+      <div id="computedProgress" class="muted">Nog niet gestart.</div>
+      <div id="computedBox" class="muted">Nog geen data.</div>
+    </section>
+
+    <section class="card">
+      <h2>Kandidaten dichtbij</h2>
+      <div id="candidatesMeta" class="meta"></div>
+      <div id="candidatesBox" class="muted">Nog geen data.</div>
+    </section>
+  </main>
+
+  <footer class="container footer muted">
+    <p>
+      Tip: draai dit via je lokale webserver (niet via <code>file://</code>). Als je CORS errors ziet, is soms een proxy
+      nodig.
+    </p>
+  </footer>
+</body>
+
+</html>
