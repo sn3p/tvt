@@ -1,0 +1,11 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Node modules
+node_modules/

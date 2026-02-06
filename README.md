@@ -2,9 +2,21 @@
 
 Lightweight viewer voor resultaten van de Nationale Tuinvogeltelling (Vogelbescherming).
 
+## Repo structuur (2026)
+
+- **Nieuwe doorstart (dataset-based)**: root `index.html` + `main.js` + `src/app.js`
+  - Dataset staat in `data/2026/municipality_groningen.json` (en `.gz`).
+- **Oude app (live endpoints)**: `old/` (oude `index.html`, `styles.css`, `main.js`, `src/`), bedoeld om werkend te blijven.
+
+## Features Draft
+
+Zie DRAFT.md
+
 ## Development
 
-- **Geen build step**: open `index.html` via een lokale webserver (niet `file://`).
+- **Geen build step**: open via een lokale webserver (niet `file://`).
+  - Nieuwe app: `index.html`
+  - Oude app: `old/index.html`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
 
