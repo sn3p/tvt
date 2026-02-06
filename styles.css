@@ -230,7 +230,7 @@ input {
 
 .tvt-popup .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   counter-increment: tvt-item;
   gap: 6px;
   border-top: 1px solid rgba(11, 16, 32, 0.10);
@@ -243,7 +243,22 @@ input {
   min-width: 18px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  margin-right: 8px;
+}
+
+.tvt-popup .img {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.tvt-popup .img img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .tvt-popup .name {

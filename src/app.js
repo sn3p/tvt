@@ -158,13 +158,35 @@ export function initApp() {
   function popupHtml(entry) {
     const birds = Array.isArray(entry?.birds) ? entry.birds : [];
     const total = sumBirds(birds);
+    const imgBase = birdImageBase();
+    const imgFallback = birdFallbackFilename();
     const rows = birds
       .slice()
       .sort((a, b) => (Number(b?.count ?? 0) || 0) - (Number(a?.count ?? 0) || 0))
       .map((b) => {
         const name = String(b?.name ?? "Onbekend");
         const count = Number(b?.count ?? 0) || 0;
-        return `<li class="row"><span class="name">${escapeHtml(name)}</span><span class="count">${count}</span></li>`;
+        const filename = guessImageFilename(name);
+        const src = `${imgBase}${String(filename || "")}`;
+        const fallbackSrc = `${imgBase}${String(imgFallback || "")}`;
+        const alt = escapeHtml(name);
+
+        return `
+          <li class="row">
+            <span class="img">
+              <img
+                src="${src}"
+                alt="${alt}"
+                loading="lazy"
+                decoding="async"
+                referrerpolicy="no-referrer"
+                onerror="this.onerror=null;this.src='${fallbackSrc}'"
+              />
+            </span>
+            <span class="name">${alt}</span>
+            <span class="count">${count}</span>
+          </li>
+        `.trim();
       })
       .join("");
 
@@ -175,6 +197,28 @@ export function initApp() {
         <ol class="list">${rows || '<li class="row"><span class="name">Geen soorten</span><span class="count">0</span></li>'}</ol>
       </div>
     `;
+  }
+
+  function birdImageBase() {
+    // Observed in Vogelbescherming DOM & data json:
+    // https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/<filename>.png
+    return "https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/";
+  }
+
+  function birdFallbackFilename() {
+    return "niet-herkend.png";
+  }
+
+  function guessImageFilename(name) {
+    // best-effort: lowercase, strip diacritics, spaces -> underscore
+    return String(name || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .concat(".png");
   }
 
   function escapeHtml(s) {
