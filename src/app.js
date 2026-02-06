@@ -274,9 +274,18 @@ export function initApp() {
     rendered = [];
 
     const bounds = [];
+    // Render order matters: put school/org markers *above* regular entries.
+    const privateEntries = [];
+    const orgEntries = [];
     for (const e of filtered) {
+      if (entryHasMode(e, "isorg")) orgEntries.push(e);
+      else privateEntries.push(e);
+    }
+
+    const draw = (e, { bringToFront = false } = {}) => {
       const latlng = globalThis.L.latLng(e.lat, e.lng);
       bounds.push(latlng);
+
       const birdsTotal = sumBirds(e.birds);
       const isIsorg = entryHasMode(e, "isorg");
       const rawIsType1 = entryHasMode(e, "type1");
@@ -285,7 +294,7 @@ export function initApp() {
       rendered.push({ latlng, birdsTotal, isType1, isIsorg });
 
       const color = colorForEntry(e);
-      globalThis.L.circleMarker(latlng, {
+      const marker = globalThis.L.circleMarker(latlng, {
         radius: 6,
         color: "rgba(255,255,255,0.9)",
         weight: 2,
@@ -294,7 +303,13 @@ export function initApp() {
       })
         .bindPopup(popupHtml(e), { maxWidth: 340 })
         .addTo(layer);
-    }
+
+      if (bringToFront && marker?.bringToFront) marker.bringToFront();
+    };
+
+    // Draw private first, org last.
+    for (const e of privateEntries) draw(e);
+    for (const e of orgEntries) draw(e, { bringToFront: true });
 
     totals = {
       entries: filtered.length,
