@@ -201,24 +201,27 @@ input {
 .leaflet-control-attribution a { color: rgba(255, 255, 255, 0.85) !important; }
 
 .tvt-popup {
-  font-size: 12px;
+  font-family: ui-sans-serif, system-ui;
+  font-size: 13px;
   line-height: 1.35;
 }
 
 .tvt-popup h3 {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .tvt-popup .meta {
   margin: 0 0 10px;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(11, 16, 32, 0.55);
+  font-size: 12px;
 }
 
 .tvt-popup .list {
   margin: 0;
   padding: 0;
   list-style: none;
+  counter-reset: tvt-item;
   display: grid;
   gap: 3px;
   max-height: 240px;
@@ -227,21 +230,33 @@ input {
 
 .tvt-popup .row {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 3px;
+  align-items: baseline;
+  counter-increment: tvt-item;
+  gap: 6px;
+  border-top: 1px solid rgba(11, 16, 32, 0.10);
+  padding: 3px 0;
+}
+
+.tvt-popup .row::before {
+  content: counter(tvt-item) ".";
+  flex: 0 0 auto;
+  min-width: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  margin-right: 8px;
 }
 
 .tvt-popup .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .tvt-popup .count {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
+  margin-left: auto;
 }
 
 .meta-footer {

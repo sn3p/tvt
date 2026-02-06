@@ -28,7 +28,7 @@ export function initApp() {
 
   globalThis.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
   const layer = globalThis.L.layerGroup().addTo(map);
@@ -91,7 +91,7 @@ export function initApp() {
       if (r.isIsorg) inViewIsorg += 1;
     }
 
-    statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
+    statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels (totaal ${totals.birds}) geteld`;
 
     if (legendType1TextEl) legendType1TextEl.textContent = `Inzending (${inViewType1})`;
     if (legendIsorgTextEl) legendIsorgTextEl.textContent = `Schoolinzending (${inViewIsorg})`;
@@ -170,9 +170,9 @@ export function initApp() {
 
     return `
       <div class="tvt-popup">
-        <h3>Entry ${entry.id}</h3>
+        <h3>Inzending ${entry.id}</h3>
         <p class="meta">PC4 ${entry.pc4} • ${labelForEntry(entry)} • totaal ${total}</p>
-        <ul class="list">${rows || '<li class="row"><span class="name">Geen soorten</span><span class="count">0</span></li>'}</ul>
+        <ol class="list">${rows || '<li class="row"><span class="name">Geen soorten</span><span class="count">0</span></li>'}</ol>
       </div>
     `;
   }
