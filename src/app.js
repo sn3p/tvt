@@ -62,17 +62,13 @@ export function initApp() {
   }
 
   function colorForEntry(entry) {
-    const isType1 = entryHasMode(entry, "type1");
     const isIsorg = entryHasMode(entry, "isorg");
-    if (isType1 && isIsorg) return "#a78bfa"; // both
     if (isIsorg) return "#60a5fa"; // blue
     return "#fb923c"; // orange (type1)
   }
 
   function labelForEntry(entry) {
-    const isType1 = entryHasMode(entry, "type1");
     const isIsorg = entryHasMode(entry, "isorg");
-    if (isType1 && isIsorg) return "Inzending + Schoolinzending";
     if (isIsorg) return "Schoolinzending";
     return "Inzending";
   }
@@ -244,7 +240,14 @@ export function initApp() {
   function entryIncludedByModes(entry, { includeType1, includeIsorg }) {
     const isType1 = entryHasMode(entry, "type1");
     const isIsorg = entryHasMode(entry, "isorg");
-    return (includeType1 && isType1) || (includeIsorg && isIsorg);
+    // IMPORTANT: we de-dupe by treating `isorg` as a strict subset of `type1` when both are present.
+    // Rationale: upstream (VBN) endpoints can return `isorg=true` entries in the `type=1` list too.
+    // Semantics in UI:
+    // - **Inzending** = `type1` but NOT `isorg`
+    // - **Schoolinzending** = `isorg` (regardless of `type1`)
+    const isPrivate = isType1 && !isIsorg;
+    const isOrg = isIsorg;
+    return (includeType1 && isPrivate) || (includeIsorg && isOrg);
   }
 
   function render() {
@@ -275,8 +278,10 @@ export function initApp() {
       const latlng = globalThis.L.latLng(e.lat, e.lng);
       bounds.push(latlng);
       const birdsTotal = sumBirds(e.birds);
-      const isType1 = entryHasMode(e, "type1");
       const isIsorg = entryHasMode(e, "isorg");
+      const rawIsType1 = entryHasMode(e, "type1");
+      // See comment in `entryIncludedByModes`: `type1` may include `isorg` entries.
+      const isType1 = rawIsType1 && !isIsorg; // "Inzending" count should exclude school/org
       rendered.push({ latlng, birdsTotal, isType1, isIsorg });
 
       const color = colorForEntry(e);
