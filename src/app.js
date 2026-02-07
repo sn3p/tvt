@@ -24,9 +24,11 @@ export function initApp() {
   statsEl.textContent = "Dataset laden…";
 
   const map = globalThis.L.map(mapEl, {
-    zoomControl: true,
+    zoomControl: false,
     preferCanvas: true,
   });
+
+  globalThis.L.control.zoom({ position: 'topright' }).addTo(map);
 
   // const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
   const tileUrl = "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png";
