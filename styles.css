@@ -678,3 +678,27 @@ input {
   .stats { min-width: 0; text-align: left; }
   .brand { min-width: auto; }
 }
+
+.tvt-legend {
+  display: grid;
+  gap: 6px;
+  padding: 10px 10px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 220px;
+}
+
+.tvt-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tvt-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+}

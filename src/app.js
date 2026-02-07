@@ -245,26 +245,13 @@ export function initApp() {
   // Legend (copied from old app style)
   const legend = globalThis.L.control({ position: "bottomright" });
   legend.onAdd = () => {
-    const div = globalThis.L.DomUtil.create("div", "pill");
-    div.style.display = "grid";
-    div.style.gap = "6px";
-    div.style.padding = "10px 10px";
-    div.style.background = "rgba(0, 0, 0, 0.45)";
-    div.style.backdropFilter = "blur(8px)";
-    div.style.borderRadius = "12px";
-    div.style.color = "rgba(255, 255, 255, 0.9)";
-    div.style.maxWidth = "220px";
+    const div = globalThis.L.DomUtil.create("div", "pill tvt-legend");
 
     const row = ({ label, color, getTextEl }) => {
       const r = document.createElement("div");
-      r.style.display = "flex";
-      r.style.alignItems = "center";
-      r.style.gap = "8px";
+      r.className = "tvt-legend-row";
       const dot = document.createElement("span");
-      dot.style.width = "12px";
-      dot.style.height = "12px";
-      dot.style.borderRadius = "999px";
-      dot.style.border = "2px solid #fff";
+      dot.className = "tvt-legend-dot";
       dot.style.background = color;
       const t = document.createElement("span");
       t.textContent = label;
@@ -300,6 +287,14 @@ export function initApp() {
   };
   legend.addTo(map);
 
+  function setLegendVisible(show) {
+    if (show) {
+      if (!legend._map) legend.addTo(map);
+    } else {
+      if (legend._map) legend.remove(); // of: map.removeControl(legend)
+    }
+  }
+
   function setMode(nextMode) {
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
@@ -322,10 +317,12 @@ export function initApp() {
     if (mode === "species") {
       if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
+      setLegendVisible(false);
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
       if (!map.hasLayer(pointsLayer)) pointsLayer.addTo(map);
+      setLegendVisible(true);
     }
 
     // Layout changes (sidebar show/hide) require a size invalidation.
@@ -539,7 +536,7 @@ export function initApp() {
     if (!selectedSpecies) {
       hudName = "Kies een soort";
       hudStyle = "";
-      hudMetric = "Tik om de zijbalk te openen";
+      hudMetric = "Klik om de zijbalk te openen";
     } else {
       hudName = selectedSpecies.name;
       hudStyle = `${styleNl}${suffixMinN}`.trim();
