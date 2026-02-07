@@ -532,25 +532,28 @@ export function initApp() {
     // Compute metric sentence using current viewport.
     const summary = computeSelectedSpeciesViewportSummary();
 
-    let line1 = "";
-    let line2 = "";
+    let hudName = "";
+    let hudStyle = "";
+    let hudMetric = "";
 
     if (!selectedSpecies) {
-      line1 = "Kies een soort";
-      line2 = "Tik om de zijbalk te openen";
+      hudName = "Kies een soort";
+      hudStyle = "";
+      hudMetric = "Tik om de zijbalk te openen";
     } else {
-      line1 = `${selectedSpecies.name} · ${styleNl}${suffixMinN}`;
+      hudName = selectedSpecies.name;
+      hudStyle = `${styleNl}${suffixMinN}`.trim();
 
       if (isComputing) {
-        line2 = "Bezig met berekenen…";
+        hudMetric = "Bezig met berekenen…";
       } else if (metric === "sum") {
-        line2 = `In beeld · Totaal ${fmtInt(summary.sum)} geteld`;
+        hudMetric = `In beeld · Totaal ${fmtInt(summary.sum)} geteld`;
       } else if (metric === "avg") {
-        line2 = `In beeld · Gemiddeld ${fmtAvg(summary.avg)} per inzending`;
+        hudMetric = `In beeld · Gemiddeld ${fmtAvg(summary.avg)} per inzending`;
       } else {
         // presence
         const pct = summary.total ? Math.round((summary.with / summary.total) * 100) : 0;
-        line2 = `Aanwezig in ${fmtInt(summary.with)}/${fmtInt(summary.total)} inzendingen (${pct}%)`;
+        hudMetric = `Aanwezig in ${fmtInt(summary.with)}/${fmtInt(summary.total)} inzendingen (${pct}%)`;
       }
     }
 
@@ -558,27 +561,19 @@ export function initApp() {
       hudControl = globalThis.L.control({ position: "topleft" });
       hudControl.onAdd = () => {
         const div = globalThis.L.DomUtil.create("div", "tvt-hud");
-        div.style.display = "grid";
-        div.style.gap = "6px";
-        div.style.padding = "10px 10px";
-        div.style.background = "rgba(0, 0, 0, 0.45)";
-        div.style.backdropFilter = "blur(8px)";
-        div.style.borderRadius = "12px";
-        div.style.color = "rgba(255, 255, 255, 0.92)";
-        div.style.maxWidth = "320px";
-        div.style.cursor = "pointer";
-        div.style.userSelect = "none";
         div.tabIndex = 0;
 
-        const a = document.createElement("div");
-        a.className = "tvt-hud-primary";
-        div.appendChild(a);
+        const nameEl = document.createElement("div");
+        nameEl.className = "tvt-hud-name";
+        div.appendChild(nameEl);
 
-        const b = document.createElement("div");
-        b.className = "tvt-hud-secondary";
-        b.style.color = "rgba(255, 255, 255, 0.75)";
-        b.style.fontSize = "12px";
-        div.appendChild(b);
+        const styleEl = document.createElement("div");
+        styleEl.className = "tvt-hud-style";
+        div.appendChild(styleEl);
+
+        const metricEl = document.createElement("div");
+        metricEl.className = "tvt-hud-metric";
+        div.appendChild(metricEl);
 
         const open = () => setSidebarOpen(true, { persist: true, reason: "hud" });
         div.addEventListener("click", open);
@@ -589,7 +584,7 @@ export function initApp() {
         globalThis.L.DomEvent.disableClickPropagation(div);
         globalThis.L.DomEvent.disableScrollPropagation(div);
 
-        div.__tvt = { a, b };
+        div.__tvt = { nameEl, styleEl, metricEl };
         return div;
       };
       hudControl.addTo(map);
@@ -598,8 +593,9 @@ export function initApp() {
     const el = hudControl.getContainer();
     const refs = el && el.__tvt;
     if (refs) {
-      refs.a.textContent = line1;
-      refs.b.textContent = line2;
+      refs.nameEl.textContent = hudName;
+      refs.styleEl.textContent = hudStyle;
+      refs.metricEl.textContent = hudMetric;
     }
   }
 

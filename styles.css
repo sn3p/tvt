@@ -519,9 +519,32 @@ input {
 }
 .tvt-sidebar-toggle-btn:hover { background: rgba(0, 0, 0, 0.55); }
 
-.tvt-hud-primary {
-  font-weight: 900;
-  letter-spacing: 0.1px;
+.tvt-hud {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name style"
+    "metric metric";
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 320px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+}
+.tvt-hud-name {
+  grid-area: name; font-weight: 600;
+}
+.tvt-hud-style {
+  grid-area: style; justify-self: end; color: rgba(255,255,255,0.72);
+}
+.tvt-hud-metric {
+  grid-area: metric; color: rgba(255,255,255,0.75);
 }
 
 /* Empty state overlay */
