@@ -21,6 +21,11 @@ export function initApp() {
   const metricPresence = document.querySelector("#metricPresence");
   const metricAvg = document.querySelector("#metricAvg");
   const metricSum = document.querySelector("#metricSum");
+  const styleAuto = document.querySelector("#styleAuto");
+  const styleGrid = document.querySelector("#styleGrid");
+  const styleHeatmap = document.querySelector("#styleHeatmap");
+  const minNSlider = document.querySelector("#minNSlider");
+  const minNValue = document.querySelector("#minNValue");
 
   if (
     !mapEl ||
@@ -42,7 +47,12 @@ export function initApp() {
     !speciesSortAZ ||
     !metricPresence ||
     !metricAvg ||
-    !metricSum
+    !metricSum ||
+    !styleAuto ||
+    !styleGrid ||
+    !styleHeatmap ||
+    !minNSlider ||
+    !minNValue
   ) {
     return;
   }
@@ -90,6 +100,8 @@ export function initApp() {
   let speciesScope = "viewport"; // "viewport" | "all"
   let speciesSort = "most"; // "most" | "az"
   let metric = "presence"; // "presence" | "avg" | "sum"
+  let style = "auto"; // "auto" | "grid" | "heatmap"
+  let minN = 1;
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -459,6 +471,9 @@ export function initApp() {
     speciesScope = speciesScopeAll.checked ? "all" : "viewport";
     speciesSort = speciesSortAZ.checked ? "az" : "most";
     metric = metricAvg.checked ? "avg" : (metricSum.checked ? "sum" : "presence");
+    style = styleHeatmap.checked ? "heatmap" : (styleGrid.checked ? "grid" : "auto");
+    minN = Number(minNSlider.value || 0) || 0;
+    minNValue.textContent = String(minN);
   }
 
   function onSpeciesControlsChanged() {
@@ -474,6 +489,10 @@ export function initApp() {
   metricPresence.addEventListener("change", onSpeciesControlsChanged);
   metricAvg.addEventListener("change", onSpeciesControlsChanged);
   metricSum.addEventListener("change", onSpeciesControlsChanged);
+  styleAuto.addEventListener("change", onSpeciesControlsChanged);
+  styleGrid.addEventListener("change", onSpeciesControlsChanged);
+  styleHeatmap.addEventListener("change", onSpeciesControlsChanged);
+  minNSlider.addEventListener("input", onSpeciesControlsChanged);
 
   function schedulePresenceGridCompute() {
     if (computeTimer) window.clearTimeout(computeTimer);
@@ -562,7 +581,27 @@ export function initApp() {
       if (v > maxMetric) maxMetric = v;
     }
 
-    // Render all cells (border always; fill depends on N + presence).
+    // Decide render style (auto mapping or explicit override).
+    const effectiveStyle =
+      style === "auto"
+        ? (metric === "sum" ? "heatmap" : "grid")
+        : style;
+
+    // For "heatmap" we'll render circles at cell centers with overlap alpha blending.
+    // For "grid" we'll render rectangles (binned).
+
+    // Precompute cell radius in meters (roughly cellPx in x direction).
+    const cellRadiusM = (() => {
+      try {
+        const a = map.containerPointToLatLng([0, 0]);
+        const b = map.containerPointToLatLng([cellPx, 0]);
+        return Math.max(20, map.distance(a, b) * 0.75);
+      } catch {
+        return 120;
+      }
+    })();
+
+    // Render all cells.
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = r * cols + c;
@@ -570,6 +609,8 @@ export function initApp() {
         const withN = nWith[idx];
         const sum = sumCount[idx];
         const v = metricVal[idx];
+
+        if (total < minN) continue;
 
         const x0 = c * cellPx;
         const y0 = r * cellPx;
@@ -585,13 +626,6 @@ export function initApp() {
         const vNorm = maxMetric ? Math.min(1, v / maxMetric) : 0;
         const fillOpacity = total ? 0.85 * vNorm * nScale : 0;
 
-        const rect = globalThis.L.rectangle(bb, {
-          color: "rgba(255,255,255,0.18)",
-          weight: 1,
-          fillColor: "rgba(125,211,252,1)",
-          fillOpacity,
-        });
-
         const metricLabel =
           metric === "sum"
             ? `sum=${sum.toFixed(0)}`
@@ -599,16 +633,33 @@ export function initApp() {
               ? `avg=${(total ? (sum / total) : 0).toFixed(2)}`
               : `presence=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
 
-        rect.bindTooltip(
-          `${selectedSpecies.name}\nN_total=${total} • N_with=${withN}\n${metricLabel}`,
-          { sticky: false }
-        );
+        const tooltip = `${selectedSpecies.name}\nN_total=${total} • N_with=${withN}\n${metricLabel}`;
 
-        rect.addTo(gridLayer);
+        if (effectiveStyle === "heatmap") {
+          if (!v || !vNorm) continue;
+          const center = map.containerPointToLatLng([(x0 + x1) / 2, (y0 + y1) / 2]);
+          const circle = globalThis.L.circle(center, {
+            radius: cellRadiusM,
+            stroke: false,
+            fillColor: "rgba(125,211,252,1)",
+            fillOpacity: Math.min(0.65, fillOpacity * 0.85),
+          });
+          circle.bindTooltip(tooltip, { sticky: false });
+          circle.addTo(gridLayer);
+        } else {
+          const rect = globalThis.L.rectangle(bb, {
+            color: "rgba(255,255,255,0.18)",
+            weight: 1,
+            fillColor: "rgba(125,211,252,1)",
+            fillOpacity,
+          });
+          rect.bindTooltip(tooltip, { sticky: false });
+          rect.addTo(gridLayer);
+        }
       }
     }
 
-    setSpeciesStatus(`${selectedSpecies.name} • ${metric}`);
+    setSpeciesStatus(`${selectedSpecies.name} • ${metric} • ${effectiveStyle} • min‑N ${minN}`);
   }
 
   function popupHtml(entry) {

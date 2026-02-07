@@ -111,6 +111,36 @@
             </label>
           </div>
         </div>
+
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Style</div>
+          <div class="segmented" role="group" aria-label="Render style">
+            <label class="seg">
+              <input id="styleAuto" type="radio" name="style" value="auto" checked />
+              <span>Auto</span>
+            </label>
+            <label class="seg">
+              <input id="styleGrid" type="radio" name="style" value="grid" />
+              <span>Grid</span>
+            </label>
+            <label class="seg">
+              <input id="styleHeatmap" type="radio" name="style" value="heatmap" />
+              <span>Heatmap</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">min‑N</div>
+          <div class="slider">
+            <input id="minNSlider" type="range" min="0" max="50" step="1" value="1" />
+            <div id="minNValue" class="muted slider-value">1</div>
+          </div>
+        </div>
+
+        <div class="sidebar-hint muted">
+          Low N = faint (opacity scales with √N).
+        </div>
       </div>
 
       <div id="speciesList" class="species-list" role="listbox" aria-label="Soortenlijst"></div>
