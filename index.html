@@ -56,112 +56,106 @@
   <main class="main" role="main">
     <aside id="sidebar" class="sidebar" aria-label="Soorten" hidden>
       <div class="sidebar-header">
-        <div class="sidebar-title">Soorten</div>
+        <nav class="sidebar-tabs" aria-label="Sidebar tabs">
+          <button id="sidebarTabSpecies" class="sidebar-tab" type="button" aria-pressed="true">
+            <span>Soorten</span>
+          </button>
+          <button id="sidebarTabView" class="sidebar-tab" type="button" aria-pressed="false">
+            <span>Weergave</span>
+          </button>
+        </nav>
         <button id="sidebarCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
       </div>
 
-      <nav class="sidebar-tabs" aria-label="Sidebar tabs">
-        <button id="sidebarTabSpecies" class="sidebar-tab" type="button" aria-pressed="true">Soorten</button>
-        <button id="sidebarTabView" class="sidebar-tab" type="button" aria-pressed="false">Weergave</button>
-      </nav>
-
       <div id="sidebarPanelSpecies" class="sidebar-panel">
-        <fieldset class="sidebar-fieldset sidebar-fieldset-selection">
-          <!-- <legend>Selectie</legend> -->
-
-          <label class="sidebar-search">
-            <!-- <span class="muted">Zoek</span> -->
-            <input id="speciesSearchInput" type="search" placeholder="Typ een soort…" />
-          </label>
-
-          <div class="sidebar-row">
-            <div class="sidebar-label muted">
-              Soortenlijst
-              <span class="sidebar-help"
-                title="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span>
-            </div>
-            <div class="segmented" role="group" aria-label="Soortenlijst">
-              <label class="seg">
-                <input id="speciesScopeViewport" type="radio" name="speciesScope" value="viewport" checked />
-                <span>In beeld</span>
-              </label>
-              <label class="seg">
-                <input id="speciesScopeAll" type="radio" name="speciesScope" value="all" />
-                <span>Alles</span>
-              </label>
-            </div>
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">
+            Soortenlijst
+            <span class="sidebar-help"
+              title="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span>
           </div>
-
-          <div class="sidebar-row">
-            <div class="sidebar-label muted">Sorteren</div>
-            <div class="segmented" role="group" aria-label="Sorteren">
-              <label class="seg">
-                <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked />
-                <span>Geteld</span>
-              </label>
-              <label class="seg">
-                <input id="speciesSortAZ" type="radio" name="speciesSort" value="az" />
-                <span>A–Z</span>
-              </label>
-            </div>
+          <div class="segmented" role="group" aria-label="Soortenlijst">
+            <label class="seg">
+              <input id="speciesScopeViewport" type="radio" name="speciesScope" value="viewport" checked />
+              <span>In beeld</span>
+            </label>
+            <label class="seg">
+              <input id="speciesScopeAll" type="radio" name="speciesScope" value="all" />
+              <span>Alles</span>
+            </label>
           </div>
+        </div>
 
-          <div id="speciesList" class="species-list" role="listbox" aria-label="Soortenlijst"></div>
-        </fieldset>
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Sorteren</div>
+          <div class="segmented" role="group" aria-label="Sorteren">
+            <label class="seg">
+              <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked />
+              <span>Geteld</span>
+            </label>
+            <label class="seg">
+              <input id="speciesSortAZ" type="radio" name="speciesSort" value="az" />
+              <span>A–Z</span>
+            </label>
+          </div>
+        </div>
+
+        <label class="sidebar-search">
+          <input id="speciesSearchInput" type="search" placeholder="Typ een soort…">
+        </label>
+
+        <div id="speciesList" class="species-list" role="listbox" aria-label="Soortenlijst"></div>
       </div>
 
       <div id="sidebarPanelView" class="sidebar-panel" hidden>
-        <fieldset class="sidebar-fieldset sidebar-fieldset-map">
-          <!-- <legend>Weergave</legend> -->
 
-          <div class="sidebar-row">
-            <div class="sidebar-label muted">Metriek</div>
-            <div class="segmented" role="group" aria-label="Metriek">
-              <label class="seg">
-                <input id="metricPresence" type="radio" name="metric" value="presence" checked />
-                <span>aanwezigheid</span>
-              </label>
-              <label class="seg">
-                <input id="metricAvg" type="radio" name="metric" value="avg" />
-                <span>gemiddeld</span>
-              </label>
-              <label class="seg">
-                <input id="metricSum" type="radio" name="metric" value="sum" />
-                <span>totaal</span>
-              </label>
-            </div>
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Metriek</div>
+          <div class="segmented" role="group" aria-label="Metriek">
+            <label class="seg">
+              <input id="metricPresence" type="radio" name="metric" value="presence" checked />
+              <span>aanwezigheid</span>
+            </label>
+            <label class="seg">
+              <input id="metricAvg" type="radio" name="metric" value="avg" />
+              <span>gemiddeld</span>
+            </label>
+            <label class="seg">
+              <input id="metricSum" type="radio" name="metric" value="sum" />
+              <span>totaal</span>
+            </label>
           </div>
+        </div>
 
-          <div class="sidebar-row">
-            <div class="sidebar-label muted">Weergave</div>
-            <div class="segmented" role="group" aria-label="Weergave">
-              <label class="seg">
-                <input id="styleAuto" type="radio" name="style" value="auto" checked />
-                <span>Auto</span>
-              </label>
-              <label class="seg">
-                <input id="styleGrid" type="radio" name="style" value="grid" />
-                <span>Raster</span>
-              </label>
-              <label class="seg">
-                <input id="styleHeatmap" type="radio" name="style" value="heatmap" />
-                <span>Heatmap</span>
-              </label>
-            </div>
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Weergave</div>
+          <div class="segmented" role="group" aria-label="Weergave">
+            <label class="seg">
+              <input id="styleAuto" type="radio" name="style" value="auto" checked />
+              <span>Auto</span>
+            </label>
+            <label class="seg">
+              <input id="styleGrid" type="radio" name="style" value="grid" />
+              <span>Raster</span>
+            </label>
+            <label class="seg">
+              <input id="styleHeatmap" type="radio" name="style" value="heatmap" />
+              <span>Heatmap</span>
+            </label>
           </div>
+        </div>
 
-          <div class="sidebar-row">
-            <div class="sidebar-label muted">Min‑N</div>
-            <div class="slider">
-              <input id="minNSlider" type="range" min="0" max="50" step="1" value="1" />
-              <div id="minNValue" class="muted slider-value">1</div>
-            </div>
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Min‑N</div>
+          <div class="slider">
+            <input id="minNSlider" type="range" min="0" max="50" step="1" value="1" />
+            <div id="minNValue" class="muted slider-value">1</div>
           </div>
+        </div>
 
-          <div class="sidebar-hint muted">
-            Lage N = vaag (opacity schaalt met √N).
-          </div>
-        </fieldset>
+        <div class="sidebar-hint muted">
+          Lage N = vaag (opacity schaalt met √N).
+        </div>
       </div>
     </aside>
 
