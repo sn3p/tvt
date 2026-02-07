@@ -60,10 +60,58 @@
         <div id="speciesStatus" class="sidebar-status muted"></div>
       </div>
 
-      <label class="sidebar-search">
-        <span class="muted">Zoek</span>
-        <input id="speciesSearchInput" type="search" placeholder="Typ een soort…" />
-      </label>
+      <div class="sidebar-controls">
+        <label class="sidebar-search">
+          <span class="muted">Zoek</span>
+          <input id="speciesSearchInput" type="search" placeholder="Typ een soort…" />
+        </label>
+
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Scope</div>
+          <div class="segmented" role="group" aria-label="Scope">
+            <label class="seg">
+              <input id="speciesScopeViewport" type="radio" name="speciesScope" value="viewport" checked />
+              <span>Only in viewport</span>
+            </label>
+            <label class="seg">
+              <input id="speciesScopeAll" type="radio" name="speciesScope" value="all" />
+              <span>All</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Sort</div>
+          <div class="segmented" role="group" aria-label="Sorteren">
+            <label class="seg">
+              <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked />
+              <span>Most observed</span>
+            </label>
+            <label class="seg">
+              <input id="speciesSortAZ" type="radio" name="speciesSort" value="az" />
+              <span>A–Z</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sidebar-row">
+          <div class="sidebar-label muted">Metric</div>
+          <div class="segmented" role="group" aria-label="Metric">
+            <label class="seg">
+              <input id="metricPresence" type="radio" name="metric" value="presence" checked />
+              <span>presence</span>
+            </label>
+            <label class="seg">
+              <input id="metricAvg" type="radio" name="metric" value="avg" />
+              <span>avg/telling</span>
+            </label>
+            <label class="seg">
+              <input id="metricSum" type="radio" name="metric" value="sum" />
+              <span>sum</span>
+            </label>
+          </div>
+        </div>
+      </div>
 
       <div id="speciesList" class="species-list" role="listbox" aria-label="Soortenlijst"></div>
     </aside>

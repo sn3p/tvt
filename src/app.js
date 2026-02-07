@@ -14,6 +14,13 @@ export function initApp() {
   const speciesStatusEl = document.querySelector("#speciesStatus");
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
+  const speciesScopeViewport = document.querySelector("#speciesScopeViewport");
+  const speciesScopeAll = document.querySelector("#speciesScopeAll");
+  const speciesSortMost = document.querySelector("#speciesSortMost");
+  const speciesSortAZ = document.querySelector("#speciesSortAZ");
+  const metricPresence = document.querySelector("#metricPresence");
+  const metricAvg = document.querySelector("#metricAvg");
+  const metricSum = document.querySelector("#metricSum");
 
   if (
     !mapEl ||
@@ -28,7 +35,14 @@ export function initApp() {
     !speciesSearchInput ||
     !speciesListEl ||
     !modePointsBtn ||
-    !modeSpeciesBtn
+    !modeSpeciesBtn ||
+    !speciesScopeViewport ||
+    !speciesScopeAll ||
+    !speciesSortMost ||
+    !speciesSortAZ ||
+    !metricPresence ||
+    !metricAvg ||
+    !metricSum
   ) {
     return;
   }
@@ -73,6 +87,9 @@ export function initApp() {
   let speciesIndex = [];
   let selectedSpecies = null; // { id?: number|null, name: string }
   let computeTimer = 0;
+  let speciesScope = "viewport"; // "viewport" | "all"
+  let speciesSort = "most"; // "most" | "az"
+  let metric = "presence"; // "presence" | "avg" | "sum"
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -332,11 +349,73 @@ export function initApp() {
     speciesStatusEl.textContent = msg || "";
   }
 
+  function filteredPreparedEntries() {
+    const { pc4, includeType1, includeIsorg } = getFilters();
+    return preparedEntries.filter((p) => {
+      if (pc4 && p.pc4 !== pc4) return false;
+      return (includeType1 && p.isPrivate) || (includeIsorg && p.isOrg);
+    });
+  }
+
   function renderSpeciesList({ query = "" } = {}) {
     const q = normalizeSpeciesName(query);
-    const list = q
-      ? speciesIndex.filter((s) => normalizeSpeciesName(s.name).includes(q))
-      : speciesIndex;
+    const baseAll = filteredPreparedEntries();
+    const bounds = (() => {
+      try {
+        return map.getBounds();
+      } catch {
+        return null;
+      }
+    })();
+    const base =
+      speciesScope === "all" || !bounds
+        ? baseAll
+        : baseAll.filter((p) => bounds.contains(p.latlng));
+
+    // Compute "most observed" stats within current scope (and current filters).
+    const statsByKey = new Map(); // key -> { with, sum }
+    for (const e of base) {
+      const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
+      for (const b of birds) {
+        const id = Number(b?.bird_id ?? NaN);
+        const name = String(b?.name ?? "").trim();
+        const key = Number.isFinite(id) ? `id:${id}` : `name:${normalizeSpeciesName(name)}`;
+        if (!key) continue;
+        const count = Number(b?.count ?? 0) || 0;
+        if (!statsByKey.has(key)) statsByKey.set(key, { with: 0, sum: 0 });
+        const st = statsByKey.get(key);
+        if (count > 0) st.with += 1;
+        st.sum += count;
+      }
+    }
+
+    const inScope = speciesIndex.filter((s) => {
+      const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
+      return statsByKey.has(key);
+    });
+
+    // Expectation: list contains *observed* species under current filters (and scope).
+    const listUnfiltered = inScope;
+
+    const listFiltered = q
+      ? listUnfiltered.filter((s) => normalizeSpeciesName(s.name).includes(q))
+      : listUnfiltered;
+
+    const list =
+      speciesSort === "az"
+        ? listFiltered.slice().sort((a, b) => a.name.localeCompare(b.name, "nl"))
+        : listFiltered
+            .slice()
+            .sort((a, b) => {
+              const ka = a.id != null ? `id:${a.id}` : `name:${normalizeSpeciesName(a.name)}`;
+              const kb = b.id != null ? `id:${b.id}` : `name:${normalizeSpeciesName(b.name)}`;
+              const sa = statsByKey.get(ka) || { with: 0, sum: 0 };
+              const sb = statsByKey.get(kb) || { with: 0, sum: 0 };
+              // Most observed = N_with desc, then sum desc, then name.
+              if (sb.with !== sa.with) return sb.with - sa.with;
+              if (sb.sum !== sa.sum) return sb.sum - sa.sum;
+              return a.name.localeCompare(b.name, "nl");
+            });
 
     speciesListEl.innerHTML = "";
 
@@ -354,7 +433,12 @@ export function initApp() {
       btn.appendChild(title);
 
       const meta = document.createElement("small");
-      meta.textContent = s.id != null ? `id ${s.id}` : "";
+      const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
+      const st = statsByKey.get(key);
+      meta.textContent =
+        st && speciesSort === "most"
+          ? `${st.with}×`
+          : (s.id != null ? `id ${s.id}` : "");
       btn.appendChild(meta);
 
       btn.addEventListener("click", () => {
@@ -370,6 +454,26 @@ export function initApp() {
   speciesSearchInput.addEventListener("input", () => {
     renderSpeciesList({ query: speciesSearchInput.value });
   });
+
+  function readControls() {
+    speciesScope = speciesScopeAll.checked ? "all" : "viewport";
+    speciesSort = speciesSortAZ.checked ? "az" : "most";
+    metric = metricAvg.checked ? "avg" : (metricSum.checked ? "sum" : "presence");
+  }
+
+  function onSpeciesControlsChanged() {
+    readControls();
+    renderSpeciesList({ query: speciesSearchInput.value });
+    schedulePresenceGridCompute();
+  }
+
+  speciesScopeViewport.addEventListener("change", onSpeciesControlsChanged);
+  speciesScopeAll.addEventListener("change", onSpeciesControlsChanged);
+  speciesSortMost.addEventListener("change", onSpeciesControlsChanged);
+  speciesSortAZ.addEventListener("change", onSpeciesControlsChanged);
+  metricPresence.addEventListener("change", onSpeciesControlsChanged);
+  metricAvg.addEventListener("change", onSpeciesControlsChanged);
+  metricSum.addEventListener("change", onSpeciesControlsChanged);
 
   function schedulePresenceGridCompute() {
     if (computeTimer) window.clearTimeout(computeTimer);
@@ -408,7 +512,8 @@ export function initApp() {
     const cellCount = cols * rows;
 
     const nTotal = new Array(cellCount).fill(0);
-    const nHas = new Array(cellCount).fill(0);
+    const nWith = new Array(cellCount).fill(0);
+    const sumCount = new Array(cellCount).fill(0);
 
     // Assign entries to grid cells in viewport (O(entries)).
     for (const e of entries) {
@@ -423,7 +528,38 @@ export function initApp() {
         selId != null
           ? Boolean(e.birdIds && e.birdIds.has(selId))
           : Boolean(e.birdNames && e.birdNames.has(selName));
-      if (has) nHas[idx] += 1;
+      if (has) nWith[idx] += 1;
+
+      // For avg/sum we also need the per-entry count for this species.
+      if (has) {
+        let cnt = 0;
+        const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
+        for (const b of birds) {
+          const id = Number(b?.bird_id ?? NaN);
+          const nm = normalizeSpeciesName(b?.name);
+          if (selId != null ? Number.isFinite(id) && id === selId : nm === selName) {
+            cnt = Number(b?.count ?? 0) || 0;
+            break;
+          }
+        }
+        sumCount[idx] += cnt;
+      }
+    }
+
+    // Normalize metric for visualization (per recompute, per viewport).
+    let maxMetric = 0;
+    const metricVal = new Array(cellCount).fill(0);
+    for (let i = 0; i < cellCount; i++) {
+      const total = nTotal[i];
+      if (!total) continue;
+      const withN = nWith[i];
+      const sum = sumCount[i];
+      const v =
+        metric === "sum" ? sum :
+        metric === "avg" ? sum / total :
+        (withN / total); // presence
+      metricVal[i] = v;
+      if (v > maxMetric) maxMetric = v;
     }
 
     // Render all cells (border always; fill depends on N + presence).
@@ -431,8 +567,9 @@ export function initApp() {
       for (let c = 0; c < cols; c++) {
         const idx = r * cols + c;
         const total = nTotal[idx];
-        const has = nHas[idx];
-        const presence = total ? has / total : 0;
+        const withN = nWith[idx];
+        const sum = sumCount[idx];
+        const v = metricVal[idx];
 
         const x0 = c * cellPx;
         const y0 = r * cellPx;
@@ -445,7 +582,8 @@ export function initApp() {
 
         // Sample size indicator: ramp opacity with N.
         const nScale = total ? Math.min(1, Math.sqrt(total) / 3) : 0;
-        const fillOpacity = total ? 0.85 * presence * nScale : 0;
+        const vNorm = maxMetric ? Math.min(1, v / maxMetric) : 0;
+        const fillOpacity = total ? 0.85 * vNorm * nScale : 0;
 
         const rect = globalThis.L.rectangle(bb, {
           color: "rgba(255,255,255,0.18)",
@@ -454,9 +592,15 @@ export function initApp() {
           fillOpacity,
         });
 
-        const pTxt = `${(presence * 100).toFixed(1)}%`;
+        const metricLabel =
+          metric === "sum"
+            ? `sum=${sum.toFixed(0)}`
+            : metric === "avg"
+              ? `avg=${(total ? (sum / total) : 0).toFixed(2)}`
+              : `presence=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
+
         rect.bindTooltip(
-          `${selectedSpecies.name}: ${pTxt}\nN=${total}${total ? ` • n=${has}` : ""}`,
+          `${selectedSpecies.name}\nN_total=${total} • N_with=${withN}\n${metricLabel}`,
           { sticky: false }
         );
 
@@ -464,7 +608,7 @@ export function initApp() {
       }
     }
 
-    setSpeciesStatus(`${selectedSpecies.name} • presence grid`);
+    setSpeciesStatus(`${selectedSpecies.name} • ${metric}`);
   }
 
   function popupHtml(entry) {
@@ -717,7 +861,10 @@ export function initApp() {
   map.setView([53.22, 6.57], 11);
   map.on("moveend", () => {
     updateViewportStats();
-    if (mode === "species") schedulePresenceGridCompute();
+    if (mode === "species") {
+      if (speciesScope === "viewport") renderSpeciesList({ query: speciesSearchInput.value });
+      schedulePresenceGridCompute();
+    }
   });
 
   // Guard against layout/size timing issues (flex layouts, sticky header).
