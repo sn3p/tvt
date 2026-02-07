@@ -1,3 +1,5 @@
+import { loadMunicipalityDataset } from "./data.js";
+
 export function initApp() {
   const mapEl = document.querySelector("#map");
   const statsEl = document.querySelector("#statsBar");
@@ -37,10 +39,12 @@ export function initApp() {
   const layer = globalThis.L.layerGroup().addTo(map);
 
   let dataset = null;
+  let datasetYear = 0;
   let didFitOnce = false;
   let lastPc4 = "";
   let rendered = [];
   let totals = { entries: 0, birds: 0 };
+  let loadSeq = 0;
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -348,7 +352,30 @@ export function initApp() {
     render();
   }
 
-  yearInput.addEventListener("change", onFiltersChanged);
+  async function loadForYear(year) {
+    const seq = ++loadSeq;
+    const y = Number(year || 0) || 0;
+    if (!y) return;
+
+    statsEl.textContent = `Dataset ${y} laden…`;
+
+    try {
+      const json = await loadMunicipalityDataset({ year: y, area: "groningen" });
+      if (seq !== loadSeq) return; // stale request
+      dataset = json;
+      datasetYear = y;
+      didFitOnce = false; // refit when switching datasets
+      render();
+    } catch (err) {
+      if (seq !== loadSeq) return; // stale request
+      dataset = null;
+      datasetYear = 0;
+      layer.clearLayers();
+      statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
+    }
+  }
+
+  yearInput.addEventListener("change", () => loadForYear(Number(yearInput.value || 0) || 0));
   pc4Input.addEventListener("change", onFiltersChanged);
   includeType1Input.addEventListener("change", onFiltersChanged);
   includeIsorgInput.addEventListener("change", onFiltersChanged);
@@ -372,18 +399,7 @@ export function initApp() {
   });
   window.addEventListener("resize", () => invalidate());
 
-  fetch("./data/2026/municipality_groningen.json")
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status} bij laden dataset`);
-      return r.json();
-    })
-    .then((json) => {
-      dataset = json;
-      render();
-    })
-    .catch((err) => {
-      layer.clearLayers();
-      statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
-    });
+  // Initial load (defaults to the year input value).
+  loadForYear(Number(yearInput.value || 0) || 0);
 }
 
