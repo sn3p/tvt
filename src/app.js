@@ -1,15 +1,35 @@
-import { loadMunicipalityDataset } from "./data.js";
+import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
   const statsEl = document.querySelector("#statsBar");
+  const modePointsBtn = document.querySelector("#modePointsBtn");
+  const modeSpeciesBtn = document.querySelector("#modeSpeciesBtn");
   const yearInput = document.querySelector("#yearInput");
   const pc4Input = document.querySelector("#pc4Input");
   const includeType1Input = document.querySelector("#includeType1Input");
   const includeIsorgInput = document.querySelector("#includeIsorgInput");
   const filtersForm = document.querySelector("#filtersForm");
+  const sidebarEl = document.querySelector("#sidebar");
+  const speciesStatusEl = document.querySelector("#speciesStatus");
+  const speciesSearchInput = document.querySelector("#speciesSearchInput");
+  const speciesListEl = document.querySelector("#speciesList");
 
-  if (!mapEl || !statsEl || !yearInput || !pc4Input || !includeType1Input || !includeIsorgInput || !filtersForm) {
+  if (
+    !mapEl ||
+    !statsEl ||
+    !yearInput ||
+    !pc4Input ||
+    !includeType1Input ||
+    !includeIsorgInput ||
+    !filtersForm ||
+    !sidebarEl ||
+    !speciesStatusEl ||
+    !speciesSearchInput ||
+    !speciesListEl ||
+    !modePointsBtn ||
+    !modeSpeciesBtn
+  ) {
     return;
   }
 
@@ -38,7 +58,8 @@ export function initApp() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
-  const layer = globalThis.L.layerGroup().addTo(map);
+  const pointsLayer = globalThis.L.layerGroup().addTo(map);
+  const gridLayer = globalThis.L.layerGroup();
 
   let dataset = null;
   let datasetYear = 0;
@@ -47,6 +68,11 @@ export function initApp() {
   let rendered = [];
   let totals = { entries: 0, birds: 0 };
   let loadSeq = 0;
+  let mode = "points"; // "points" | "species"
+  let preparedEntries = [];
+  let speciesIndex = [];
+  let selectedSpecies = null; // { id?: number|null, name: string }
+  let computeTimer = 0;
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -63,8 +89,74 @@ export function initApp() {
     return s;
   }
 
+  function normalizeSpeciesName(name) {
+    return String(name || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/[^a-z0-9 ]+/g, "")
+      .trim();
+  }
+
   function entryHasMode(entry, mode) {
     return Array.isArray(entry?.modes) && entry.modes.includes(mode);
+  }
+
+  function prepareDataset(json) {
+    const entries = Array.isArray(json?.entries) ? json.entries : [];
+
+    // Build a species index from the compiled dataset (preferred over birdguide).
+    const byId = new Map();
+    for (const e of entries) {
+      const birds = Array.isArray(e?.birds) ? e.birds : [];
+      for (const b of birds) {
+        const id = Number(b?.bird_id ?? NaN);
+        const name = String(b?.name ?? "").trim();
+        if (!Number.isFinite(id) || !name) continue;
+        if (!byId.has(id)) byId.set(id, name);
+      }
+    }
+    speciesIndex = Array.from(byId.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "nl"));
+
+    preparedEntries = entries
+      .map((e) => {
+        const lat = Number(e?.lat);
+        const lng = Number(e?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+        const isOrg = entryHasMode(e, "isorg");
+        const rawIsType1 = entryHasMode(e, "type1");
+        // IMPORTANT: `type1` can contain `isorg` entries too (see `entryIncludedByModes`).
+        const isPrivate = rawIsType1 && !isOrg;
+
+        const birds = Array.isArray(e?.birds) ? e.birds : [];
+        const birdsTotal = sumBirds(birds);
+
+        const birdIds = new Set();
+        const birdNames = new Set();
+        for (const b of birds) {
+          const id = Number(b?.bird_id ?? NaN);
+          if (Number.isFinite(id)) birdIds.add(id);
+          const n = normalizeSpeciesName(b?.name);
+          if (n) birdNames.add(n);
+        }
+
+        return {
+          entry: e,
+          latlng: globalThis.L.latLng(lat, lng),
+          pc4: String(e?.pc4 ?? ""),
+          isPrivate,
+          isOrg,
+          birdsTotal,
+          birdIds,
+          birdNames,
+        };
+      })
+      .filter(Boolean);
   }
 
   function colorForEntry(entry) {
@@ -96,7 +188,7 @@ export function initApp() {
       if (r.isIsorg) inViewIsorg += 1;
     }
 
-    statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels (totaal ${totals.birds}) geteld`;
+    statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
 
     if (legendType1TextEl) legendType1TextEl.textContent = `Inzending (${inViewType1})`;
     if (legendIsorgTextEl) legendIsorgTextEl.textContent = `Schoolinzending (${inViewIsorg})`;
@@ -159,6 +251,221 @@ export function initApp() {
     return div;
   };
   legend.addTo(map);
+
+  function setMode(nextMode) {
+    mode = nextMode === "species" ? "species" : "points";
+    syncModeToUrl(mode);
+
+    modePointsBtn.setAttribute("aria-pressed", mode === "points" ? "true" : "false");
+    modeSpeciesBtn.setAttribute("aria-pressed", mode === "species" ? "true" : "false");
+
+    // Allow mode-based styling without touching JS again.
+    document.body.dataset.mode = mode;
+
+    sidebarEl.hidden = mode !== "species";
+
+    if (mode === "species") {
+      if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
+      if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
+    } else {
+      if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
+      gridLayer.clearLayers();
+      if (!map.hasLayer(pointsLayer)) pointsLayer.addTo(map);
+    }
+
+    // Layout changes (sidebar show/hide) require a size invalidation.
+    try {
+      map.invalidateSize({ animate: false });
+    } catch {
+      // ignore
+    }
+    setTimeout(() => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // ignore
+      }
+    }, 0);
+
+    // Re-render for the new mode.
+    render();
+  }
+
+  modePointsBtn.addEventListener("click", () => setMode("points"));
+  modeSpeciesBtn.addEventListener("click", () => setMode("species"));
+
+  function modeFromUrl() {
+    try {
+      const url = new URL(window.location.href);
+      const m = (url.searchParams.get("mode") || "").trim().toLowerCase();
+      if (m === "species" || m === "soorten") return "species";
+      if (m === "points" || m === "tellingen") return "points";
+      return "points";
+    } catch {
+      return "points";
+    }
+  }
+
+  function syncModeToUrl(next) {
+    // Keep mode in URL (shareable, back/forward friendly), not in localStorage.
+    const modeValue = next === "species" ? "species" : "points";
+    const url = new URL(window.location.href);
+    if (modeValue === "points") url.searchParams.delete("mode");
+    else url.searchParams.set("mode", modeValue);
+    window.history.replaceState(null, "", url);
+  }
+
+  // Initial mode: URL is source of truth.
+  setMode(modeFromUrl());
+
+  // React to back/forward navigation if mode changes in URL.
+  window.addEventListener("popstate", () => {
+    const m = modeFromUrl();
+    if (m !== mode) setMode(m);
+  });
+
+  function clearSpeciesStatus() {
+    speciesStatusEl.textContent = "";
+  }
+
+  function setSpeciesStatus(msg) {
+    speciesStatusEl.textContent = msg || "";
+  }
+
+  function renderSpeciesList({ query = "" } = {}) {
+    const q = normalizeSpeciesName(query);
+    const list = q
+      ? speciesIndex.filter((s) => normalizeSpeciesName(s.name).includes(q))
+      : speciesIndex;
+
+    speciesListEl.innerHTML = "";
+
+    for (const s of list) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "species-item";
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", selectedSpecies?.id === s.id && selectedSpecies?.name === s.name ? "true" : "false");
+      btn.dataset.name = s.name;
+      if (s.id != null) btn.dataset.id = String(s.id);
+
+      const title = document.createElement("span");
+      title.textContent = s.name;
+      btn.appendChild(title);
+
+      const meta = document.createElement("small");
+      meta.textContent = s.id != null ? `id ${s.id}` : "";
+      btn.appendChild(meta);
+
+      btn.addEventListener("click", () => {
+        selectedSpecies = s;
+        renderSpeciesList({ query: speciesSearchInput.value });
+        schedulePresenceGridCompute();
+      });
+
+      speciesListEl.appendChild(btn);
+    }
+  }
+
+  speciesSearchInput.addEventListener("input", () => {
+    renderSpeciesList({ query: speciesSearchInput.value });
+  });
+
+  function schedulePresenceGridCompute() {
+    if (computeTimer) window.clearTimeout(computeTimer);
+    if (mode !== "species") return;
+    computeTimer = window.setTimeout(() => {
+      computeTimer = 0;
+      computePresenceGrid();
+    }, 120);
+  }
+
+  function computePresenceGrid() {
+    if (mode !== "species") return;
+
+    gridLayer.clearLayers();
+
+    if (!selectedSpecies) {
+      setSpeciesStatus("Kies een soort…");
+      return;
+    }
+
+    const entries = rendered;
+    if (!entries || entries.length === 0) {
+      setSpeciesStatus("Geen entries (na filters).");
+      return;
+    }
+
+    setSpeciesStatus("Computing…");
+
+    const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
+    const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
+
+    const cellPx = 90;
+    const size = map.getSize();
+    const cols = Math.max(1, Math.ceil(size.x / cellPx));
+    const rows = Math.max(1, Math.ceil(size.y / cellPx));
+    const cellCount = cols * rows;
+
+    const nTotal = new Array(cellCount).fill(0);
+    const nHas = new Array(cellCount).fill(0);
+
+    // Assign entries to grid cells in viewport (O(entries)).
+    for (const e of entries) {
+      const pt = map.latLngToContainerPoint(e.latlng);
+      if (pt.x < 0 || pt.y < 0 || pt.x >= size.x || pt.y >= size.y) continue;
+      const c = Math.floor(pt.x / cellPx);
+      const r = Math.floor(pt.y / cellPx);
+      const idx = r * cols + c;
+      nTotal[idx] += 1;
+
+      const has =
+        selId != null
+          ? Boolean(e.birdIds && e.birdIds.has(selId))
+          : Boolean(e.birdNames && e.birdNames.has(selName));
+      if (has) nHas[idx] += 1;
+    }
+
+    // Render all cells (border always; fill depends on N + presence).
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const idx = r * cols + c;
+        const total = nTotal[idx];
+        const has = nHas[idx];
+        const presence = total ? has / total : 0;
+
+        const x0 = c * cellPx;
+        const y0 = r * cellPx;
+        const x1 = Math.min((c + 1) * cellPx, size.x);
+        const y1 = Math.min((r + 1) * cellPx, size.y);
+
+        const nw = map.containerPointToLatLng([x0, y0]);
+        const se = map.containerPointToLatLng([x1, y1]);
+        const bb = globalThis.L.latLngBounds(nw, se);
+
+        // Sample size indicator: ramp opacity with N.
+        const nScale = total ? Math.min(1, Math.sqrt(total) / 3) : 0;
+        const fillOpacity = total ? 0.85 * presence * nScale : 0;
+
+        const rect = globalThis.L.rectangle(bb, {
+          color: "rgba(255,255,255,0.18)",
+          weight: 1,
+          fillColor: "rgba(125,211,252,1)",
+          fillOpacity,
+        });
+
+        const pTxt = `${(presence * 100).toFixed(1)}%`;
+        rect.bindTooltip(
+          `${selectedSpecies.name}: ${pTxt}\nN=${total}${total ? ` • n=${has}` : ""}`,
+          { sticky: false }
+        );
+
+        rect.addTo(gridLayer);
+      }
+    }
+
+    setSpeciesStatus(`${selectedSpecies.name} • presence grid`);
+  }
 
   function popupHtml(entry) {
     const birds = Array.isArray(entry?.birds) ? entry.birds : [];
@@ -263,59 +570,53 @@ export function initApp() {
     const dataYear = Number(dataset?.meta?.year ?? 0) || 0;
 
     if (year && dataYear && year !== dataYear) {
-      layer.clearLayers();
+      pointsLayer.clearLayers();
+      gridLayer.clearLayers();
       statsEl.textContent = `Geen dataset voor ${year} (alleen ${dataYear} beschikbaar).`;
       return;
     }
 
-    const entries = Array.isArray(dataset?.entries) ? dataset.entries : [];
-
-    const filtered = entries.filter((e) => {
-      if (pc4 && String(e?.pc4) !== pc4) return false;
-      if (!entryIncludedByModes(e, { includeType1, includeIsorg })) return false;
-      return typeof e?.lat === "number" && typeof e?.lng === "number";
+    const filtered = preparedEntries.filter((p) => {
+      if (pc4 && p.pc4 !== pc4) return false;
+      return (includeType1 && p.isPrivate) || (includeIsorg && p.isOrg);
     });
 
-    layer.clearLayers();
-    rendered = [];
+    rendered = filtered.map((p) => ({
+      latlng: p.latlng,
+      birdsTotal: p.birdsTotal,
+      isType1: p.isPrivate,
+      isIsorg: p.isOrg,
+      birdIds: p.birdIds,
+      birdNames: p.birdNames,
+      entry: p.entry,
+    }));
 
-    const bounds = [];
-    // Render order matters: put school/org markers *above* regular entries.
-    const privateEntries = [];
-    const orgEntries = [];
-    for (const e of filtered) {
-      if (entryHasMode(e, "isorg")) orgEntries.push(e);
-      else privateEntries.push(e);
+    const bounds = filtered.map((p) => p.latlng);
+
+    // Mode 1: draw point markers. Mode 2: hide points.
+    pointsLayer.clearLayers();
+    if (mode === "points") {
+      const privateEntries = filtered.filter((p) => p.isPrivate);
+      const orgEntries = filtered.filter((p) => p.isOrg);
+
+      const draw = (p, { bringToFront = false } = {}) => {
+        const marker = globalThis.L.circleMarker(p.latlng, {
+          radius: 6,
+          color: "rgba(255,255,255,0.9)",
+          weight: 2,
+          fillColor: colorForEntry(p.entry),
+          fillOpacity: 0.85,
+        })
+          .bindPopup(popupHtml(p.entry), { maxWidth: 340 })
+          .addTo(pointsLayer);
+
+        if (bringToFront && marker?.bringToFront) marker.bringToFront();
+      };
+
+      // Draw private first, org last.
+      for (const p of privateEntries) draw(p);
+      for (const p of orgEntries) draw(p, { bringToFront: true });
     }
-
-    const draw = (e, { bringToFront = false } = {}) => {
-      const latlng = globalThis.L.latLng(e.lat, e.lng);
-      bounds.push(latlng);
-
-      const birdsTotal = sumBirds(e.birds);
-      const isIsorg = entryHasMode(e, "isorg");
-      const rawIsType1 = entryHasMode(e, "type1");
-      // See comment in `entryIncludedByModes`: `type1` may include `isorg` entries.
-      const isType1 = rawIsType1 && !isIsorg; // "Inzending" count should exclude school/org
-      rendered.push({ latlng, birdsTotal, isType1, isIsorg });
-
-      const color = colorForEntry(e);
-      const marker = globalThis.L.circleMarker(latlng, {
-        radius: 6,
-        color: "rgba(255,255,255,0.9)",
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.85,
-      })
-        .bindPopup(popupHtml(e), { maxWidth: 340 })
-        .addTo(layer);
-
-      if (bringToFront && marker?.bringToFront) marker.bringToFront();
-    };
-
-    // Draw private first, org last.
-    for (const e of privateEntries) draw(e);
-    for (const e of orgEntries) draw(e, { bringToFront: true });
 
     totals = {
       entries: filtered.length,
@@ -345,6 +646,8 @@ export function initApp() {
 
     // Initial stats for current viewport (moveend will keep it updated).
     updateViewportStats();
+
+    if (mode === "species") schedulePresenceGridCompute();
   }
 
   function onFiltersChanged() {
@@ -367,12 +670,40 @@ export function initApp() {
       dataset = json;
       datasetYear = y;
       didFitOnce = false; // refit when switching datasets
+
+      prepareDataset(json);
+      if (!speciesIndex || speciesIndex.length === 0) {
+        // Fallback: birdguide is a plain array of names (no IDs).
+        try {
+          const guide = await loadBirdguide();
+          if (seq !== loadSeq) return; // stale request
+          speciesIndex = (Array.isArray(guide) ? guide : [])
+            .map((name) => ({ id: null, name: String(name || "").trim() }))
+            .filter((s) => s.name)
+            .sort((a, b) => a.name.localeCompare(b.name, "nl"));
+        } catch {
+          // ignore fallback failure
+        }
+      }
+
+      // Reset selection if it's not in the new list.
+      if (selectedSpecies) {
+        const ok = speciesIndex.some((s) => s.id === selectedSpecies.id && s.name === selectedSpecies.name);
+        if (!ok) selectedSpecies = null;
+      }
+
+      clearSpeciesStatus();
+      renderSpeciesList({ query: speciesSearchInput.value });
       render();
     } catch (err) {
       if (seq !== loadSeq) return; // stale request
       dataset = null;
       datasetYear = 0;
-      layer.clearLayers();
+      preparedEntries = [];
+      speciesIndex = [];
+      selectedSpecies = null;
+      pointsLayer.clearLayers();
+      gridLayer.clearLayers();
       statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
     }
   }
@@ -384,7 +715,10 @@ export function initApp() {
 
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);
-  map.on("moveend", () => updateViewportStats());
+  map.on("moveend", () => {
+    updateViewportStats();
+    if (mode === "species") schedulePresenceGridCompute();
+  });
 
   // Guard against layout/size timing issues (flex layouts, sticky header).
   const invalidate = () => {

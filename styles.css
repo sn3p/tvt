@@ -83,6 +83,39 @@ body {
 }
 .brand-link:hover { color: var(--text); background: rgba(0, 0, 0, 0.30); }
 
+.modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.20);
+}
+
+.mode-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.mode-btn[aria-pressed="true"] {
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.12);
+}
+
+.mode-btn:hover {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .filters {
   display: flex;
   align-items: center;
@@ -167,6 +200,102 @@ input {
   display: flex;
   padding: 14px;
   min-height: 0;
+  gap: 12px;
+}
+
+.sidebar {
+  width: 320px;
+  max-width: min(360px, 45vw);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Sidebar can be hidden in mode 1. for now */
+.sidebar[hidden] { display: none !important; }
+
+.sidebar-header {
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar-title {
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.sidebar-status {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sidebar-search {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-search input[type="search"] {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+}
+
+.sidebar-search input[type="search"]:focus {
+  outline: none;
+  border-color: rgba(125, 211, 252, 0.55);
+  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18);
+}
+
+.species-list {
+  padding: 8px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+}
+
+.species-item {
+  width: 100%;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.90);
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.species-item:hover { background: rgba(0, 0, 0, 0.28); }
+
+.species-item[aria-selected="true"] {
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.12);
+}
+
+.species-item small {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.70);
 }
 
 .map-shell {
@@ -269,7 +398,6 @@ input {
 }
 
 .tvt-popup .count {
-  font-variant-numeric: tabular-nums;
   font-weight: 800;
   margin-left: auto;
 }

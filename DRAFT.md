@@ -1,137 +1,184 @@
-# Draft
+# Draft — Mijn Vogeltellingen (kaart-gebaseerde visualisaties)
 
-> Ik wil nog even mijn idee(en) bij je pitchen.
-> Een kaart van Nederland die de viewport grotendeels inneemt. Om de scope even te verkleinen ipv NL misschien eerst even inzoomen op gemeente of provincie Groningen.
->
-> Met een paar verschillende modi/datasets waarbij bijv via tabs de context te switchen is:
->
-> 1) Tellingen tonen (particulier en school/org) als punten op de kaart die je kunt aanklikken om de resultaten bekijken in een popover (wellicht pas bij verder inzoomen).
->
-> 2) Soorten tonen op de kaart op basis van de tellingen (heatmap? of anders?)
-> De te visualiseren soort (of meerdere tegelijk?) is te selecteren met via een dropdown of sidebar.
-> Deze visualisatie is denk ik wel indicatief en kan vertekenen: 2 tellingen bij elkaar in de buurt tellen beide een merel, > dan kan dat dezelfde merel zijn maar op een ander tijdstip geteld :(
->
-> Voor beide modi/datasets wil ik een paar filters/search input om op een subset in te tonen (letterlijk, op de kaart), bijv. op adres, gemeente, provincie, PC4, etc.
->
->  Verder ben ik nog een beetje zoekende naar interessante weergaves, dus ideeen zijn welkom!
+> Doel: een kaart van Nederland (start: gemeente Groningen) die de viewport grotendeels inneemt, met tabs/modi om context te switchen.
+
+We starten bewust klein (Groningen), zodat er snel iets “af” komt zonder meteen heel NL te harvesten.
 
 ---
 
-Leuk pitch — dit is een heel logisch product-gevoel: “één kaart, context tabs, en dan steeds andere lagen/filters”. Als je Groningen als eerste scope pakt, kun je snel iets “af” krijgen zonder meteen heel NL te hoeven harvesten.
+## Mode 1 — Tellingen als punten (explore / drill-down)
 
-## 1) Modus “Tellingen als punten”
+### Idee
+Toon elke telling als punt op de kaart. Bij voldoende zoom zijn punten klikbaar en krijg je een popover met details.
+
+Uitgezoomd kan dit (later) ook als aggregatie getoond worden:
+- clusters (voorkeur)
+- eventueel een “effort heatmap” (N tellingen per gebied) als contextlaag
 
 ### Kaartlaag
-
-- Puntlaag met clustering tot je ver inzoomt.
+- Puntlaag met (later) **clustering** totdat je ver genoeg bent ingezoomd.
 - Bij genoeg zoom: losse punten klikbaar → popover met:
   - top soorten + aantallen (uit `entry-top-birds`)
-  - label: particulier vs school/org
+  - label: particulier vs school/org (belangrijk: school/org is een label; niet optellen!)
   - (optioneel) link “open raw JSON” (transparantie)
 
-### Belangrijk UX punt
+### Filters / controls (v1)
+- **PC4 input**: zoom naar PC4 gebied + filter data ✅
+- **Jaar toggle**: 2025 vs 2026 ✅
+- **School/org toggle** ✅
+- (Later) zoek op plaats/postcode (geocoding kan later)
 
-- Toon bij elk kaartniveau een “inspanning badge”: # tellingen in viewport (en split private/school). Dat maakt de rest interpreteerbaar.
+### “Interestingness” sidebar (aanrader, vooral voor Mode 1)
+Een inklapbare sidebar met “tellingen in beeld” (viewport) helpt enorm om interessante punten te vinden.
 
-### Privacy/ethiek (zonder je te blokkeren)
+**Filters**
+- Filter tellingen op soort (presence):
+  - “toon tellingen waar soort X voorkomt”
+  - (optie) minimum count slider (>= N)
 
-- In de UI kun je “punten pas tonen vanaf zoom ≥ X” doen, en daaronder alleen clusters/heat. Dan houd je het mooi én minder gevoelig.
+**Sortering**
+- **Meest divers**: sorteer op aantal verschillende soorten in telling (`birds.length`)
+- **Meest ongewoon / zeldzaam**:
+  - bereken per soort een frequentie: `freq[bird_id] = #tellingen waarin soort voorkomt`
+  - score per telling: `rarity_score = Σ (1 / freq[bird_id])` over soorten in die telling
+  - sorteer op `rarity_score` (hoogste bovenaan)
+  - optioneel: scope rarity op “hele dataset” of “viewport”
 
-## 2) Modus “Soort op de kaart” (beter dan een simpele heatmap)
+**Interactie**
+- Klik in lijst → zoom naar punt + open popover
 
-Je intuïtie klopt: een heatmap op aantallen kan “dubbel tellen” (zelfde merel). Dat kun je opvangen door meerdere “metrieken” aan te bieden, met een simpele toggle.
+### Belangrijk UX-punt: effort zichtbaar maken
+- Toon bij elk kaartniveau een “inspanning badge”: `# tellingen in viewport` (en split private/school).
+- Dit maakt interpretatie van alle andere lagen betrouwbaarder.
 
-### Per soort: kies metric
+### Privacy/ethiek (zonder te blokkeren)
+- Punten pas tonen vanaf zoom ≥ X; daaronder alleen clusters/aggregatie.
+- Houd het “mooi” én minder gevoelig.
 
-- Aanwezigheid: % tellingen waarin soort voorkomt (0/1 per telling)
-  → heel robuust tegen “zelfde vogel dubbel”
-- Gemiddeld aantal per telling: count / # tellingen
-  → minder gevoelig voor dichtheid van tellingen
-- Som aantallen (klassiek)
-  → leuk, maar duidelijk als “indicatief”
+---
 
-### Weergave: liever hex/grid dan heatmap
+## Mode 2 — Soorten op de kaart (aggregatie / patronen)
 
-- Heatmap voelt mooi, maar is vaak misleidend.
-- Ik zou doen: hexbin / grid overlay (bv. H3 of vaste rastercellen) met kleurintensiteit.
-- Je kunt nog steeds een “glow” stijl geven zodat het heatmap-achtig voelt.
-- Bonus: je kunt per cel ook sample size tonen.
+### Idee
+Toon verspreiding/relatieve aanwezigheid van een soort over de ruimte. Niet één-op-één punten, maar geaggregeerd.
 
-### Onzekerheid zichtbaar maken
+### Species selector UI (sidebar)
+Een sidebar naast de kaart (inklapbaar), met:
 
-- Maak transparantie of een hatch-overlay afhankelijk van # tellingen per cel.
-- Lage \(N\) = “meer ruis”, hoge \(N\) = “betrouwbaarder”.
+1) **Species list**
+   - bron: bij voorkeur uit je eigen dataset (unieke birds), eventueel aangevuld met `vogelgids.json`
+2) **Filters**
+   - “All species” vs “Only in viewport” (default viewport)
+3) **Sort**
+   - default: “Most observed”
+   - alternatief: “A–Z”
+4) **Click species**
+   - toont aggregatie-laag op de kaart
 
-## Filters/search die echt nuttig zijn (en haalbaar)
+### Metric toggle (wat meten we?)
+Heatmaps op “som van aantallen” zijn misleidend (dichtheid deelnemers, dubbel tellen). Daarom bieden we meerdere metrics:
 
-Je “subset letterlijk op de kaart” idee is top. De truc is: filters moeten ook echt snel blijven.
+- **Aanwezigheid (presence)** — default
+  - per telling 0/1: komt soort voor?
+  - per cel: `presence = (# tellingen in cel met soort) / (# tellingen in cel)`
+  - robuust tegen “zelfde vogel dubbel”
+- **Gemiddeld (avg per telling)**
+  - per cel: `avg = (som counts) / (# tellingen)`
+  - corrigeert deels voor tel-intensiteit
+- **Som (sum)**
+  - per cel: `sum = (som counts)`
+  - intuïtief maar “indicatief” (gevoelig voor bias)
 
-### Filters die ik zou shippen in v1 (Groningen)
+### Render style (hoe tekenen we het?)
+We scheiden “metric” (wat) van “style” (hoe), met een **Auto**-stand die logische defaults kiest.
 
-- PC4 (invoer): zoom naar PC4 gebied + filter data
-- School/org toggle
-- Soort dropdown + quick search
-- Minimum # tellingen in cel (schuifje) → reduceert ruis
-- Jaar (2025 vs 2026) of “verschil” view (als je straks beide harvested)
+**Styles**
+- **Grid/Hex (binned)**: aggregatie per cel (duidelijk, minder misleidend)
+- **Heatmap (smooth)**: visueel aantrekkelijk, maar kan bias maskeren
 
-### Adres/gemeente/provincie
+**Auto mapping (default)**
+- **Presence → Grid/Hex**
+- **Avg → Grid/Hex**
+- **Sum → Heatmap**
 
-- Adreszoek: kan met geocoding (later), maar voor nu kun je:
-  - “Plaatsnaam / postcode” zoeken (simpel en heel bruikbaar)
-  - Gemeente/provincie: je kunt het conceptueel doen door een lijst PC4’s te laden die jij samenstelt (zoals je zelf al zei).
+**Override (advanced)**
+- Laat de gebruiker (later) de style overrulen:
+  - `Sum` op `Grid/Hex` is soms eerlijker (geen smoothing)
+  - (optioneel) `Presence` als zachte heatmap-look kan, maar blijft conceptueel “ratio”
 
-## Extra weergaves die vaak verrassend leuk zijn
+UI voorstel:
+- Metric: `Presence / Avg / Sum`
+- Style: `Auto / Grid/Hex / Heatmap` (Style kan klein onder “Advanced”)
 
-Hier een paar die veel “aha” geven zonder dat je superveel extra data nodig hebt:
+### Weergave: liever grid/hex dan klassieke heatmap (waarom?)
+- Heatmap smeert punten uit (glow) en suggereert precisie.
+- Grid/hex maakt duidelijk: dit is aggregatie.
 
-### A) Inspanning vs resultaat (2 lagen)
+**Implementatie (v1):**
+- Start met **grid** (vierkant raster), omdat het simpel is en goed genoeg.
+- Later eventueel **hex** (H3) omdat het mooier oogt.
 
-- Laag 1: tellingen dichtheid
-- Laag 2: soort aanwezigheid (of vogels per telling)
+### Sample size indicator (betrouwbaarheid / ruis)
+Per cel is `N = # tellingen` belangrijk:
+- lage N = ruis
+- hoge N = betrouwbaarder
 
-Met een split view of toggle. Dit laat bias meteen zien.
+Manieren om dit te tonen:
+- opacity afhankelijk van N
+- tooltip met: `N`, metric waarde, en top-entries
+- min-N slider: toon alleen cellen met `N ≥ k`
 
-### B) School vs particulier: verschilkaart
+### Filters (Mode 2)
+- Year toggle (2025/2026)
+- School/org toggle (label)
+- PC4 filter / zoom to PC4
+- “Only in viewport” species list (default)
 
-Per cel:
+---
 
-- \(presence\_school - presence\_private\)
+## Later — Mode 2 “All species overview” (geen selectie)
 
-Dan zie je waar schooltellingen afwijken (vaak stedelijker / andere tijdstippen).
+Leuke “shareable” layers zonder soort-selectie:
 
-### C) “Meest kenmerkende soorten” per gebied
+### A) Top 3 species per cell
+- per cel: tel presence (of sum) per soort en toon top 3
+- op kaart: subtiel (bijv. alleen in tooltip), anders wordt het druk
 
-Voor elke cel/PC4:
+### B) Meest kenmerkende soort (lift)
+- per cel: `presence_cell / presence_overall`
+- toont “wat is hier relatief typisch”, voorkomt dat overal koolmees/merel wint
 
-- top 1–3 soorten die relatief vaker voorkomen dan provincie-gemiddelde.
+### C) Diversiteitkaart
+- per cel: aantal unieke soorten (of Shannon)
+- toont biodiversiteit hotspots
 
-Dit voelt meteen “lokaal” en is super deelbaar.
+### D) Effort layer (context)
+- per cel: `N = # tellingen`
+- ideaal als baseline laag in alle modi
 
-### D) Diversiteitkaart
+---
 
-Per cel:
+## Extra weergaves (later, maar waardevol)
+- School vs particulier verschilkaart (per cel):
+  - `presence_school - presence_private`
+- Co-occurrence “buddy’s”:
+  - klik soort → “welke soorten zie je vaak samen met X in dit gebied?”
 
-- unieke soorten (of Shannon)
+---
 
-Leuk om “groene hotspots” te zien.
+## Voorstel: Groningen MVP (roadmap)
+1) Tab: **Tellingen (Mode 1)**
+   - punten + popover ✅
+   - PC4 + year ✅
+   - school/org toggle ✅
+   - (later) clustering
+   - (later) interestingness sidebar
+2) Tab: **Soortkaart (Mode 2)**
+   - sidebar species list + filters
+   - metric toggle: presence / avg / sum
+   - render style: auto (presence/avg→grid, sum→heatmap) + optional override
+   - sample size indicator (N)
+3) Later: **Overview (Mode 2 all species)**
+   - effort grid, diversity, top 3 species per cell
 
-### E) Co-occurrence “buddy’s”
-
-Klik een soort → “Welke soorten zie je vaak samen met X in dit gebied?”
-Heel educatief, en het gebruikt alleen per-teling soortlijsten.
-
-## Voorstel: eerste “Groningen MVP”
-
-1. Tab: **Tellingen**
-   - clusters + popover
-   - toggle private/school
-2. Tab: **Soortkaart**
-   - dropdown soort
-   - metric toggle: aanwezigheid / gemiddeld / som
-   - grid/hex overlay + sample size indicator
-3. Filterbar:
-   - PC4 input + year toggle
-
-Als dit staat, voelt het al als een product.
-
-Als je wilt: zeg even welke data je nu al “compleet” hebt voor Groningen (alle PC4’s in 97xx? alleen 9721?), dan kan ik je helpen kiezen welke van deze visualisaties je zonder extra harvesting meteen kunt bouwen.
+Als dit staat, voelt het als een product.

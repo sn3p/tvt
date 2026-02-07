@@ -19,6 +19,11 @@
         <a class="brand-link" href="./old/" rel="noreferrer">/old</a>
       </div>
 
+      <nav class="modes" aria-label="Modus">
+        <button id="modePointsBtn" class="mode-btn" type="button" aria-pressed="true">Tellingen</button>
+        <button id="modeSpeciesBtn" class="mode-btn" type="button" aria-pressed="false">Soorten</button>
+      </nav>
+
       <form id="filtersForm" class="filters" autocomplete="off">
         <label class="field">
           <span>Jaar</span>
@@ -49,6 +54,20 @@
   </header>
 
   <main class="main" role="main">
+    <aside id="sidebar" class="sidebar" aria-label="Soorten" hidden>
+      <div class="sidebar-header">
+        <div class="sidebar-title">Soort</div>
+        <div id="speciesStatus" class="sidebar-status muted"></div>
+      </div>
+
+      <label class="sidebar-search">
+        <span class="muted">Zoek</span>
+        <input id="speciesSearchInput" type="search" placeholder="Typ een soort…" />
+      </label>
+
+      <div id="speciesList" class="species-list" role="listbox" aria-label="Soortenlijst"></div>
+    </aside>
+
     <section class="map-shell" aria-label="Kaart">
       <div id="map" class="map" role="application" aria-label="Leaflet kaart"></div>
     </section>
