@@ -11,7 +11,10 @@ export function initApp() {
   const includeIsorgInput = document.querySelector("#includeIsorgInput");
   const filtersForm = document.querySelector("#filtersForm");
   const sidebarEl = document.querySelector("#sidebar");
-  const speciesStatusEl = document.querySelector("#speciesStatus");
+  const sidebarTabSpecies = document.querySelector("#sidebarTabSpecies");
+  const sidebarTabView = document.querySelector("#sidebarTabView");
+  const sidebarPanelSpecies = document.querySelector("#sidebarPanelSpecies");
+  const sidebarPanelView = document.querySelector("#sidebarPanelView");
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
   const sidebarCloseBtn = document.querySelector("#sidebarCloseBtn");
@@ -39,7 +42,10 @@ export function initApp() {
     !includeIsorgInput ||
     !filtersForm ||
     !sidebarEl ||
-    !speciesStatusEl ||
+    !sidebarTabSpecies ||
+    !sidebarTabView ||
+    !sidebarPanelSpecies ||
+    !sidebarPanelView ||
     !speciesSearchInput ||
     !speciesListEl ||
     !sidebarCloseBtn ||
@@ -112,6 +118,7 @@ export function initApp() {
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
   let sidebarToggleControl = null;
+  let isComputing = false;
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -499,7 +506,9 @@ export function initApp() {
       return;
     }
 
-    const showHud = !sidebarOpen;
+    // HUD: if a species is selected we always show it (even when sidebar is open).
+    // If nothing is selected, only show HUD when sidebar is closed.
+    const showHud = Boolean(selectedSpecies) || !sidebarOpen;
     const showEmpty = showHud && !selectedSpecies;
 
     emptyStateOverlay.hidden = !showEmpty;
@@ -532,10 +541,12 @@ export function initApp() {
     } else {
       line1 = `${selectedSpecies.name} · ${styleNl}${suffixMinN}`;
 
-      if (metric === "sum") {
-        line2 = `Totaal ${fmtInt(summary.sum)} geteld (in beeld)`;
+      if (isComputing) {
+        line2 = "Bezig met berekenen…";
+      } else if (metric === "sum") {
+        line2 = `In beeld · Totaal ${fmtInt(summary.sum)} geteld`;
       } else if (metric === "avg") {
-        line2 = `Gemiddeld ${fmtAvg(summary.avg)} per inzending (in beeld)`;
+        line2 = `In beeld · Gemiddeld ${fmtAvg(summary.avg)} per inzending`;
       } else {
         // presence
         const pct = summary.total ? Math.round((summary.with / summary.total) * 100) : 0;
@@ -641,13 +652,26 @@ export function initApp() {
     return nfAvg1.format(n);
   }
 
-  function clearSpeciesStatus() {
-    speciesStatusEl.textContent = "";
+  function setComputing(next) {
+    isComputing = Boolean(next);
+    updateHudAndEmptyState();
   }
 
-  function setSpeciesStatus(msg) {
-    speciesStatusEl.textContent = msg || "";
+  let sidebarTab = "species"; // "species" | "view"
+
+  function setSidebarTab(next) {
+    sidebarTab = next === "view" ? "view" : "species";
+    sidebarTabSpecies.setAttribute("aria-pressed", sidebarTab === "species" ? "true" : "false");
+    sidebarTabView.setAttribute("aria-pressed", sidebarTab === "view" ? "true" : "false");
+    sidebarPanelSpecies.hidden = sidebarTab !== "species";
+    sidebarPanelView.hidden = sidebarTab !== "view";
   }
+
+  sidebarTabSpecies.addEventListener("click", () => setSidebarTab("species"));
+  sidebarTabView.addEventListener("click", () => setSidebarTab("view"));
+
+  // Default tab on open.
+  setSidebarTab("species");
 
   function filteredPreparedEntries() {
     const { pc4, includeType1, includeIsorg } = getFilters();
@@ -808,17 +832,17 @@ export function initApp() {
     gridLayer.clearLayers();
 
     if (!selectedSpecies) {
-      setSpeciesStatus("Kies een soort…");
+      setComputing(false);
       return;
     }
 
     const entries = rendered;
     if (!entries || entries.length === 0) {
-      setSpeciesStatus("Geen entries (na filters).");
+      setComputing(false);
       return;
     }
 
-    setSpeciesStatus("Computing…");
+    setComputing(true);
 
     const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
     const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
@@ -958,9 +982,7 @@ export function initApp() {
       }
     }
 
-    const styleNl = effectiveStyle === "heatmap" ? "heatmap" : "raster";
-    const metricNl = metric === "sum" ? "totaal" : (metric === "avg" ? "gemiddeld" : "aanwezigheid");
-    setSpeciesStatus(`${selectedSpecies.name} • ${metricNl} • ${styleNl}${minN > 1 ? ` • min‑N ${minN}` : ""}`);
+    setComputing(false);
   }
 
   function popupHtml(entry) {
@@ -1188,7 +1210,7 @@ export function initApp() {
         if (!ok) selectedSpecies = null;
       }
 
-      clearSpeciesStatus();
+      setComputing(false);
       renderSpeciesList({ query: speciesSearchInput.value });
       render();
     } catch (err) {
