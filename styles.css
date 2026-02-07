@@ -230,6 +230,25 @@ input {
   gap: 10px;
 }
 
+.sidebar-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.20);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  line-height: 1;
+  font-size: 18px;
+}
+.sidebar-close-btn:hover { background: rgba(0, 0, 0, 0.30); }
+
 .sidebar-title {
   font-weight: 900;
   letter-spacing: 0.2px;
@@ -379,6 +398,7 @@ input {
   box-shadow: var(--shadow);
   overflow: hidden;
   min-height: 0;
+  position: relative;
 }
 
 .map {
@@ -401,6 +421,62 @@ input {
 }
 
 .leaflet-control-attribution a { color: rgba(255, 255, 255, 0.85) !important; }
+
+/* Mode 2 sidebar toggle (map control) */
+.tvt-sidebar-toggle-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  user-select: none;
+  font: inherit;
+  font-size: 13px;
+}
+.tvt-sidebar-toggle-btn:hover { background: rgba(0, 0, 0, 0.55); }
+
+.tvt-hud-primary {
+  font-weight: 900;
+  letter-spacing: 0.1px;
+}
+
+/* Empty state overlay */
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.empty-state > * { pointer-events: auto; }
+
+.empty-state-title {
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.empty-state-sub {
+  margin-bottom: 12px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.empty-state-btn {
+  appearance: none;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.empty-state-btn:hover { background: rgba(125, 211, 252, 0.20); }
 
 .tvt-popup {
   font-family: ui-sans-serif, system-ui;

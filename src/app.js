@@ -14,6 +14,9 @@ export function initApp() {
   const speciesStatusEl = document.querySelector("#speciesStatus");
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
+  const sidebarCloseBtn = document.querySelector("#sidebarCloseBtn");
+  const emptyStateOverlay = document.querySelector("#emptyStateOverlay");
+  const emptyStateOpenBtn = document.querySelector("#emptyStateOpenBtn");
   const speciesScopeViewport = document.querySelector("#speciesScopeViewport");
   const speciesScopeAll = document.querySelector("#speciesScopeAll");
   const speciesSortMost = document.querySelector("#speciesSortMost");
@@ -39,6 +42,9 @@ export function initApp() {
     !speciesStatusEl ||
     !speciesSearchInput ||
     !speciesListEl ||
+    !sidebarCloseBtn ||
+    !emptyStateOverlay ||
+    !emptyStateOpenBtn ||
     !modePointsBtn ||
     !modeSpeciesBtn ||
     !speciesScopeViewport ||
@@ -102,6 +108,10 @@ export function initApp() {
   let metric = "presence"; // "presence" | "avg" | "sum"
   let style = "auto"; // "auto" | "grid" | "heatmap"
   let minN = 1;
+  let sidebarOpen = true;
+  let hudStats = { entries: 0, birds: 0 };
+  let hudControl = null;
+  let sidebarToggleControl = null;
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -217,10 +227,12 @@ export function initApp() {
       if (r.isIsorg) inViewIsorg += 1;
     }
 
+    hudStats = { entries: inViewEntries, birds: inViewBirds };
     statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
 
     if (legendType1TextEl) legendType1TextEl.textContent = `Inzending (${inViewType1})`;
     if (legendIsorgTextEl) legendIsorgTextEl.textContent = `Schoolinzending (${inViewIsorg})`;
+    updateHudAndEmptyState();
   }
 
   // Legend (copied from old app style)
@@ -291,7 +303,14 @@ export function initApp() {
     // Allow mode-based styling without touching JS again.
     document.body.dataset.mode = mode;
 
-    sidebarEl.hidden = mode !== "species";
+    // Mode 1 never shows sidebar.
+    if (mode !== "species") {
+      setSidebarOpen(false, { persist: false, reason: "mode1" });
+    } else {
+      initSidebarOpenOnEnterSpeciesMode();
+    }
+
+    updateSidebarToggleControl();
 
     if (mode === "species") {
       if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
@@ -352,6 +371,275 @@ export function initApp() {
     const m = modeFromUrl();
     if (m !== mode) setMode(m);
   });
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia("(max-width: 880px)").matches;
+  }
+
+  function sidebarStorageKey() {
+    return `tvt:speciesSidebarOpen:${isMobile() ? "mobile" : "desktop"}`;
+  }
+
+  function hasSidebarPreference() {
+    try {
+      return window.localStorage.getItem(sidebarStorageKey()) != null;
+    } catch {
+      return false;
+    }
+  }
+
+  function getSavedSidebarOpen() {
+    try {
+      const v = window.localStorage.getItem(sidebarStorageKey());
+      if (v == null) return null;
+      return v === "1" || v === "true" || v === "open";
+    } catch {
+      return null;
+    }
+  }
+
+  function saveSidebarOpen(open) {
+    try {
+      window.localStorage.setItem(sidebarStorageKey(), open ? "open" : "closed");
+    } catch {
+      // ignore
+    }
+  }
+
+  function setSidebarOpen(open, { persist = true, reason = "" } = {}) {
+    sidebarOpen = Boolean(open);
+    sidebarEl.hidden = !(mode === "species" && sidebarOpen);
+    updateSidebarToggleControl();
+
+    if (mode === "species") {
+      if (sidebarOpen) {
+        if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
+      }
+      // sidebar open/close changes map size
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // ignore
+      }
+      setTimeout(() => {
+        try {
+          map.invalidateSize({ animate: false });
+        } catch {
+          // ignore
+        }
+      }, 0);
+    }
+
+    if (persist) saveSidebarOpen(sidebarOpen);
+    updateHudAndEmptyState();
+    if (mode === "species" && !sidebarOpen) schedulePresenceGridCompute();
+  }
+
+  function initSidebarOpenOnEnterSpeciesMode() {
+    const saved = getSavedSidebarOpen();
+    if (saved == null) {
+      // First time: open sidebar (friendly), except on mobile with species selected.
+      if (isMobile() && selectedSpecies) setSidebarOpen(false, { persist: false, reason: "mobile-default-closed" });
+      else setSidebarOpen(true, { persist: false, reason: "first-time-open" });
+      return;
+    }
+    setSidebarOpen(saved, { persist: false, reason: "restore" });
+  }
+
+  sidebarCloseBtn.addEventListener("click", () => {
+    if (mode !== "species") return;
+    setSidebarOpen(false, { persist: true, reason: "close" });
+  });
+
+  emptyStateOpenBtn.addEventListener("click", () => {
+    if (mode !== "species") return;
+    setSidebarOpen(true, { persist: true, reason: "empty-state" });
+  });
+
+  function updateSidebarToggleControl() {
+    if (mode !== "species") {
+      if (sidebarToggleControl) {
+        try { sidebarToggleControl.remove(); } catch { /* ignore */ }
+      }
+      sidebarToggleControl = null;
+      return;
+    }
+
+    if (!sidebarToggleControl) {
+      sidebarToggleControl = globalThis.L.control({ position: "topright" });
+      sidebarToggleControl.onAdd = () => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tvt-sidebar-toggle-btn";
+        btn.addEventListener("click", () => setSidebarOpen(!sidebarOpen, { persist: true, reason: "map-toggle" }));
+        globalThis.L.DomEvent.disableClickPropagation(btn);
+        globalThis.L.DomEvent.disableScrollPropagation(btn);
+        return btn;
+      };
+      sidebarToggleControl.addTo(map);
+    }
+
+    const el = sidebarToggleControl.getContainer();
+    if (el) {
+      el.textContent = sidebarOpen ? "Zijbalk sluiten" : "Zijbalk openen";
+    }
+  }
+
+  function updateHudAndEmptyState() {
+    if (mode !== "species") {
+      if (hudControl) {
+        try {
+          hudControl.remove();
+        } catch {
+          // ignore
+        }
+      }
+      hudControl = null;
+      emptyStateOverlay.hidden = true;
+      return;
+    }
+
+    const showHud = !sidebarOpen;
+    const showEmpty = showHud && !selectedSpecies;
+
+    emptyStateOverlay.hidden = !showEmpty;
+
+    if (!showHud) {
+      if (hudControl) {
+        try {
+          hudControl.remove();
+        } catch {
+          // ignore
+        }
+      }
+      hudControl = null;
+      return;
+    }
+
+    const effectiveStyleRaw = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const styleNl = effectiveStyleRaw === "heatmap" ? "heatmap" : "raster";
+    const suffixMinN = minN > 1 ? ` · min‑N ${minN}` : "";
+
+    // Compute metric sentence using current viewport.
+    const summary = computeSelectedSpeciesViewportSummary();
+
+    let line1 = "";
+    let line2 = "";
+
+    if (!selectedSpecies) {
+      line1 = "Kies een soort";
+      line2 = "Tik om de zijbalk te openen";
+    } else {
+      line1 = `${selectedSpecies.name} · ${styleNl}${suffixMinN}`;
+
+      if (metric === "sum") {
+        line2 = `Totaal ${fmtInt(summary.sum)} geteld (in beeld)`;
+      } else if (metric === "avg") {
+        line2 = `Gemiddeld ${fmtAvg(summary.avg)} per inzending (in beeld)`;
+      } else {
+        // presence
+        const pct = summary.total ? Math.round((summary.with / summary.total) * 100) : 0;
+        line2 = `Aanwezig in ${fmtInt(summary.with)}/${fmtInt(summary.total)} inzendingen (${pct}%)`;
+      }
+    }
+
+    if (!hudControl) {
+      hudControl = globalThis.L.control({ position: "topleft" });
+      hudControl.onAdd = () => {
+        const div = globalThis.L.DomUtil.create("div", "tvt-hud");
+        div.style.display = "grid";
+        div.style.gap = "6px";
+        div.style.padding = "10px 10px";
+        div.style.background = "rgba(0, 0, 0, 0.45)";
+        div.style.backdropFilter = "blur(8px)";
+        div.style.borderRadius = "12px";
+        div.style.color = "rgba(255, 255, 255, 0.92)";
+        div.style.maxWidth = "320px";
+        div.style.cursor = "pointer";
+        div.style.userSelect = "none";
+        div.tabIndex = 0;
+
+        const a = document.createElement("div");
+        a.className = "tvt-hud-primary";
+        div.appendChild(a);
+
+        const b = document.createElement("div");
+        b.className = "tvt-hud-secondary";
+        b.style.color = "rgba(255, 255, 255, 0.75)";
+        b.style.fontSize = "12px";
+        div.appendChild(b);
+
+        const open = () => setSidebarOpen(true, { persist: true, reason: "hud" });
+        div.addEventListener("click", open);
+        div.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") open();
+        });
+
+        globalThis.L.DomEvent.disableClickPropagation(div);
+        globalThis.L.DomEvent.disableScrollPropagation(div);
+
+        div.__tvt = { a, b };
+        return div;
+      };
+      hudControl.addTo(map);
+    }
+
+    const el = hudControl.getContainer();
+    const refs = el && el.__tvt;
+    if (refs) {
+      refs.a.textContent = line1;
+      refs.b.textContent = line2;
+    }
+  }
+
+  function computeSelectedSpeciesViewportSummary() {
+    const out = { total: 0, with: 0, sum: 0, avg: 0 };
+    if (!selectedSpecies) return out;
+
+    let bounds = null;
+    try {
+      bounds = map.getBounds();
+    } catch {
+      bounds = null;
+    }
+    if (!bounds) return out;
+
+    const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
+    const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
+
+    for (const e of rendered) {
+      if (!bounds.contains(e.latlng)) continue;
+      out.total += 1;
+
+      let cnt = 0;
+      const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
+      for (const b of birds) {
+        const id = Number(b?.bird_id ?? NaN);
+        const nm = normalizeSpeciesName(b?.name);
+        if (selId != null ? Number.isFinite(id) && id === selId : nm === selName) {
+          cnt = Number(b?.count ?? 0) || 0;
+          break;
+        }
+      }
+      if (cnt > 0) out.with += 1;
+      out.sum += cnt;
+    }
+
+    out.avg = out.total ? out.sum / out.total : 0;
+    return out;
+  }
+
+  const nfInt = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
+  const nfAvg1 = new Intl.NumberFormat("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function fmtInt(n) {
+    return nfInt.format(Number(n || 0) || 0);
+  }
+
+  function fmtAvg(v) {
+    const n = Number(v || 0) || 0;
+    return nfAvg1.format(n);
+  }
 
   function clearSpeciesStatus() {
     speciesStatusEl.textContent = "";
@@ -417,17 +705,17 @@ export function initApp() {
       speciesSort === "az"
         ? listFiltered.slice().sort((a, b) => a.name.localeCompare(b.name, "nl"))
         : listFiltered
-            .slice()
-            .sort((a, b) => {
-              const ka = a.id != null ? `id:${a.id}` : `name:${normalizeSpeciesName(a.name)}`;
-              const kb = b.id != null ? `id:${b.id}` : `name:${normalizeSpeciesName(b.name)}`;
-              const sa = statsByKey.get(ka) || { with: 0, sum: 0 };
-              const sb = statsByKey.get(kb) || { with: 0, sum: 0 };
-              // Most observed = N_with desc, then sum desc, then name.
-              if (sb.with !== sa.with) return sb.with - sa.with;
-              if (sb.sum !== sa.sum) return sb.sum - sa.sum;
-              return a.name.localeCompare(b.name, "nl");
-            });
+          .slice()
+          .sort((a, b) => {
+            const ka = a.id != null ? `id:${a.id}` : `name:${normalizeSpeciesName(a.name)}`;
+            const kb = b.id != null ? `id:${b.id}` : `name:${normalizeSpeciesName(b.name)}`;
+            const sa = statsByKey.get(ka) || { with: 0, sum: 0 };
+            const sb = statsByKey.get(kb) || { with: 0, sum: 0 };
+            // Most observed = N_with desc, then sum desc, then name.
+            if (sb.with !== sa.with) return sb.with - sa.with;
+            if (sb.sum !== sa.sum) return sb.sum - sa.sum;
+            return a.name.localeCompare(b.name, "nl");
+          });
 
     speciesListEl.innerHTML = "";
 
@@ -454,9 +742,20 @@ export function initApp() {
       btn.appendChild(meta);
 
       btn.addEventListener("click", () => {
-        selectedSpecies = s;
+        // Toggle behavior: clicking the selected species deselects it.
+        const isSame =
+          selectedSpecies &&
+          selectedSpecies.id === s.id &&
+          selectedSpecies.name === s.name;
+        selectedSpecies = isSame ? null : s;
         renderSpeciesList({ query: speciesSearchInput.value });
         schedulePresenceGridCompute();
+        updateHudAndEmptyState();
+        // Mobile UX: selecting a species should immediately show the map.
+        // This auto-close does NOT persist preference (user intent wins).
+        if (mode === "species" && isMobile() && selectedSpecies) {
+          setSidebarOpen(false, { persist: false, reason: "mobile-autoclose-on-select" });
+        }
       });
 
       speciesListEl.appendChild(btn);
@@ -575,8 +874,8 @@ export function initApp() {
       const sum = sumCount[i];
       const v =
         metric === "sum" ? sum :
-        metric === "avg" ? sum / total :
-        (withN / total); // presence
+          metric === "avg" ? sum / total :
+            (withN / total); // presence
       metricVal[i] = v;
       if (v > maxMetric) maxMetric = v;
     }
@@ -628,12 +927,12 @@ export function initApp() {
 
         const metricLabel =
           metric === "sum"
-            ? `sum=${sum.toFixed(0)}`
+            ? `totaal=${sum.toFixed(0)}`
             : metric === "avg"
-              ? `avg=${(total ? (sum / total) : 0).toFixed(2)}`
-              : `presence=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
+              ? `gemiddeld=${(total ? (sum / total) : 0).toFixed(2)}`
+              : `aanwezigheid=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
 
-        const tooltip = `${selectedSpecies.name}\nN_total=${total} • N_with=${withN}\n${metricLabel}`;
+        const tooltip = `${selectedSpecies.name}\nN_totaal=${total} • N_met=${withN}\n${metricLabel}`;
 
         if (effectiveStyle === "heatmap") {
           if (!v || !vNorm) continue;
@@ -659,7 +958,9 @@ export function initApp() {
       }
     }
 
-    setSpeciesStatus(`${selectedSpecies.name} • ${metric} • ${effectiveStyle} • min‑N ${minN}`);
+    const styleNl = effectiveStyle === "heatmap" ? "heatmap" : "raster";
+    const metricNl = metric === "sum" ? "totaal" : (metric === "avg" ? "gemiddeld" : "aanwezigheid");
+    setSpeciesStatus(`${selectedSpecies.name} • ${metricNl} • ${styleNl}${minN > 1 ? ` • min‑N ${minN}` : ""}`);
   }
 
   function popupHtml(entry) {
