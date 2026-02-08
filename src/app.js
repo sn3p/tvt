@@ -34,7 +34,7 @@ export function initApp() {
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
   const gridCellValue = document.querySelector("#gridCellValue");
-  const GRID_CELL_M_DEFAULT = Number(gridCellSlider?.value ?? 900); // tune: 600–1200 is usually nice
+  const GRID_CELL_M_DEFAULT = Number(gridCellSlider?.value ?? 1000);
 
   if (
     !mapEl ||
@@ -79,32 +79,6 @@ export function initApp() {
     const v = Number(localStorage.getItem("tvtGridCellM"));
     return Number.isFinite(v) && v > 0 ? v : GRID_CELL_M_DEFAULT;
   })();
-
-  // Clamp a value between a minimum and maximum.
-  function clamp(n, min, max) {
-    return Math.max(min, Math.min(max, n));
-  }
-
-  // Convert target meters to pixels at current zoom (approx) using 100px sample at map center.
-  function metersToPixels(meters) {
-    try {
-      const center = map.getCenter();
-      const p0 = map.latLngToContainerPoint(center);
-      const p1 = L.point(p0.x + 100, p0.y);
-      const ll1 = map.containerPointToLatLng(p1);
-      const metersPer100px = map.distance(center, ll1);
-      if (!metersPer100px || metersPer100px <= 0) return 90;
-      return (meters / metersPer100px) * 100;
-    } catch {
-      return 90;
-    }
-  }
-
-  function getGridCellPx() {
-    // Clamp keeps performance sane and prevents unreadable tiny cells.
-    // Tune these after eyeballing: 30–140px is a good starting range.
-    return clamp(Math.round(metersToPixels(gridCellM)), 30, 140);
-  }
 
   if (gridCellSlider && gridCellValue) {
     gridCellSlider.value = String(gridCellM);
@@ -876,33 +850,40 @@ export function initApp() {
     const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
     const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
 
-    const cellPx = getGridCellPx();
-    const size = map.getSize();
-    const cols = Math.max(1, Math.ceil(size.x / cellPx));
-    const rows = Math.max(1, Math.ceil(size.y / cellPx));
-    const cellCount = cols * rows;
+    // We anchor the grid in projected CRS meters (EPSG:3857), not to the viewport pixels.
+    // This makes the grid stable under pan/zoom and makes `gridCellM` truly "meters".
+    const crs = map.options.crs;
+    const bounds = map.getBounds();
 
-    const nTotal = new Array(cellCount).fill(0);
-    const nWith = new Array(cellCount).fill(0);
-    const sumCount = new Array(cellCount).fill(0);
+    // Aggregate by (ix, iy) where each cell is gridCellM x gridCellM meters in projected space.
+    const cells = new Map(); // key -> { total, withN, sum, ix, iy }
 
-    // Assign entries to grid cells in viewport (O(entries)).
     for (const e of entries) {
-      const pt = map.latLngToContainerPoint(e.latlng);
-      if (pt.x < 0 || pt.y < 0 || pt.x >= size.x || pt.y >= size.y) continue;
-      const c = Math.floor(pt.x / cellPx);
-      const r = Math.floor(pt.y / cellPx);
-      const idx = r * cols + c;
-      nTotal[idx] += 1;
+      // Only consider points currently in view (keeps it fast and matches HUD wording).
+      if (!bounds.contains(e.latlng)) continue;
+
+      const p = crs.project(e.latlng); // meters-ish in WebMercator
+      const ix = Math.floor(p.x / gridCellM);
+      const iy = Math.floor(p.y / gridCellM);
+      const key = `${ix},${iy}`;
+
+      let cell = cells.get(key);
+      if (!cell) {
+        cell = { ix, iy, total: 0, withN: 0, sum: 0 };
+        cells.set(key, cell);
+      }
+
+      cell.total += 1;
 
       const has =
         selId != null
           ? Boolean(e.birdIds && e.birdIds.has(selId))
           : Boolean(e.birdNames && e.birdNames.has(selName));
-      if (has) nWith[idx] += 1;
 
-      // For avg/sum we also need the per-entry count for this species.
       if (has) {
+        cell.withN += 1;
+
+        // For avg/sum we need the per-entry count for this species.
         let cnt = 0;
         const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
         for (const b of birds) {
@@ -913,23 +894,27 @@ export function initApp() {
             break;
           }
         }
-        sumCount[idx] += cnt;
+        cell.sum += cnt;
       }
     }
 
-    // Normalize metric for visualization (per recompute, per viewport).
+    if (cells.size === 0) {
+      setComputing(false);
+      return;
+    }
+
+    // Normalize metric per viewport for visualization.
     let maxMetric = 0;
-    const metricVal = new Array(cellCount).fill(0);
-    for (let i = 0; i < cellCount; i++) {
-      const total = nTotal[i];
+    for (const cell of cells.values()) {
+      const total = cell.total;
       if (!total) continue;
-      const withN = nWith[i];
-      const sum = sumCount[i];
       const v =
-        metric === "sum" ? sum :
-          metric === "avg" ? sum / total :
-            (withN / total); // presence
-      metricVal[i] = v;
+        metric === "sum"
+          ? cell.sum
+          : metric === "avg"
+            ? cell.sum / total
+            : (cell.withN / total); // presence
+      cell.v = v;
       if (v > maxMetric) maxMetric = v;
     }
 
@@ -939,75 +924,65 @@ export function initApp() {
         ? (metric === "sum" ? "heatmap" : "grid")
         : style;
 
-    // For "heatmap" we'll render circles at cell centers with overlap alpha blending.
-    // For "grid" we'll render rectangles (binned).
+    // Render cells. We only render cells that have enough sample size (minN).
+    // Opacity scales by both value and sample size to hint uncertainty.
+    for (const cell of cells.values()) {
+      const total = cell.total;
+      const withN = cell.withN;
+      const sum = cell.sum;
+      const v = cell.v || 0;
 
-    // Precompute cell radius in meters (roughly cellPx in x direction).
-    const cellRadiusM = (() => {
-      try {
-        const a = map.containerPointToLatLng([0, 0]);
-        const b = map.containerPointToLatLng([cellPx, 0]);
-        return Math.max(20, map.distance(a, b) * 0.75);
-      } catch {
-        return 120;
-      }
-    })();
+      if (total < minN) continue;
 
-    // Render all cells.
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const idx = r * cols + c;
-        const total = nTotal[idx];
-        const withN = nWith[idx];
-        const sum = sumCount[idx];
-        const v = metricVal[idx];
+      const vNorm = maxMetric ? Math.min(1, v / maxMetric) : 0;
+      if (!vNorm) continue;
 
-        if (total < minN) continue;
+      const nScale = Math.min(1, Math.sqrt(total) / 3); // tune: 3 ~= "reasonable N"
+      const fillOpacity = 0.85 * vNorm * nScale;
 
-        const x0 = c * cellPx;
-        const y0 = r * cellPx;
-        const x1 = Math.min((c + 1) * cellPx, size.x);
-        const y1 = Math.min((r + 1) * cellPx, size.y);
+      // Cell bounds in projected meters
+      const x0m = cell.ix * gridCellM;
+      const y0m = cell.iy * gridCellM;
+      const x1m = x0m + gridCellM;
+      const y1m = y0m + gridCellM;
 
-        const nw = map.containerPointToLatLng([x0, y0]);
-        const se = map.containerPointToLatLng([x1, y1]);
-        const bb = globalThis.L.latLngBounds(nw, se);
+      // Convert projected meters back to lat/lng for Leaflet layers.
+      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
+      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
+      const bb = globalThis.L.latLngBounds(sw, ne);
 
-        // Sample size indicator: ramp opacity with N.
-        const nScale = total ? Math.min(1, Math.sqrt(total) / 3) : 0;
-        const vNorm = maxMetric ? Math.min(1, v / maxMetric) : 0;
-        const fillOpacity = total ? 0.85 * vNorm * nScale : 0;
+      const metricLabel =
+        metric === "sum"
+          ? `totaal=${sum.toFixed(0)}`
+          : metric === "avg"
+            ? `gemiddeld=${(total ? (sum / total) : 0).toFixed(2)}`
+            : `aanwezigheid=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
 
-        const metricLabel =
-          metric === "sum"
-            ? `totaal=${sum.toFixed(0)}`
-            : metric === "avg"
-              ? `gemiddeld=${(total ? (sum / total) : 0).toFixed(2)}`
-              : `aanwezigheid=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
+      const tooltip = `${selectedSpecies.name}\nN_totaal=${total} • N_met=${withN}\n${metricLabel}`;
 
-        const tooltip = `${selectedSpecies.name}\nN_totaal=${total} • N_met=${withN}\n${metricLabel}`;
+      if (effectiveStyle === "heatmap") {
+        // Heatmap-ish: circles centered on the cell, radius ~ half a cell.
+        const cxm = x0m + gridCellM / 2;
+        const cym = y0m + gridCellM / 2;
+        const center = crs.unproject(globalThis.L.point(cxm, cym));
 
-        if (effectiveStyle === "heatmap") {
-          if (!v || !vNorm) continue;
-          const center = map.containerPointToLatLng([(x0 + x1) / 2, (y0 + y1) / 2]);
-          const circle = globalThis.L.circle(center, {
-            radius: cellRadiusM,
-            stroke: false,
-            fillColor: "rgba(125,211,252,1)",
-            fillOpacity: Math.min(0.65, fillOpacity * 0.85),
-          });
-          circle.bindTooltip(tooltip, { sticky: false });
-          circle.addTo(gridLayer);
-        } else {
-          const rect = globalThis.L.rectangle(bb, {
-            color: "rgba(255,255,255,0.18)",
-            weight: 1,
-            fillColor: "rgba(125,211,252,1)",
-            fillOpacity,
-          });
-          rect.bindTooltip(tooltip, { sticky: false });
-          rect.addTo(gridLayer);
-        }
+        const circle = globalThis.L.circle(center, {
+          radius: Math.max(30, gridCellM * 0.6),
+          stroke: false,
+          fillColor: "rgba(125,211,252,1)",
+          fillOpacity: Math.min(0.65, fillOpacity * 0.85),
+        });
+        circle.bindTooltip(tooltip, { sticky: false });
+        circle.addTo(gridLayer);
+      } else {
+        const rect = globalThis.L.rectangle(bb, {
+          color: "rgba(255,255,255,0.18)",
+          weight: 1,
+          fillColor: "rgba(125,211,252,1)",
+          fillOpacity,
+        });
+        rect.bindTooltip(tooltip, { sticky: false });
+        rect.addTo(gridLayer);
       }
     }
 
