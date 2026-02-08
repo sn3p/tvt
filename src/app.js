@@ -125,11 +125,11 @@ export function initApp() {
 
   // Manual value is always persisted, even when Auto is on (so you can toggle back).
   let gridCellMManual = (() => {
-    const v = Number(localStorage.getItem("tvtGridCellM"));
+    const v = Number(localStorage.getItem("tvt:GridCellM"));
     return Number.isFinite(v) && v > 0 ? v : GRID_CELL_M_DEFAULT;
   })();
 
-  let gridCellAutoEnabled = readBoolLS("tvtGridCellAuto", true);
+  let gridCellAutoEnabled = readBoolLS("tvt:GridCellAuto", true);
 
   // Effective cell size used by compute. Initialized after map is created.
   let gridCellM = snapGridCellM(gridCellMManual);
@@ -164,7 +164,7 @@ export function initApp() {
       gridCellSlider.addEventListener("input", () => {
         const snapped = snapGridCellM(Number(gridCellSlider.value));
         gridCellMManual = snapped;
-        localStorage.setItem("tvtGridCellM", String(gridCellMManual));
+        localStorage.setItem("tvt:GridCellM", String(gridCellMManual));
 
         if (!gridCellAutoEnabled) {
           gridCellM = snapped;
@@ -185,7 +185,7 @@ export function initApp() {
       if (!v) return;
       const snapped = snapGridCellM(Number(v));
       gridCellMManual = snapped;
-      localStorage.setItem("tvtGridCellM", String(gridCellMManual));
+      localStorage.setItem("tvt:GridCellM", String(gridCellMManual));
       if (!gridCellAutoEnabled) {
         gridCellM = snapped;
         updateGridCellUI(gridCellM);
@@ -199,7 +199,7 @@ export function initApp() {
 
       gridCellAuto.addEventListener("change", () => {
         gridCellAutoEnabled = Boolean(gridCellAuto.checked);
-        localStorage.setItem("tvtGridCellAuto", gridCellAutoEnabled ? "1" : "0");
+        localStorage.setItem("tvt:GridCellAuto", gridCellAutoEnabled ? "1" : "0");
         gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
         updateGridCellUI(gridCellM);
         schedulePresenceGridCompute();
@@ -255,6 +255,7 @@ export function initApp() {
   let preparedEntries = [];
   let speciesIndex = [];
   let selectedSpecies = null; // { id?: number|null, name: string }
+  const SELECTED_SPECIES_LS_KEY = "tvt:selectedSpecies";
   let computeTimer = 0;
   let speciesScope = "viewport"; // "viewport" | "all"
   let speciesSort = "most"; // "most" | "az"
@@ -269,6 +270,60 @@ export function initApp() {
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
+
+  function readSelectedSpeciesFromStorage() {
+    try {
+      const raw = window.localStorage.getItem(SELECTED_SPECIES_LS_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      const name = String(obj?.name ?? "").trim();
+      if (!name) return null;
+      const idRaw = obj?.id;
+      const id =
+        idRaw == null
+          ? null
+          : (Number.isFinite(Number(idRaw)) ? Number(idRaw) : null);
+      return { id, name };
+    } catch {
+      return null;
+    }
+  }
+
+  function persistSelectedSpeciesToStorage() {
+    try {
+      if (!selectedSpecies) {
+        window.localStorage.removeItem(SELECTED_SPECIES_LS_KEY);
+        return;
+      }
+      const payload = {
+        id: selectedSpecies.id == null ? null : Number(selectedSpecies.id),
+        name: String(selectedSpecies.name || "").trim(),
+      };
+      if (!payload.name) {
+        window.localStorage.removeItem(SELECTED_SPECIES_LS_KEY);
+        return;
+      }
+      window.localStorage.setItem(SELECTED_SPECIES_LS_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage failures (private mode, quota, etc.)
+    }
+  }
+
+  function setSelectedSpecies(next, { persist = true } = {}) {
+    if (!next) {
+      selectedSpecies = null;
+    } else {
+      selectedSpecies = {
+        id: next.id == null ? null : Number(next.id),
+        name: String(next.name || "").trim(),
+      };
+      if (!selectedSpecies.name) selectedSpecies = null;
+    }
+    if (persist) persistSelectedSpeciesToStorage();
+  }
+
+  // Restore last selected species (removed when user toggles it off).
+  setSelectedSpecies(readSelectedSpeciesFromStorage(), { persist: false });
 
   function normalizePc4(v) {
     const m = String(v ?? "").match(/(\d{4})/);
@@ -291,6 +346,23 @@ export function initApp() {
       .replace(/\s+/g, " ")
       .replace(/[^a-z0-9 ]+/g, "")
       .trim();
+  }
+
+  // Number formatting helpers.
+  //
+  // IMPORTANT: These are used by `updateHud()`, which can run very early (during `setMode()`)
+  // especially when `selectedSpecies` is restored from localStorage. So this must be defined
+  // before the first `setMode(...)` call to avoid TDZ issues.
+  const nfInt = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
+  const nfAvg1 = new Intl.NumberFormat("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function fmtInt(n) {
+    return nfInt.format(Number(n || 0) || 0);
+  }
+
+  function fmtAvg(v) {
+    const n = Number(v || 0) || 0;
+    return nfAvg1.format(n);
   }
 
   function entryHasMode(entry, mode) {
@@ -772,18 +844,6 @@ export function initApp() {
     return out;
   }
 
-  const nfInt = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
-  const nfAvg1 = new Intl.NumberFormat("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-
-  function fmtInt(n) {
-    return nfInt.format(Number(n || 0) || 0);
-  }
-
-  function fmtAvg(v) {
-    const n = Number(v || 0) || 0;
-    return nfAvg1.format(n);
-  }
-
   function setComputing(next) {
     isComputing = Boolean(next);
     updateHud();
@@ -903,7 +963,7 @@ export function initApp() {
           selectedSpecies &&
           selectedSpecies.id === s.id &&
           selectedSpecies.name === s.name;
-        selectedSpecies = isSame ? null : s;
+        setSelectedSpecies(isSame ? null : s);
         renderSpeciesList({ query: speciesSearchInput.value });
         schedulePresenceGridCompute();
         updateHud();
@@ -1340,7 +1400,7 @@ export function initApp() {
       // Reset selection if it's not in the new list.
       if (selectedSpecies) {
         const ok = speciesIndex.some((s) => s.id === selectedSpecies.id && s.name === selectedSpecies.name);
-        if (!ok) selectedSpecies = null;
+        if (!ok) setSelectedSpecies(null);
       }
 
       setComputing(false);
@@ -1352,7 +1412,7 @@ export function initApp() {
       datasetYear = 0;
       preparedEntries = [];
       speciesIndex = [];
-      selectedSpecies = null;
+      setSelectedSpecies(null);
       pointsLayer.clearLayers();
       gridLayer.clearLayers();
       statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
