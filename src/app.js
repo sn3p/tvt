@@ -262,7 +262,10 @@ export function initApp() {
   let speciesSort = "most"; // "most" | "az"
   let metric = "presence"; // "presence" | "avg" | "sum"
   let style = "auto"; // "auto" | "grid" | "heatmap"
-  let minN = 1;
+
+  let minNDefault = Number(minNSlider?.value || 3);
+  let minN = minNValue.textContent = minNDefault;
+
   let sidebarOpen = true;
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
@@ -736,7 +739,7 @@ export function initApp() {
 
     const effectiveStyleRaw = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
     const styleNl = effectiveStyleRaw === "heatmap" ? "heatmap" : "raster";
-    const suffixMinN = minN > 1 ? ` · min‑N ${minN}` : "";
+    const suffixMinN = minN == minNDefault ? "" : ` · min‑N ${minN}`;
 
     // Compute metric sentence using current viewport.
     const summary = computeSelectedSpeciesViewportSummary();
