@@ -729,3 +729,46 @@ input {
   border-radius: 999px;
   border: 2px solid #fff;
 }
+
+/* Species grid/heatmap legend */
+.tvt-grid-legend {
+  gap: 8px;
+  max-width: 260px;
+}
+
+.tvt-grid-legend-title {
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  opacity: 0.95;
+}
+
+.tvt-grid-legend-scale {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.tvt-grid-legend-swatch {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.tvt-grid-legend-labels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.tvt-grid-legend-labels > span {
+  text-align: center;
+}
+
+.tvt-grid-legend-note {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.25;
+}

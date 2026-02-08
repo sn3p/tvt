@@ -518,6 +518,152 @@ export function initApp() {
     }
   }
 
+  // Grid/heatmap legend for species mode (sequential, luminance ramp + gamma).
+  const GRID_COLORMAP_GAMMA = 0.6;
+  // ColorBrewer "Blues" ramp (light -> dark), sampled densely for smooth interpolation.
+  const GRID_COLORMAP_BLUES = [
+    [247, 251, 255],
+    [222, 235, 247],
+    [198, 219, 239],
+    [158, 202, 225],
+    [107, 174, 214],
+    [66, 146, 198],
+    [33, 113, 181],
+    [8, 81, 156],
+    [8, 48, 107],
+  ];
+
+  function clamp01(x) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(1, Math.max(0, n));
+  }
+
+  // Gamma mapping that increases contrast near the high end.
+  function applyHighEndGamma(t, gamma = GRID_COLORMAP_GAMMA) {
+    const x = clamp01(t);
+    const g = Number(gamma);
+    if (!Number.isFinite(g) || g <= 0) return x;
+    return 1 - Math.pow(1 - x, g);
+  }
+
+  function colorFromBluesRamp(t) {
+    const x = clamp01(t);
+    const n = GRID_COLORMAP_BLUES.length;
+    if (n <= 1) {
+      const c = GRID_COLORMAP_BLUES[0] || [125, 211, 252];
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+    const f = x * (n - 1);
+    const i = Math.floor(f);
+    const w = f - i;
+    const c0 = GRID_COLORMAP_BLUES[Math.min(n - 1, Math.max(0, i))];
+    const c1 = GRID_COLORMAP_BLUES[Math.min(n - 1, Math.max(0, i + 1))];
+    const r = Math.round(c0[0] + (c1[0] - c0[0]) * w);
+    const g = Math.round(c0[1] + (c1[1] - c0[1]) * w);
+    const b = Math.round(c0[2] + (c1[2] - c0[2]) * w);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function metricLabelNl(m) {
+    if (m === "sum") return "Totaal";
+    if (m === "avg") return "Gemiddeld";
+    return "Aanwezigheid";
+  }
+
+  let gridLegendTitleEl = null;
+  let gridLegendScaleEl = null;
+  let gridLegendLabelsEl = null;
+  let gridLegendNoteEl = null;
+
+  const gridLegend = globalThis.L.control({ position: "bottomright" });
+  gridLegend.onAdd = () => {
+    const div = globalThis.L.DomUtil.create("div", "pill tvt-legend tvt-grid-legend");
+
+    const title = document.createElement("div");
+    title.className = "tvt-grid-legend-title";
+    title.textContent = "Aanwezigheid";
+    div.appendChild(title);
+    gridLegendTitleEl = title;
+
+    const scale = document.createElement("div");
+    scale.className = "tvt-grid-legend-scale";
+    div.appendChild(scale);
+    gridLegendScaleEl = scale;
+
+    const labels = document.createElement("div");
+    labels.className = "tvt-grid-legend-labels";
+    div.appendChild(labels);
+    gridLegendLabelsEl = labels;
+
+    const note = document.createElement("div");
+    note.className = "tvt-grid-legend-note";
+    note.textContent = `Kleur = waarde (γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+    div.appendChild(note);
+    gridLegendNoteEl = note;
+
+    // Don't let the legend eat map scroll/drag.
+    globalThis.L.DomEvent.disableClickPropagation(div);
+    globalThis.L.DomEvent.disableScrollPropagation(div);
+
+    // Populate with a sensible default so it never renders "empty".
+    updateGridLegend({ metric: "presence", maxMetric: 1, effectiveStyle: "grid" });
+    return div;
+  };
+  gridLegend.addTo(map);
+
+  function setGridLegendVisible(show) {
+    if (show) {
+      if (!gridLegend._map) gridLegend.addTo(map);
+    } else {
+      if (gridLegend._map) gridLegend.remove();
+    }
+  }
+  // Default mode is "points".
+  setGridLegendVisible(false);
+
+  function updateGridLegend({ metric, maxMetric, effectiveStyle }) {
+    if (!gridLegendTitleEl || !gridLegendScaleEl || !gridLegendLabelsEl || !gridLegendNoteEl) return;
+
+    const stops = [0, 0.25, 0.5, 0.75, 1];
+    const m = metric === "sum" ? "sum" : metric === "avg" ? "avg" : "presence";
+    const maxV = Number(maxMetric);
+    const maxOk = Number.isFinite(maxV) && maxV > 0 ? maxV : 0;
+
+    gridLegendTitleEl.textContent = `${metricLabelNl(m)} • ${effectiveStyle === "heatmap" ? "Heatmap" : "Raster"}`;
+
+    // Swatches
+    gridLegendScaleEl.replaceChildren();
+    for (const s of stops) {
+      const sw = document.createElement("span");
+      sw.className = "tvt-grid-legend-swatch";
+      sw.style.background = colorFromBluesRamp(applyHighEndGamma(s));
+      gridLegendScaleEl.appendChild(sw);
+    }
+
+    // Labels
+    gridLegendLabelsEl.replaceChildren();
+    for (const s of stops) {
+      const el = document.createElement("span");
+      if (m === "presence") {
+        el.textContent = `${Math.round(s * 100)}%`;
+      } else if (m === "sum") {
+        el.textContent = maxOk ? fmtInt(s * maxOk) : "0";
+      } else {
+        el.textContent = maxOk ? fmtAvg(s * maxOk) : "0";
+      }
+      gridLegendLabelsEl.appendChild(el);
+    }
+
+    if (m === "presence") {
+      gridLegendNoteEl.textContent = `Kleur = aanwezigheid (0–100%, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+    } else if (m === "sum") {
+      gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtInt(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+    } else {
+      gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtAvg(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+    }
+  }
+
   function setMode(nextMode) {
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
@@ -541,11 +687,13 @@ export function initApp() {
       if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
       setLegendVisible(false);
+      setGridLegendVisible(true);
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
       if (!map.hasLayer(pointsLayer)) pointsLayer.addTo(map);
       setLegendVisible(true);
+      setGridLegendVisible(false);
     }
 
     // Layout changes (sidebar show/hide) require a size invalidation.
@@ -1105,7 +1253,7 @@ export function initApp() {
     let maxMetric = 0;
     for (const cell of cells.values()) {
       const total = cell.total;
-      if (!total) continue;
+      if (!total || total < minN) continue;
       const v =
         metric === "sum"
           ? cell.sum
@@ -1122,6 +1270,8 @@ export function initApp() {
         ? (metric === "sum" ? "heatmap" : "grid")
         : style;
 
+    updateGridLegend({ metric, maxMetric, effectiveStyle });
+
     // Render cells. We only render cells that have enough sample size (minN).
     // Opacity scales by both value and sample size to hint uncertainty.
     for (const cell of cells.values()) {
@@ -1132,11 +1282,17 @@ export function initApp() {
 
       if (total < minN) continue;
 
-      const vNorm = maxMetric ? Math.min(1, v / maxMetric) : 0;
+      // Presence is already bounded 0..1; keep it on an absolute scale for interpretability.
+      const vNorm =
+        metric === "presence"
+          ? clamp01(v)
+          : (maxMetric ? clamp01(v / maxMetric) : 0);
       if (!vNorm) continue;
 
       const nScale = Math.min(1, Math.sqrt(total) / 3); // tune: 3 ~= "reasonable N"
-      const fillOpacity = 0.85 * vNorm * nScale;
+      const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
+      const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
+      const fillColor = colorFromBluesRamp(applyHighEndGamma(vNorm));
 
       // Cell bounds in projected meters
       const x0m = cell.ix * gridCellM;
@@ -1167,8 +1323,8 @@ export function initApp() {
         const circle = globalThis.L.circle(center, {
           radius: Math.max(30, gridCellM * 0.6),
           stroke: false,
-          fillColor: "rgba(125,211,252,1)",
-          fillOpacity: Math.min(0.65, fillOpacity * 0.85),
+          fillColor,
+          fillOpacity,
         });
         circle.bindTooltip(tooltip, { sticky: false });
         circle.addTo(gridLayer);
@@ -1176,7 +1332,7 @@ export function initApp() {
         const rect = globalThis.L.rectangle(bb, {
           color: "rgba(255,255,255,0.18)",
           weight: 1,
-          fillColor: "rgba(125,211,252,1)",
+          fillColor,
           fillOpacity,
         });
         rect.bindTooltip(tooltip, { sticky: false });
