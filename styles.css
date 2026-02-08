@@ -351,7 +351,8 @@ input {
   margin-left: 6px;
 }
 
-.sidebar-row {
+.sidebar-row,
+.sidebar-row-full {
   display: grid;
   grid-template-columns: 56px 1fr;
   gap: 10px;
@@ -360,8 +361,21 @@ input {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.sidebar-row-full {
+  grid-template-columns: 1fr;
+}
+
 .sidebar-label {
   font-size: 12px;
+}
+
+.tvt-grid-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tvt-grid-size-controls input[type="range"] {
+  width: 100%;
 }
 
 .segmented {
@@ -417,7 +431,12 @@ input {
 .sidebar-hint {
   padding: 8px 12px 10px;
   font-size: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-row .sidebar-hint,
+.sidebar-row-full .sidebar-hint {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .sidebar-search input[type="search"] {

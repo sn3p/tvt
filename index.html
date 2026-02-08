@@ -155,18 +155,19 @@
           </div>
         </div>
 
-        <div class="tvt-control">
-          <div class="tvt-control-label-row">
-            <label for="gridCellSlider">Rastergrootte</label>
+        <div class="sidebar-row-full">
+          <div class="sidebar-label muted">
+            Rastergrootte:
             <span id="gridCellValue"></span>
           </div>
-          <label class="check">
-            <input id="gridCellAuto" type="checkbox" checked>
-            <span>Auto</span>
-          </label>
-          <input id="gridCellSlider" type="range" min="200" max="2500" step="50" value="1000">
-          <div class="tvt-hint">Kleiner = meer detail, groter = rustiger.</div>
-
+          <div class="tvt-grid-size-controls">
+            <label class="check">
+              <input id="gridCellAuto" type="checkbox" checked>
+              <span>Auto</span>
+            </label>
+            <input id="gridCellSlider" type="range" min="200" max="2500" step="50" value="1000">
+          </div>
+          <!-- <div class="sidebar-hint muted">Kleiner = meer detail, groter = rustiger.</div> -->
         </div>
 
         <div class="sidebar-row">

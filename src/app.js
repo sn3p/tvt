@@ -146,7 +146,7 @@ export function initApp() {
     const sliderVal = gridCellAutoEnabled ? effectiveM : snapGridCellM(gridCellMManual);
     gridCellSlider.value = String(sliderVal);
 
-    gridCellValue.textContent = gridCellAutoEnabled ? `Auto · ${effectiveM} m` : `${effectiveM} m`;
+    gridCellValue.textContent = gridCellAutoEnabled ? `${effectiveM} m (Auto)` : `${effectiveM} m`;
 
     if (gridCellAuto && "checked" in gridCellAuto) {
       gridCellAuto.checked = gridCellAutoEnabled;
