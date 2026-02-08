@@ -923,6 +923,11 @@ export function initApp() {
         const div = globalThis.L.DomUtil.create("div", "tvt-hud");
         div.tabIndex = 0;
 
+        const imgEl = document.createElement("div");
+        imgEl.className = "tvt-hud-image";
+        imgEl.innerHTML = birdImageHtml(selectedSpecies.name);
+        div.appendChild(imgEl);
+
         const nameEl = document.createElement("div");
         nameEl.className = "tvt-hud-name";
         div.appendChild(nameEl);
@@ -944,15 +949,16 @@ export function initApp() {
         globalThis.L.DomEvent.disableClickPropagation(div);
         globalThis.L.DomEvent.disableScrollPropagation(div);
 
-        div.__tvt = { nameEl, styleEl, metricEl };
+        div.__tvt = { imgEl, nameEl, styleEl, metricEl };
         return div;
       };
       hudControl.addTo(map);
     }
 
     const el = hudControl.getContainer();
-    const refs = el && el.__tvt;
+    const refs = el?.__tvt;
     if (refs) {
+      refs.imgEl.innerHTML = birdImageHtml(selectedSpecies.name);
       refs.nameEl.textContent = hudName;
       refs.styleEl.textContent = hudStyle;
       refs.metricEl.textContent = hudMetric;
