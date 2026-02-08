@@ -34,6 +34,7 @@ export function initApp() {
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
   const gridCellValue = document.querySelector("#gridCellValue");
+  const gridCellAuto = document.querySelector("#gridCellAuto"); // optional checkbox
   const GRID_CELL_M_DEFAULT = Number(gridCellSlider?.value ?? 1000);
 
   if (
@@ -75,20 +76,145 @@ export function initApp() {
     return;
   }
 
-  let gridCellM = (() => {
+  // Grid cell size (meters): Auto (zoom-driven) + Manual override.
+  //
+  // Important: This grid is defined in *meters* (projected space). That means:
+  // - With "Auto" enabled, cell size changes with zoom (best default UX).
+  // - With "Auto" disabled, cell size is locked in meters (good for comparing areas).
+  //
+  // You can add preset buttons in HTML like:
+  //   <button data-grid-cell-m="1000">1 km</button>
+  const GRID_CELL_M_PRESETS = [
+    200, 250, 300, 400, 500, 650, 800, 1000, 1250, 1600, 2000, 2500,
+    // 3200, 4000, 5000, 8000, 10000
+  ];
+
+  function snapGridCellM(m) {
+    const v = Number(m);
+    if (!Number.isFinite(v) || v <= 0) return GRID_CELL_M_DEFAULT;
+    let best = GRID_CELL_M_PRESETS[0];
+    let bestDist = Math.abs(best - v);
+    for (const p of GRID_CELL_M_PRESETS) {
+      const d = Math.abs(p - v);
+      if (d < bestDist) {
+        best = p;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  // Heuristic: meters-per-cell for Groningen-ish density.
+  // Discrete steps prevent jitter between zoom levels.
+  function autoGridCellMForZoom(z) {
+    if (z >= 16) return 200;
+    if (z === 15) return 250;
+    if (z === 14) return 350;
+    if (z === 13) return 500;
+    if (z === 12) return 800;
+    if (z === 11) return 1200;
+    if (z === 10) return 1800;
+    return 2500; // z <= 9
+  }
+
+  function readBoolLS(key, fallback) {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === "1" || raw === "true";
+  }
+
+  // Manual value is always persisted, even when Auto is on (so you can toggle back).
+  let gridCellMManual = (() => {
     const v = Number(localStorage.getItem("tvtGridCellM"));
     return Number.isFinite(v) && v > 0 ? v : GRID_CELL_M_DEFAULT;
   })();
 
-  if (gridCellSlider && gridCellValue) {
-    gridCellSlider.value = String(gridCellM);
-    gridCellValue.textContent = `${gridCellM} m`;
+  let gridCellAutoEnabled = readBoolLS("tvtGridCellAuto", true);
 
-    gridCellSlider.addEventListener("input", () => {
-      gridCellM = Number(gridCellSlider.value);
-      localStorage.setItem("tvtGridCellM", String(gridCellM));
-      gridCellValue.textContent = `${gridCellM} m`;
-      schedulePresenceGridCompute();
+  // Effective cell size used by compute. Initialized after map is created.
+  let gridCellM = snapGridCellM(gridCellMManual);
+
+  function updateGridCellUI(effectiveM) {
+    if (!gridCellSlider || !gridCellValue) return;
+
+    // Slider reflects the manual value; disabled when Auto is enabled.
+    gridCellSlider.disabled = gridCellAutoEnabled;
+    gridCellSlider.min = String(Math.min(...GRID_CELL_M_PRESETS));
+    gridCellSlider.max = String(Math.max(...GRID_CELL_M_PRESETS));
+    gridCellSlider.step = "1"; // snapping happens in JS
+
+    const sliderVal = gridCellAutoEnabled ? effectiveM : snapGridCellM(gridCellMManual);
+    gridCellSlider.value = String(sliderVal);
+
+    gridCellValue.textContent = gridCellAutoEnabled ? `Auto · ${effectiveM} m` : `${effectiveM} m`;
+
+    if (gridCellAuto && "checked" in gridCellAuto) {
+      gridCellAuto.checked = gridCellAutoEnabled;
+    }
+  }
+
+  // Called once we have a Leaflet map instance.
+  function initGridCellControls(map) {
+    // Compute initial effective size (auto uses current zoom).
+    gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+    updateGridCellUI(gridCellM);
+
+    // Slider (manual override)
+    if (gridCellSlider) {
+      gridCellSlider.addEventListener("input", () => {
+        const snapped = snapGridCellM(Number(gridCellSlider.value));
+        gridCellMManual = snapped;
+        localStorage.setItem("tvtGridCellM", String(gridCellMManual));
+
+        if (!gridCellAutoEnabled) {
+          gridCellM = snapped;
+          updateGridCellUI(gridCellM);
+          schedulePresenceGridCompute();
+        } else {
+          // In auto mode the slider is disabled; still keep UI consistent.
+          updateGridCellUI(gridCellM);
+        }
+      });
+    }
+
+    // Preset buttons (optional)
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const v = t.getAttribute("data-grid-cell-m");
+      if (!v) return;
+      const snapped = snapGridCellM(Number(v));
+      gridCellMManual = snapped;
+      localStorage.setItem("tvtGridCellM", String(gridCellMManual));
+      if (!gridCellAutoEnabled) {
+        gridCellM = snapped;
+        updateGridCellUI(gridCellM);
+        schedulePresenceGridCompute();
+      }
+    });
+
+    // Auto toggle (optional checkbox)
+    if (gridCellAuto && "addEventListener" in gridCellAuto) {
+      if ("checked" in gridCellAuto) gridCellAuto.checked = gridCellAutoEnabled;
+
+      gridCellAuto.addEventListener("change", () => {
+        gridCellAutoEnabled = Boolean(gridCellAuto.checked);
+        localStorage.setItem("tvtGridCellAuto", gridCellAutoEnabled ? "1" : "0");
+        gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+        updateGridCellUI(gridCellM);
+        schedulePresenceGridCompute();
+      });
+    }
+
+    // Auto mode updates on zoom changes.
+    map.on("zoomend", () => {
+      if (!gridCellAutoEnabled) return;
+      const next = autoGridCellMForZoom(map.getZoom());
+      if (next !== gridCellM) {
+        gridCellM = next;
+        updateGridCellUI(gridCellM);
+        schedulePresenceGridCompute();
+      }
     });
   }
 
@@ -103,6 +229,9 @@ export function initApp() {
   });
 
   globalThis.L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // Grid cell size controls (auto/manual) depend on the map instance.
+  initGridCellControls(map);
 
   // const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
   const tileUrl = "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png";
