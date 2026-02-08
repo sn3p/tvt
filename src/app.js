@@ -945,6 +945,11 @@ export function initApp() {
       btn.dataset.name = s.name;
       if (s.id != null) btn.dataset.id = String(s.id);
 
+      const img = document.createElement("span");
+      img.className = "species-item-image";
+      img.innerHTML = birdImageHtml(s.name);
+      btn.appendChild(img);
+
       const title = document.createElement("span");
       title.textContent = s.name;
       btn.appendChild(title);
@@ -1182,7 +1187,6 @@ export function initApp() {
   function popupHtml(entry) {
     const birds = Array.isArray(entry?.birds) ? entry.birds : [];
     const total = sumBirds(birds);
-    const imgBase = birdImageBase();
     const imgFallback = birdFallbackFilename();
     const rows = birds
       .slice()
@@ -1190,24 +1194,12 @@ export function initApp() {
       .map((b) => {
         const name = String(b?.name ?? "Onbekend");
         const count = Number(b?.count ?? 0) || 0;
-        const filename = guessImageFilename(name);
-        const src = `${imgBase}${String(filename || "")}`;
-        const fallbackSrc = `${imgBase}${String(imgFallback || "")}`;
-        const alt = escapeHtml(name);
+        const img = birdImageHtml(name);
 
         return `
           <li class="row">
-            <span class="img">
-              <img
-                src="${src}"
-                alt="${alt}"
-                loading="lazy"
-                decoding="async"
-                referrerpolicy="no-referrer"
-                onerror="this.onerror=null;this.src='${fallbackSrc}'"
-              />
-            </span>
-            <span class="name">${alt}</span>
+            <span class="img">${img}</span>
+            <span class="name">${name}</span>
             <span class="count">${count}</span>
           </li>
         `.trim();
@@ -1223,10 +1215,23 @@ export function initApp() {
     `;
   }
 
-  function birdImageBase() {
-    // Observed in Vogelbescherming DOM & data json:
-    // https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/<filename>.png
-    return "https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/";
+  function birdImageHtml(name) {
+    const filename = guessImageFilename(name);
+    const src = birdImageUrl(filename);
+    const imgFallback = birdFallbackFilename();
+    const fallbackSrc = birdImageUrl(imgFallback);
+    const alt = escapeHtml(name);
+    return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="window.birdImageOnError(this)" />`;
+  }
+
+  window.birdImageOnError = function (img) {
+    img.onerror = null;
+    img.classList.add("no-bird-image");
+    img.src = birdImageUrl(birdFallbackFilename());
+  }
+
+  function birdImageUrl(filename) {
+    return `https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/${filename}`;
   }
 
   function birdFallbackFilename() {

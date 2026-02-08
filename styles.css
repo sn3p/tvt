@@ -478,7 +478,7 @@ input {
   padding: 8px;
   overflow: auto;
   display: grid;
-  gap: 6px;
+  /* gap: 6px; */
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -486,28 +486,45 @@ input {
 .species-item {
   width: 100%;
   text-align: left;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
   color: rgba(255, 255, 255, 0.90);
-  padding: 8px 10px;
+  padding: 6px 10px;
   cursor: pointer;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 10px;
 }
-
 .species-item:hover { background: rgba(0, 0, 0, 0.28); }
-
 .species-item[aria-selected="true"] {
   border-color: rgba(125, 211, 252, 0.35);
   background: rgba(125, 211, 252, 0.12);
 }
 
+.species-item-image {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.species-item-image img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+.species-item-image:has(.no-bird-image) {
+  filter: grayscale(100%);
+  opacity: 0.75;
+}
+
 .species-item small {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.70);
+  margin-left: auto;
 }
 
 .map-shell {
