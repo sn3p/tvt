@@ -226,6 +226,7 @@ export function initApp() {
   const map = globalThis.L.map(mapEl, {
     zoomControl: false,
     preferCanvas: true,
+    minZoom: 8,
   });
 
   globalThis.L.control.zoom({ position: 'topright' }).addTo(map);

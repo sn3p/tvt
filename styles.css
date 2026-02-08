@@ -7,7 +7,7 @@
   --muted: rgba(255, 255, 255, 0.68);
   --border: rgba(255, 255, 255, 0.12);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --accent: #7dd3fc;
+  --accent: #0275ff;
   --ok: #34d399;
   --warn: #fbbf24;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -28,14 +28,20 @@ html, body {
   line-height: 1.35;
 }
 
-code { font-family: var(--mono); }
-
-a { color: inherit; }
-
 body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+code { font-family: var(--mono); }
+
+a { color: inherit; }
+
+input,
+select,
+textarea {
+  accent-color: var(--accent);
 }
 
 /* Topbar */
@@ -166,7 +172,6 @@ body {
 .check input[type="checkbox"] {
   width: 14px;
   height: 14px;
-  accent-color: var(--accent);
 }
 
 .check input[type="checkbox"]#includeType1Input {
@@ -338,17 +343,18 @@ input {
   flex: 0 0 auto;
 }
 
-.sidebar-help {
+.sidebar-help-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.70);
-  font-size: 11px;
-  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  font-weight: 600;
+  user-select: none;
 }
 
 .sidebar-row,
@@ -369,6 +375,19 @@ input {
   font-size: 12px;
 }
 
+.tvt-species-list-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .sidebar-label {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
 .tvt-grid-size-controls {
   display: flex;
   align-items: center;
@@ -381,14 +400,14 @@ input {
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .seg {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.20);
@@ -397,8 +416,9 @@ input {
 }
 
 .seg input {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
+  margin: 0;
 }
 
 .seg:hover {
