@@ -1312,7 +1312,7 @@ export function initApp() {
             ? `gemiddeld=${(total ? (sum / total) : 0).toFixed(2)}`
             : `aanwezigheid=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
 
-      const tooltip = `${selectedSpecies.name}\nN_totaal=${total} • N_met=${withN}\n${metricLabel}`;
+      const tooltip = `<b>${selectedSpecies.name}</b><br>N_totaal=${total} • N_met=${withN}\n${metricLabel}`;
 
       if (effectiveStyle === "heatmap") {
         // Heatmap-ish: circles centered on the cell, radius ~ half a cell.
