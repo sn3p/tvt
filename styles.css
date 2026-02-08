@@ -519,6 +519,7 @@ input {
 }
 .tvt-sidebar-toggle-btn:hover { background: rgba(0, 0, 0, 0.55); }
 
+/* HUD */
 .tvt-hud {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -538,49 +539,19 @@ input {
   font-size: 12px;
 }
 .tvt-hud-name {
-  grid-area: name; font-weight: 600;
+  grid-area: name;
+  font-weight: 600;
 }
 .tvt-hud-style {
-  grid-area: style; justify-self: end; color: rgba(255,255,255,0.72);
+  grid-area: style;
+  justify-self: end;
+  color: rgba(255,255,255,0.5);
+  font-style: italic;
 }
 .tvt-hud-metric {
-  grid-area: metric; color: rgba(255,255,255,0.75);
+  grid-area: metric;
+  color: rgba(255,255,255,0.75);
 }
-
-/* Empty state overlay */
-.empty-state {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.empty-state > * { pointer-events: auto; }
-
-.empty-state-title {
-  font-weight: 900;
-  letter-spacing: 0.2px;
-  margin-bottom: 6px;
-  text-align: center;
-}
-
-.empty-state-sub {
-  margin-bottom: 12px;
-  font-size: 12px;
-  text-align: center;
-}
-
-.empty-state-btn {
-  appearance: none;
-  border: 1px solid rgba(125, 211, 252, 0.35);
-  background: rgba(125, 211, 252, 0.14);
-  color: rgba(255, 255, 255, 0.92);
-  padding: 10px 12px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-.empty-state-btn:hover { background: rgba(125, 211, 252, 0.20); }
 
 .tvt-popup {
   font-family: ui-sans-serif, system-ui;

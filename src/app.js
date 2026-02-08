@@ -18,8 +18,6 @@ export function initApp() {
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
   const sidebarCloseBtn = document.querySelector("#sidebarCloseBtn");
-  const emptyStateOverlay = document.querySelector("#emptyStateOverlay");
-  const emptyStateOpenBtn = document.querySelector("#emptyStateOpenBtn");
   const speciesScopeViewport = document.querySelector("#speciesScopeViewport");
   const speciesScopeAll = document.querySelector("#speciesScopeAll");
   const speciesSortMost = document.querySelector("#speciesSortMost");
@@ -32,6 +30,11 @@ export function initApp() {
   const styleHeatmap = document.querySelector("#styleHeatmap");
   const minNSlider = document.querySelector("#minNSlider");
   const minNValue = document.querySelector("#minNValue");
+
+  // Grid cell size (meters) — persistent and zoom-reactive.
+  const gridCellSlider = document.querySelector("#gridCellSlider");
+  const gridCellValue = document.querySelector("#gridCellValue");
+  const GRID_CELL_M_DEFAULT = Number(gridCellSlider?.value ?? 900); // tune: 600–1200 is usually nice
 
   if (
     !mapEl ||
@@ -49,8 +52,6 @@ export function initApp() {
     !speciesSearchInput ||
     !speciesListEl ||
     !sidebarCloseBtn ||
-    !emptyStateOverlay ||
-    !emptyStateOpenBtn ||
     !modePointsBtn ||
     !modeSpeciesBtn ||
     !speciesScopeViewport ||
@@ -72,6 +73,49 @@ export function initApp() {
   if (!("L" in globalThis)) {
     statsEl.textContent = "Leaflet niet geladen (check netwerk / CDN).";
     return;
+  }
+
+  let gridCellM = (() => {
+    const v = Number(localStorage.getItem("tvtGridCellM"));
+    return Number.isFinite(v) && v > 0 ? v : GRID_CELL_M_DEFAULT;
+  })();
+
+  // Clamp a value between a minimum and maximum.
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  // Convert target meters to pixels at current zoom (approx) using 100px sample at map center.
+  function metersToPixels(meters) {
+    try {
+      const center = map.getCenter();
+      const p0 = map.latLngToContainerPoint(center);
+      const p1 = L.point(p0.x + 100, p0.y);
+      const ll1 = map.containerPointToLatLng(p1);
+      const metersPer100px = map.distance(center, ll1);
+      if (!metersPer100px || metersPer100px <= 0) return 90;
+      return (meters / metersPer100px) * 100;
+    } catch {
+      return 90;
+    }
+  }
+
+  function getGridCellPx() {
+    // Clamp keeps performance sane and prevents unreadable tiny cells.
+    // Tune these after eyeballing: 30–140px is a good starting range.
+    return clamp(Math.round(metersToPixels(gridCellM)), 30, 140);
+  }
+
+  if (gridCellSlider && gridCellValue) {
+    gridCellSlider.value = String(gridCellM);
+    gridCellValue.textContent = `${gridCellM} m`;
+
+    gridCellSlider.addEventListener("input", () => {
+      gridCellM = Number(gridCellSlider.value);
+      localStorage.setItem("tvtGridCellM", String(gridCellM));
+      gridCellValue.textContent = `${gridCellM} m`;
+      schedulePresenceGridCompute();
+    });
   }
 
   // Prevent accidental form submit refresh on Enter.
@@ -239,7 +283,7 @@ export function initApp() {
 
     if (legendType1TextEl) legendType1TextEl.textContent = `Inzending (${inViewType1})`;
     if (legendIsorgTextEl) legendIsorgTextEl.textContent = `Schoolinzending (${inViewIsorg})`;
-    updateHudAndEmptyState();
+    updateHud();
   }
 
   // Legend (copied from old app style)
@@ -435,7 +479,7 @@ export function initApp() {
     }
 
     if (persist) saveSidebarOpen(sidebarOpen);
-    updateHudAndEmptyState();
+    updateHud();
     if (mode === "species" && !sidebarOpen) schedulePresenceGridCompute();
   }
 
@@ -455,11 +499,6 @@ export function initApp() {
     setSidebarOpen(false, { persist: true, reason: "close" });
   });
 
-  emptyStateOpenBtn.addEventListener("click", () => {
-    if (mode !== "species") return;
-    setSidebarOpen(true, { persist: true, reason: "empty-state" });
-  });
-
   function updateSidebarToggleControl() {
     if (mode !== "species") {
       if (sidebarToggleControl) {
@@ -470,7 +509,7 @@ export function initApp() {
     }
 
     if (!sidebarToggleControl) {
-      sidebarToggleControl = globalThis.L.control({ position: "topright" });
+      sidebarToggleControl = globalThis.L.control({ position: "topleft" });
       sidebarToggleControl.onAdd = () => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -485,11 +524,12 @@ export function initApp() {
 
     const el = sidebarToggleControl.getContainer();
     if (el) {
-      el.textContent = sidebarOpen ? "Zijbalk sluiten" : "Zijbalk openen";
+      el.textContent = sidebarOpen ? "<" : ">";
+      el.ariaLabel = sidebarOpen ? "Zijbalk sluiten" : "Zijbalk openen";
     }
   }
 
-  function updateHudAndEmptyState() {
+  function updateHud() {
     if (mode !== "species") {
       if (hudControl) {
         try {
@@ -499,16 +539,12 @@ export function initApp() {
         }
       }
       hudControl = null;
-      emptyStateOverlay.hidden = true;
       return;
     }
 
     // HUD: if a species is selected we always show it (even when sidebar is open).
     // If nothing is selected, only show HUD when sidebar is closed.
     const showHud = Boolean(selectedSpecies) || !sidebarOpen;
-    const showEmpty = showHud && !selectedSpecies;
-
-    emptyStateOverlay.hidden = !showEmpty;
 
     if (!showHud) {
       if (hudControl) {
@@ -647,7 +683,7 @@ export function initApp() {
 
   function setComputing(next) {
     isComputing = Boolean(next);
-    updateHudAndEmptyState();
+    updateHud();
   }
 
   let sidebarTab = "species"; // "species" | "view"
@@ -767,7 +803,7 @@ export function initApp() {
         selectedSpecies = isSame ? null : s;
         renderSpeciesList({ query: speciesSearchInput.value });
         schedulePresenceGridCompute();
-        updateHudAndEmptyState();
+        updateHud();
         // Mobile UX: selecting a species should immediately show the map.
         // This auto-close does NOT persist preference (user intent wins).
         if (mode === "species" && isMobile() && selectedSpecies) {
@@ -840,7 +876,7 @@ export function initApp() {
     const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
     const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
 
-    const cellPx = 90;
+    const cellPx = getGridCellPx();
     const size = map.getSize();
     const cols = Math.max(1, Math.ceil(size.x / cellPx));
     const rows = Math.max(1, Math.ceil(size.y / cellPx));

@@ -37,23 +37,23 @@
       <form id="filtersForm" class="filters" autocomplete="off">
         <label class="field">
           <span>Jaar</span>
-          <input id="yearInput" name="year" type="number" min="2010" max="2100" step="1" value="2026" />
+          <input id="yearInput" name="year" type="number" min="2010" max="2100" step="1" value="2026">
         </label>
 
         <label class="field">
           <span>PC4</span>
           <input id="pc4Input" name="pc4" type="text" inputmode="numeric" placeholder="(alle)" minlength="4"
-            maxlength="4" pattern="[0-9]{4}" />
+            maxlength="4" pattern="[0-9]{4}">
         </label>
 
         <div class="check-group">
           <label class="check">
-            <input id="includeType1Input" name="includeType1" type="checkbox" checked />
+            <input id="includeType1Input" name="includeType1" type="checkbox" checked>
             <span>Inzending</span>
           </label>
 
           <label class="check">
-            <input id="includeIsorgInput" name="includeIsorg" type="checkbox" checked />
+            <input id="includeIsorgInput" name="includeIsorg" type="checkbox" checked>
             <span>Schoolinzending</span>
           </label>
         </div>
@@ -86,11 +86,11 @@
           </div>
           <div class="segmented" role="group" aria-label="Soortenlijst">
             <label class="seg">
-              <input id="speciesScopeViewport" type="radio" name="speciesScope" value="viewport" checked />
+              <input id="speciesScopeViewport" type="radio" name="speciesScope" value="viewport" checked>
               <span>In beeld</span>
             </label>
             <label class="seg">
-              <input id="speciesScopeAll" type="radio" name="speciesScope" value="all" />
+              <input id="speciesScopeAll" type="radio" name="speciesScope" value="all">
               <span>Alles</span>
             </label>
           </div>
@@ -100,11 +100,11 @@
           <div class="sidebar-label muted">Sorteren</div>
           <div class="segmented" role="group" aria-label="Sorteren">
             <label class="seg">
-              <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked />
+              <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked>
               <span>Geteld</span>
             </label>
             <label class="seg">
-              <input id="speciesSortAZ" type="radio" name="speciesSort" value="az" />
+              <input id="speciesSortAZ" type="radio" name="speciesSort" value="az">
               <span>A–Z</span>
             </label>
           </div>
@@ -123,15 +123,15 @@
           <div class="sidebar-label muted">Metriek</div>
           <div class="segmented" role="group" aria-label="Metriek">
             <label class="seg">
-              <input id="metricPresence" type="radio" name="metric" value="presence" checked />
+              <input id="metricPresence" type="radio" name="metric" value="presence" checked>
               <span>aanwezigheid</span>
             </label>
             <label class="seg">
-              <input id="metricAvg" type="radio" name="metric" value="avg" />
+              <input id="metricAvg" type="radio" name="metric" value="avg">
               <span>gemiddeld</span>
             </label>
             <label class="seg">
-              <input id="metricSum" type="radio" name="metric" value="sum" />
+              <input id="metricSum" type="radio" name="metric" value="sum">
               <span>totaal</span>
             </label>
           </div>
@@ -141,24 +141,33 @@
           <div class="sidebar-label muted">Weergave</div>
           <div class="segmented" role="group" aria-label="Weergave">
             <label class="seg">
-              <input id="styleAuto" type="radio" name="style" value="auto" checked />
+              <input id="styleAuto" type="radio" name="style" value="auto" checked>
               <span>Auto</span>
             </label>
             <label class="seg">
-              <input id="styleGrid" type="radio" name="style" value="grid" />
+              <input id="styleGrid" type="radio" name="style" value="grid">
               <span>Raster</span>
             </label>
             <label class="seg">
-              <input id="styleHeatmap" type="radio" name="style" value="heatmap" />
+              <input id="styleHeatmap" type="radio" name="style" value="heatmap">
               <span>Heatmap</span>
             </label>
           </div>
         </div>
 
+        <div class="tvt-control">
+          <div class="tvt-control-label-row">
+            <label for="gridCellSlider">Rastergrootte</label>
+            <span id="gridCellValue">900 m</span>
+          </div>
+          <input id="gridCellSlider" type="range" min="200" max="2000" step="50" value="900">
+          <div class="tvt-hint">Kleiner = meer detail, groter = rustiger.</div>
+        </div>
+
         <div class="sidebar-row">
           <div class="sidebar-label muted">Min‑N</div>
           <div class="slider">
-            <input id="minNSlider" type="range" min="0" max="50" step="1" value="1" />
+            <input id="minNSlider" type="range" min="0" max="50" step="1" value="1">
             <div id="minNValue" class="muted slider-value">1</div>
           </div>
         </div>
@@ -171,11 +180,6 @@
 
     <section class="map-shell" aria-label="Kaart">
       <div id="map" class="map" role="application" aria-label="Leaflet kaart"></div>
-      <div id="emptyStateOverlay" class="empty-state" hidden>
-        <div class="empty-state-title">Selecteer een soort</div>
-        <div class="empty-state-sub muted">Open de sidebar om een soort te kiezen en de kaartlaag te zien.</div>
-        <button id="emptyStateOpenBtn" class="empty-state-btn" type="button">Open sidebar</button>
-      </div>
     </section>
   </main>
 
