@@ -5,6 +5,7 @@
   --panel-2: rgba(255, 255, 255, 0.09);
   --text: rgba(255, 255, 255, 0.92);
   --muted: rgba(255, 255, 255, 0.68);
+  --muted-2: rgba(255, 255, 255, 0.48);
   --border: rgba(255, 255, 255, 0.12);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   --accent: #0275ff;
@@ -34,7 +35,13 @@ body {
   flex-direction: column;
 }
 
-code { font-family: var(--mono); }
+code {
+  font-family: var(--mono);
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
 
 a { color: inherit; }
 
@@ -53,6 +60,7 @@ textarea {
 }
 
 .muted { color: var(--muted); }
+.muted-2 { color: var(--muted-2); }
 
 .topbar-inner {
   display: flex;
@@ -456,8 +464,7 @@ input {
 
 .sidebar-row .sidebar-hint,
 .sidebar-row-full .sidebar-hint {
-  padding-left: 0;
-  padding-right: 0;
+  padding:0;
 }
 
 .sidebar-search input[type="search"] {

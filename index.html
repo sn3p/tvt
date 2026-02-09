@@ -166,19 +166,20 @@
             </label>
             <input id="gridCellSlider" type="range" min="200" max="2500" step="50" value="1000">
           </div>
-          <!-- <div class="sidebar-hint muted">Kleiner = meer detail, groter = rustiger.</div> -->
+          <div class="sidebar-hint muted-2">Kleiner = meer detail, groter = minder ruis.</div>
         </div>
 
-        <div class="sidebar-row">
-          <div class="sidebar-label muted">Min‑N</div>
+        <div class="sidebar-row-full">
+          <div class="sidebar-label muted">
+            Min. aantal inzendingen per vak
+            <span class="sidebar-help-icon"
+              data-tippy-content="<code>N</code> = aantal inzendingen in een vak. min-N filtert vakken met <code>N < drempel</code>. Transparantie schaalt met <code>√N</code>.">?</span>
+          </div>
           <div class="slider">
             <input id="minNSlider" type="range" min="1" max="50" step="1" value="1">
             <div id="minNValue" class="muted slider-value"></div>
           </div>
-        </div>
-
-        <div class="sidebar-hint muted">
-          Lage N = vaag (opacity schaalt met √N).
+          <div class="sidebar-hint muted-2">Lager = meer detail, hoger = minder ruis.</div>
         </div>
       </div>
     </aside>

@@ -1,4 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
+import { formatNumber } from "./helpers.js";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
@@ -262,7 +263,11 @@ export function initApp() {
   let speciesSort = "most"; // "most" | "az"
   let metric = "presence"; // "presence" | "avg" | "sum"
   let style = "auto"; // "auto" | "grid" | "heatmap"
+
+  // Min. inzendingen per vak.
   let minN = Number(minNSlider?.value || 3);
+  minNValue.textContent = String(minN);
+
   let sidebarOpen = true;
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
@@ -579,7 +584,6 @@ export function initApp() {
 
     const title = document.createElement("div");
     title.className = "tvt-grid-legend-title";
-    title.textContent = "Aanwezigheid";
     div.appendChild(title);
     gridLegendTitleEl = title;
 
@@ -623,7 +627,7 @@ export function initApp() {
     if (!gridLegendTitleEl || !gridLegendScaleEl || !gridLegendLabelsEl || !gridLegendNoteEl) return;
 
     const stops = [0, 0.25, 0.5, 0.75, 1];
-    const m = metric === "sum" ? "sum" : metric === "avg" ? "avg" : "presence";
+    const m = ["sum", "avg", "presence"].includes(metric) ? metric : "presence";
     const maxV = Number(maxMetric);
     const maxOk = Number.isFinite(maxV) && maxV > 0 ? maxV : 0;
 
@@ -642,22 +646,37 @@ export function initApp() {
     gridLegendLabelsEl.replaceChildren();
     for (const s of stops) {
       const el = document.createElement("span");
-      if (m === "presence") {
-        el.textContent = `${Math.round(s * 100)}%`;
-      } else if (m === "sum") {
-        el.textContent = maxOk ? fmtInt(s * maxOk) : "0";
-      } else {
-        el.textContent = maxOk ? fmtAvg(s * maxOk) : "0";
+      switch (m) {
+        case "presence":
+          el.textContent = `${Math.round(s * 100)}%`;
+          break;
+        case "avg":
+          el.textContent = maxOk ? fmtAvg(s * maxOk) : "0";
+          break;
+        case "sum":
+          el.textContent = maxOk ? fmtInt(s * maxOk) : "0";
+          break;
       }
       gridLegendLabelsEl.appendChild(el);
     }
 
-    if (m === "presence") {
-      gridLegendNoteEl.textContent = `Kleur = aanwezigheid (0–100%, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
-    } else if (m === "sum") {
-      gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtInt(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
-    } else {
-      gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtAvg(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+    // Uitleg
+    // "Kleur = waarde (γ=0.6), opacity ≈ √N"
+    switch (m) {
+      case "presence":
+        gridLegendNoteEl.textContent = `Kleur = aanwezigheid (0–100%, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+        break;
+      case "avg":
+        gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtAvg(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+        break;
+      case "sum":
+        gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtInt(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
+        break;
+    }
+
+    // Regel toegevoegd wanneer minN > 1
+    if (minN > 1) {
+      gridLegendNoteEl.textContent += ` • Min. inzendingen per vak: ${minN}`;
     }
   }
 
@@ -1308,14 +1327,28 @@ export function initApp() {
       const ne = crs.unproject(globalThis.L.point(x1m, y1m));
       const bb = globalThis.L.latLngBounds(sw, ne);
 
-      const metricLabel =
-        metric === "sum"
-          ? `totaal=${sum.toFixed(0)}`
-          : metric === "avg"
-            ? `gemiddeld=${(total ? (sum / total) : 0).toFixed(2)}`
-            : `aanwezigheid=${(total ? (withN / total) * 100 : 0).toFixed(1)}%`;
+      let tooltip = `<b>${selectedSpecies.name}</b> — `;
 
-      const tooltip = `<b>${selectedSpecies.name}</b><br>N_totaal=${total} • N_met=${withN}\n${metricLabel}`;
+      switch (metric) {
+        case "presence":
+          // aanwezig in 20/23 inzendingen (87%)
+          // 	N_present=20, N_total=23
+          const pct = formatNumber((total ? (withN / total) * 100 : 0), { maxDecimals: 1 });
+          tooltip += `aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen (${pct}%)`;
+          break;
+        case "avg":
+          // gem. 2,8 per inzending · N=23 inzendingen
+          // avg = sum / N
+          const avgFmt = formatNumber((total ? sum / total : 0), { maxDecimals: 2 });
+          tooltip += `gemiddeld ${avgFmt} per inzending in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
+          break;
+        case "sum":
+          // totaal 45 geteld in 23 inzendingen
+          // sum = Σ aantal per inzending
+          const sumFmt = formatNumber(sum, { maxDecimals: 0 });
+          tooltip += `totaal ${sumFmt} geteld in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
+          break;
+      }
 
       if (effectiveStyle === "heatmap") {
         // Heatmap-ish: circles centered on the cell, radius ~ half a cell.
@@ -1380,8 +1413,6 @@ export function initApp() {
   function birdImageHtml(name) {
     const filename = guessImageFilename(name);
     const src = birdImageUrl(filename);
-    const imgFallback = birdFallbackFilename();
-    const fallbackSrc = birdImageUrl(imgFallback);
     const alt = escapeHtml(name);
     return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="window.birdImageOnError(this)" />`;
   }
