@@ -80,8 +80,10 @@
         <div class="sidebar-row-full tvt-species-list-scope">
           <div class="sidebar-label muted">
             Soortenlijst
-            <span class="sidebar-help-icon"
-              data-tippy-content="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span>
+            <!-- <span class="help-icon"
+              data-tippy-content="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span> -->
+            <span class="help-icon" data-controller="tooltip"
+              data-tooltip-content-value="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span>
           </div>
           <div class="segmented" role="group" aria-label="Soortenlijst">
             <label class="seg">
@@ -172,7 +174,7 @@
         <div class="sidebar-row-full">
           <div class="sidebar-label muted">
             Min. aantal inzendingen per vak
-            <span class="sidebar-help-icon"
+            <span class="help-icon"
               data-tippy-content="<code>N</code> = aantal inzendingen in een vak. min-N filtert vakken met <code>N < drempel</code>. Transparantie schaalt met <code>√N</code>.">?</span>
           </div>
           <div class="slider">

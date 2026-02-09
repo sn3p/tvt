@@ -577,6 +577,7 @@ export function initApp() {
   let gridLegendScaleEl = null;
   let gridLegendLabelsEl = null;
   let gridLegendNoteEl = null;
+  let gridLegendTooltipEl = null;
 
   const gridLegend = globalThis.L.control({ position: "bottomright" });
   gridLegend.onAdd = () => {
@@ -586,6 +587,14 @@ export function initApp() {
     title.className = "tvt-grid-legend-title";
     div.appendChild(title);
     gridLegendTitleEl = title;
+
+    const tooltipIcon = document.createElement("span");
+    tooltipIcon.className = "help-icon tvt-grid-legend-tooltip-icon";
+    tooltipIcon.textContent = "?";
+    tooltipIcon.setAttribute("data-controller", "tooltip");
+    tooltipIcon.setAttribute("data-tooltip-content-value", "");
+    gridLegendTooltipEl = tooltipIcon;
+    div.appendChild(tooltipIcon);
 
     const scale = document.createElement("div");
     scale.className = "tvt-grid-legend-scale";
@@ -599,7 +608,6 @@ export function initApp() {
 
     const note = document.createElement("div");
     note.className = "tvt-grid-legend-note";
-    note.textContent = `Kleur = waarde (γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
     div.appendChild(note);
     gridLegendNoteEl = note;
 
@@ -644,40 +652,42 @@ export function initApp() {
 
     // Labels
     gridLegendLabelsEl.replaceChildren();
+
+    // Centralized legend copy & formatting (keeps UI strings in one place).
+    const LEGEND_COPY = {
+      presence: {
+        // label per stop (0..1)
+        formatLabel: (s) => `${Math.round(s * 100)}%`,
+        colorLine: "<b>Kleur:</b> hoger % aanwezig = donkerder",
+      },
+      avg: {
+        formatLabel: (s, maxOk) => (maxOk ? fmtAvg(s * maxOk) : "0"),
+        colorLine: "<b>Kleur:</b> hoger gemiddeld per inzending = donkerder",
+        scaleLine: (maxOk) => (maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtAvg(maxOk)})` : ""),
+      },
+      sum: {
+        formatLabel: (s, maxOk) => (maxOk ? fmtInt(s * maxOk) : "0"),
+        colorLine: "<b>Kleur:</b> meer geteld = donkerder",
+        scaleLine: (maxOk) => (maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtInt(maxOk)})` : ""),
+      },
+      transparencyLine: "<b>Transparantie:</b> meer inzendingen in vak = minder transparant",
+    };
+
+    const legend = LEGEND_COPY[m] || LEGEND_COPY.presence;
+    legend.transparencyLine = LEGEND_COPY.transparencyLine;
+
     for (const s of stops) {
       const el = document.createElement("span");
-      switch (m) {
-        case "presence":
-          el.textContent = `${Math.round(s * 100)}%`;
-          break;
-        case "avg":
-          el.textContent = maxOk ? fmtAvg(s * maxOk) : "0";
-          break;
-        case "sum":
-          el.textContent = maxOk ? fmtInt(s * maxOk) : "0";
-          break;
-      }
+      el.textContent = legend.formatLabel.length >= 2 ? legend.formatLabel(s, maxOk) : legend.formatLabel(s);
       gridLegendLabelsEl.appendChild(el);
     }
 
-    // Uitleg
-    // "Kleur = waarde (γ=0.6), opacity ≈ √N"
-    switch (m) {
-      case "presence":
-        gridLegendNoteEl.textContent = `Kleur = aanwezigheid (0–100%, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
-        break;
-      case "avg":
-        gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtAvg(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
-        break;
-      case "sum":
-        gridLegendNoteEl.textContent = `Kleur = relatief t.o.v. max in beeld (${maxOk ? fmtInt(maxOk) : "—"}, γ=${GRID_COLORMAP_GAMMA}), opacity ≈ √N`;
-        break;
-    }
+    // Tooltip (kort, menselijk)
+    const tooltipText = [legend.scaleLine?.(maxOk), legend.colorLine, legend.transparencyLine].filter(Boolean).join(" • ");
+    gridLegendTooltipEl.setAttribute("data-tooltip-content-value", tooltipText);
 
-    // Regel toegevoegd wanneer minN > 1
-    if (minN > 1) {
-      gridLegendNoteEl.textContent += ` • Min. inzendingen per vak: ${minN}`;
-    }
+    // Min-N only when it actually filters something.
+    gridLegendNoteEl.innerHTML = minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
   }
 
   function setMode(nextMode) {
