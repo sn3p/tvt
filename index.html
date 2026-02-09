@@ -80,8 +80,6 @@
         <div class="sidebar-row-full tvt-species-list-scope">
           <div class="sidebar-label muted">
             Soortenlijst
-            <!-- <span class="help-icon"
-              data-tippy-content="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span> -->
             <span class="help-icon" data-controller="tooltip"
               data-tooltip-content-value="Bepaalt welke soorten (en ranking) in deze lijst gebruikt worden.">?</span>
           </div>
@@ -103,10 +101,14 @@
             <label class="seg">
               <input id="speciesSortMost" type="radio" name="speciesSort" value="most" checked>
               <span>Geteld</span>
+              <span data-controller="icon" data-icon-src-value="img/icons/sort-descending.svg"
+                aria-label="Sorteren naar geteld"></span>
             </label>
             <label class="seg">
               <input id="speciesSortAZ" type="radio" name="speciesSort" value="az">
               <span>A–Z</span>
+              <span data-controller="icon" data-icon-src-value="img/icons/sort-alphabetical.svg"
+                aria-label="Sorteren naar A–Z"></span>
             </label>
           </div>
         </div>

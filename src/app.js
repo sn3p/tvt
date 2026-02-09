@@ -227,7 +227,7 @@ export function initApp() {
   const map = globalThis.L.map(mapEl, {
     zoomControl: false,
     preferCanvas: true,
-    minZoom: 8,
+    // minZoom: 8,
   });
 
   globalThis.L.control.zoom({ position: 'topright' }).addTo(map);
@@ -867,6 +867,7 @@ export function initApp() {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "tvt-sidebar-toggle-btn";
+        btn.dataset.controller = "icon";
         btn.addEventListener("click", () => setSidebarOpen(!sidebarOpen, { persist: true, reason: "map-toggle" }));
         globalThis.L.DomEvent.disableClickPropagation(btn);
         globalThis.L.DomEvent.disableScrollPropagation(btn);
@@ -877,7 +878,7 @@ export function initApp() {
 
     const el = sidebarToggleControl.getContainer();
     if (el) {
-      el.textContent = sidebarOpen ? "<" : ">";
+      el.dataset.iconSrcValue = sidebarOpen ? "img/icons/sidebar-close.svg" : "img/icons/sidebar-open.svg";
       el.ariaLabel = sidebarOpen ? "Zijbalk sluiten" : "Zijbalk openen";
     }
   }
