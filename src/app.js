@@ -205,7 +205,7 @@ export function initApp() {
     displayMode: pointsDisplayClusters.checked
       ? "clusters"
       : (pointsDisplayPoints.checked ? "points" : "auto"),
-    clusterEngine: pointsClusterEngineWorker.checked ? "worker" : "default",
+    clusterEngine: "worker",
     clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
     maxPointsInView: normalizeOptionalMaxPointsInView(pointsMaxPointsInput.value, null),
     tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
@@ -328,10 +328,6 @@ export function initApp() {
       input.disabled = !clusterEngineEnabled;
     }
     pointsClusterEngineWorker.disabled = !workerAvailable || !clusterEngineEnabled;
-    if (!workerAvailable && pointsSettings.clusterEngine === "worker") {
-      pointsClusterEngineDefault.checked = true;
-      pointsClusterEngineWorker.checked = false;
-    }
   }
 
   function applyPointsSettingsToUI() {
