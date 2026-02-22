@@ -1,4 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
+import { StaticTilesSource } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 
 export function initApp() {
@@ -273,6 +274,7 @@ export function initApp() {
   let hudControl = null;
   let sidebarToggleControl = null;
   let isComputing = false;
+  const pointTilesSource = new StaticTilesSource();
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -334,6 +336,16 @@ export function initApp() {
   function normalizePc4(v) {
     const m = String(v ?? "").match(/(\d{4})/);
     return m ? m[1] : "";
+  }
+
+  function lngLatToTileXY({ lng, lat, z }) {
+    const n = 2 ** z;
+    const x = Math.floor(((lng + 180) / 360) * n);
+    const latRad = (lat * Math.PI) / 180;
+    const y = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI) / 2) * n
+    );
+    return { x, y };
   }
 
   function sumBirds(birds) {
@@ -1629,6 +1641,28 @@ export function initApp() {
     }
   }
 
+  async function probeStaticTilesSource() {
+    try {
+      const manifest = await pointTilesSource.getManifest();
+      const defaultYear = Number(manifest?.defaults?.year ?? 0) || Number(manifest?.years_available?.[0] ?? 0);
+      const year = defaultYear || (Number(yearInput.value || 0) || 0);
+      const mode = String(manifest?.defaults?.mode || manifest?.modes_available?.[0] || "type1").trim() || "type1";
+      const z = Number(manifest?.defaults?.zoom_min ?? 9) || 9;
+
+      // Probe one deterministic NL tile near the country's geographic center.
+      const { x, y } = lngLatToTileXY({ lng: 5.2913, lat: 52.1326, z });
+      const sampleTile = await pointTilesSource.getPointTile({ year, mode, z, x, y });
+
+      globalThis.__tvtStaticTilesProbe = {
+        manifest,
+        sampleTile,
+        request: { year, mode, z, x, y },
+      };
+    } catch (err) {
+      console.warn("StaticTilesSource probe failed:", err);
+    }
+  }
+
   yearInput.addEventListener("change", () => loadForYear(Number(yearInput.value || 0) || 0));
   pc4Input.addEventListener("change", onFiltersChanged);
   includeType1Input.addEventListener("change", onFiltersChanged);
@@ -1660,6 +1694,6 @@ export function initApp() {
   window.addEventListener("resize", () => invalidate());
 
   // Initial load (defaults to the year input value).
+  probeStaticTilesSource();
   loadForYear(Number(yearInput.value || 0) || 0);
 }
-
