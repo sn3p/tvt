@@ -221,12 +221,6 @@
             </div>
           </div>
 
-          <div class="sidebar-row-full">
-            <div class="sidebar-label muted">Details vanaf zoom</div>
-            <input id="pointsDetailsZoomInput" type="number" min="0" max="22" step="1" value="14">
-            <div class="sidebar-hint muted-2">Zoom in om individuele tellingen te openen.</div>
-          </div>
-
           <div id="pointsClusterStyleRow" class="sidebar-row-full" hidden>
             <div class="sidebar-label muted">Clusterstijl</div>
             <div class="segmented" role="group" aria-label="Clusterstijl">
@@ -242,18 +236,18 @@
           </div>
         </fieldset>
 
-        <details class="sidebar-advanced">
+        <details class="sidebar-advanced" open>
           <summary>Prestaties</summary>
           <fieldset class="sidebar-fieldset">
             <div class="sidebar-row-full">
               <div class="sidebar-label muted">Max punten in beeld</div>
-              <input id="pointsMaxPointsInput" type="number" min="1" max="500000" step="1000" value="20000">
-              <div class="sidebar-hint muted-2">Bij te veel punten: zoom in of kies Clusters.</div>
+              <input id="pointsMaxPointsInput" type="number" min="1" max="500000" step="1000" placeholder="Oneindig">
+              <div class="sidebar-hint muted-2">Leeg = alles tonen. Bij te veel punten: zoom in of kies Clusters.</div>
             </div>
 
             <div class="sidebar-row-full">
               <div class="sidebar-label muted">Tile buffer</div>
-              <div class="segmented" role="group" aria-label="Tilebuffer">
+              <div class="segmented" role="group" aria-label="Tile buffer">
                 <label class="seg">
                   <input id="pointsTileBuffer0" type="radio" name="pointsTileBuffer" value="0">
                   <span>0</span>
@@ -268,6 +262,18 @@
                 </label>
               </div>
               <div class="sidebar-hint muted-2">Meer buffer = minder pop-in, meer data.</div>
+            </div>
+
+            <div id="pointsAutoClusterThresholdRow" class="sidebar-row-full">
+              <div class="sidebar-label muted">Automatisch: clusters onder zoom</div>
+              <input id="pointsAutoClusterThresholdInput" type="number" min="0" max="22" step="1" value="13">
+              <div class="sidebar-hint muted-2">Alleen van toepassing bij weergavemodus Automatisch.</div>
+            </div>
+
+            <div id="pointsDisableClusteringAtZoomRow" class="sidebar-row-full">
+              <div class="sidebar-label muted">Clusters uit vanaf zoom</div>
+              <input id="pointsDisableClusteringAtZoomInput" type="number" min="0" max="22" step="1" value="12">
+              <div class="sidebar-hint muted-2">Vanaf deze zoom worden individuele punten getoond binnen Clusters.</div>
             </div>
 
             <div class="sidebar-row-full">

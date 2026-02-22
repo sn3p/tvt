@@ -37,7 +37,6 @@ export function initApp() {
   const pointsDisplayAuto = document.querySelector("#pointsDisplayAuto");
   const pointsDisplayPoints = document.querySelector("#pointsDisplayPoints");
   const pointsDisplayClusters = document.querySelector("#pointsDisplayClusters");
-  const pointsDetailsZoomInput = document.querySelector("#pointsDetailsZoomInput");
   const pointsClusterStyleRow = document.querySelector("#pointsClusterStyleRow");
   const pointsClusterStyleBlended = document.querySelector("#pointsClusterStyleBlended");
   const pointsClusterStyleMixed = document.querySelector("#pointsClusterStyleMixed");
@@ -45,6 +44,10 @@ export function initApp() {
   const pointsTileBuffer0 = document.querySelector("#pointsTileBuffer0");
   const pointsTileBuffer1 = document.querySelector("#pointsTileBuffer1");
   const pointsTileBuffer2 = document.querySelector("#pointsTileBuffer2");
+  const pointsAutoClusterThresholdRow = document.querySelector("#pointsAutoClusterThresholdRow");
+  const pointsAutoClusterThresholdInput = document.querySelector("#pointsAutoClusterThresholdInput");
+  const pointsDisableClusteringAtZoomRow = document.querySelector("#pointsDisableClusteringAtZoomRow");
+  const pointsDisableClusteringAtZoomInput = document.querySelector("#pointsDisableClusteringAtZoomInput");
   const pointsUpdateOnMoveInput = document.querySelector("#pointsUpdateOnMoveInput");
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
 
@@ -89,7 +92,6 @@ export function initApp() {
     !pointsDisplayAuto ||
     !pointsDisplayPoints ||
     !pointsDisplayClusters ||
-    !pointsDetailsZoomInput ||
     !pointsClusterStyleRow ||
     !pointsClusterStyleBlended ||
     !pointsClusterStyleMixed ||
@@ -97,6 +99,10 @@ export function initApp() {
     !pointsTileBuffer0 ||
     !pointsTileBuffer1 ||
     !pointsTileBuffer2 ||
+    !pointsAutoClusterThresholdRow ||
+    !pointsAutoClusterThresholdInput ||
+    !pointsDisableClusteringAtZoomRow ||
+    !pointsDisableClusteringAtZoomInput ||
     !pointsUpdateOnMoveInput ||
     !pointsSidebarMessage
   ) {
@@ -158,18 +164,27 @@ export function initApp() {
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
-  const POINT_DETAIL_ZOOM_HINT = "Zoom in om individuele tellingen te openen.";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
+
+  function normalizeOptionalMaxPointsInView(value, fallback = null) {
+    if (value == null) return fallback;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(500000, Math.max(1, Math.round(n)));
+  }
 
   const POINTS_SETTINGS_DEFAULTS = {
     displayMode: pointsDisplayClusters.checked
       ? "clusters"
       : (pointsDisplayPoints.checked ? "points" : "auto"),
-    detailsZoom: Math.min(22, Math.max(0, Math.round(Number(pointsDetailsZoomInput.value) || 12))),
     clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
-    maxPointsInView: Math.min(500000, Math.max(1, Math.round(Number(pointsMaxPointsInput.value) || 20000))),
+    maxPointsInView: normalizeOptionalMaxPointsInView(pointsMaxPointsInput.value, null),
     tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
+    autoClusterThreshold: toIntInRange(pointsAutoClusterThresholdInput.value, 10, 0, 22),
+    disableClusteringAtZoom: toIntInRange(pointsDisableClusteringAtZoomInput.value, 12, 0, 22),
     updateOnMove: Boolean(pointsUpdateOnMoveInput.checked),
   };
 
@@ -188,10 +203,11 @@ export function initApp() {
       : POINTS_SETTINGS_DEFAULTS.clusterStyle;
     return {
       displayMode,
-      detailsZoom: toIntInRange(raw?.detailsZoom, POINTS_SETTINGS_DEFAULTS.detailsZoom, 0, 22),
       clusterStyle,
-      maxPointsInView: toIntInRange(raw?.maxPointsInView, POINTS_SETTINGS_DEFAULTS.maxPointsInView, 1, 500000),
+      maxPointsInView: normalizeOptionalMaxPointsInView(raw?.maxPointsInView, POINTS_SETTINGS_DEFAULTS.maxPointsInView),
       tileBuffer: toIntInRange(raw?.tileBuffer, POINTS_SETTINGS_DEFAULTS.tileBuffer, 0, 2),
+      autoClusterThreshold: toIntInRange(raw?.autoClusterThreshold, POINTS_SETTINGS_DEFAULTS.autoClusterThreshold, 0, 22),
+      disableClusteringAtZoom: toIntInRange(raw?.disableClusteringAtZoom, POINTS_SETTINGS_DEFAULTS.disableClusteringAtZoom, 0, 22),
       updateOnMove: Boolean(raw?.updateOnMove),
     };
   }
@@ -250,11 +266,20 @@ export function initApp() {
 
   function updatePointsControlsVisibility() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
+    const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
+    const disableClusteringAtZoomEnabled = pointsSettings.displayMode !== "points";
+
     pointsClusterStyleRow.hidden = false;
     pointsClusterStyleRow.classList.toggle("is-disabled", !clusterStyleEnabled);
     for (const input of pointsClusterStyleRow.querySelectorAll("input")) {
       input.disabled = !clusterStyleEnabled;
     }
+
+    pointsAutoClusterThresholdRow.classList.toggle("is-disabled", !autoClusterThresholdEnabled);
+    pointsAutoClusterThresholdInput.disabled = !autoClusterThresholdEnabled;
+
+    pointsDisableClusteringAtZoomRow.classList.toggle("is-disabled", !disableClusteringAtZoomEnabled);
+    pointsDisableClusteringAtZoomInput.disabled = !disableClusteringAtZoomEnabled;
   }
 
   function applyPointsSettingsToUI() {
@@ -262,16 +287,18 @@ export function initApp() {
     pointsDisplayPoints.checked = pointsSettings.displayMode === "points";
     pointsDisplayClusters.checked = pointsSettings.displayMode === "clusters";
 
-    pointsDetailsZoomInput.value = String(pointsSettings.detailsZoom);
-
     pointsClusterStyleBlended.checked = pointsSettings.clusterStyle === "blended";
     pointsClusterStyleMixed.checked = pointsSettings.clusterStyle === "split";
 
-    pointsMaxPointsInput.value = String(pointsSettings.maxPointsInView);
+    pointsMaxPointsInput.value = pointsSettings.maxPointsInView == null
+      ? ""
+      : String(pointsSettings.maxPointsInView);
 
     pointsTileBuffer0.checked = pointsSettings.tileBuffer === 0;
     pointsTileBuffer1.checked = pointsSettings.tileBuffer === 1;
     pointsTileBuffer2.checked = pointsSettings.tileBuffer === 2;
+    pointsAutoClusterThresholdInput.value = String(pointsSettings.autoClusterThreshold);
+    pointsDisableClusteringAtZoomInput.value = String(pointsSettings.disableClusteringAtZoom);
 
     pointsUpdateOnMoveInput.checked = pointsSettings.updateOnMove;
     updatePointsControlsVisibility();
@@ -282,10 +309,11 @@ export function initApp() {
       displayMode: pointsDisplayClusters.checked
         ? "clusters"
         : (pointsDisplayPoints.checked ? "points" : "auto"),
-      detailsZoom: pointsDetailsZoomInput.value,
       clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
       maxPointsInView: pointsMaxPointsInput.value,
       tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
+      autoClusterThreshold: pointsAutoClusterThresholdInput.value,
+      disableClusteringAtZoom: pointsDisableClusteringAtZoomInput.value,
       updateOnMove: pointsUpdateOnMoveInput.checked,
     });
     pointsSettings = next;
@@ -434,7 +462,7 @@ export function initApp() {
         removeOutsideVisibleBounds: true,
         chunkedLoading: true,
         spiderfyOnMaxZoom: false,
-        disableClusteringAtZoom: 12,
+        disableClusteringAtZoom: pointsSettings.disableClusteringAtZoom,
         iconCreateFunction: (cluster) => {
           const markers = cluster.getAllChildMarkers();
           let privateCount = 0;
@@ -1475,6 +1503,9 @@ export function initApp() {
 
   function onPointsControlsChanged({ immediate = true } = {}) {
     readPointsSettingsFromUI();
+    if (pointsClusterLayer?.options) {
+      pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
+    }
     if (pointRenderKind === "clusters" && typeof pointsClusterLayer.refreshClusters === "function") {
       pointsClusterLayer.refreshClusters();
     }
@@ -1485,13 +1516,14 @@ export function initApp() {
   pointsDisplayAuto.addEventListener("change", () => onPointsControlsChanged());
   pointsDisplayPoints.addEventListener("change", () => onPointsControlsChanged());
   pointsDisplayClusters.addEventListener("change", () => onPointsControlsChanged());
-  pointsDetailsZoomInput.addEventListener("change", () => onPointsControlsChanged());
   pointsClusterStyleBlended.addEventListener("change", () => onPointsControlsChanged());
   pointsClusterStyleMixed.addEventListener("change", () => onPointsControlsChanged());
   pointsMaxPointsInput.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer0.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer1.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer2.addEventListener("change", () => onPointsControlsChanged());
+  pointsAutoClusterThresholdInput.addEventListener("change", () => onPointsControlsChanged());
+  pointsDisableClusteringAtZoomInput.addEventListener("change", () => onPointsControlsChanged());
   pointsUpdateOnMoveInput.addEventListener("change", () => onPointsControlsChanged({ immediate: false }));
 
   function schedulePresenceGridCompute() {
@@ -1782,20 +1814,10 @@ export function initApp() {
     return req;
   }
 
-  function isPointDetailsZoomAllowed() {
-    return map.getZoom() >= pointsSettings.detailsZoom;
-  }
-
   function bindPointMarkerPopup(marker, markerId) {
     marker.on("popupopen", async () => {
       const state = pointMarkerStateById.get(markerId);
       if (!state) return;
-
-      if (!isPointDetailsZoomAllowed()) {
-        marker.closePopup();
-        setPointsSidebarMessage(POINT_DETAIL_ZOOM_HINT);
-        return;
-      }
 
       const entry = state.entry;
       marker.setPopupContent(popupLoadingHtml(entry));
@@ -1811,14 +1833,6 @@ export function initApp() {
         marker.setPopupContent(popupHtml(latestState.entry, birds));
       } catch (err) {
         marker.setPopupContent(popupErrorHtml(entry, `Details laden mislukt (${err?.message || "onbekend"}).`));
-      }
-    });
-  }
-
-  if (typeof pointsClusterLayer.on === "function") {
-    pointsClusterLayer.on("clusterclick", () => {
-      if (!isPointDetailsZoomAllowed()) {
-        setPointsSidebarMessage(POINT_DETAIL_ZOOM_HINT);
       }
     });
   }
@@ -1930,8 +1944,8 @@ export function initApp() {
     return globalThis.L.divIcon({
       className: "tvt-point-marker-wrap",
       html: `<span class="tvt-point-marker ${pointMode}"></span>`,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
       popupAnchor: [0, -8],
     });
   }
@@ -1940,7 +1954,7 @@ export function initApp() {
     return {
       radius: 5,
       color: "rgba(255,255,255,0.92)",
-      weight: 1.5,
+      weight: 2,
       fillColor: isorg ? "#60a5fa" : "#fb923c",
       fillOpacity: 0.9,
       opacity: 1,
@@ -1973,21 +1987,25 @@ export function initApp() {
   }
 
   function resolveAutoPointRenderKind({ zoom }) {
-    return zoom < (pointsSettings.detailsZoom - 2) ? "clusters" : "points";
+    return zoom < pointsSettings.autoClusterThreshold ? "clusters" : "points";
+  }
+
+  function hasMaxPointsInViewCap() {
+    return Number.isFinite(pointsSettings.maxPointsInView) && pointsSettings.maxPointsInView > 0;
   }
 
   function resolvePointRenderKind({ zoom, totalCount }) {
     const requested = pointsSettings.displayMode === "auto"
       ? resolveAutoPointRenderKind({ zoom })
       : pointsSettings.displayMode;
-    if (pointsSettings.displayMode === "auto" && totalCount > pointsSettings.maxPointsInView) {
+    if (pointsSettings.displayMode === "auto" && hasMaxPointsInViewCap() && totalCount > pointsSettings.maxPointsInView) {
       return "clusters";
     }
     return requested === "clusters" ? "clusters" : "points";
   }
 
   function maybeMessageForPointCap() {
-    if (!isPointCapExceeded) return;
+    if (!isPointCapExceeded || !hasMaxPointsInViewCap()) return;
     setPointsSidebarMessage(
       `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`
     );
@@ -2212,7 +2230,7 @@ export function initApp() {
       }
 
       latestPointEntryCount = nextEntriesById.size;
-      isPointCapExceeded = latestPointEntryCount > pointsSettings.maxPointsInView;
+      isPointCapExceeded = hasMaxPointsInViewCap() && latestPointEntryCount > pointsSettings.maxPointsInView;
 
       setPointRenderKind(resolvePointRenderKind({
         zoom: map.getZoom(),
@@ -2220,7 +2238,7 @@ export function initApp() {
       }));
 
       let entriesForRender = Array.from(nextEntriesById.values());
-      if (isPointCapExceeded) {
+      if (isPointCapExceeded && hasMaxPointsInViewCap()) {
         entriesForRender = entriesForRender.slice(0, pointsSettings.maxPointsInView);
         setPointsSidebarMessage(
           `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`

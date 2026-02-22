@@ -87,14 +87,15 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
 
 ## Entries sidebar controls (Tellingen)
 
-Points mode now keeps the top-bar filters (`Particulier`, `School`, `Year`) and adds render/performance controls in the Entries sidebar:
+Points mode keeps the top-bar filters (`Particulier`, `School`, `Year`) and adds render/performance controls in the Entries sidebar:
 
-- `Display mode`: `Auto` (default), `Points`, `Clusters`
-- `Details vanaf zoom`: default `12` (below threshold, clicking shows a zoom-in hint and does not fetch details)
-- `Cluster style`: `Auto`, `Count`, `Mixed` (shown only in `Clusters` mode)
-- `Max punten in beeld`: default `20000`
-- `Tile buffer`: `0`, `1` (default), `2`
-- `Update tijdens bewegen`: off by default (`moveend`/`zoomend` updates only)
+- `Weergavemodus`: `Automatisch` (default), `Punten`, `Clusters`
+- `Clusterstijl`: `Samengevoegd`, `Gesplitst` (active when clustering is used)
+- `Max punten in beeld`: leeg = geen limiet (alles tonen)
+- `Tilebuffer`: `0`, `1` (default), `2`
+- `Automatisch: clusters onder zoom`: drempel voor auto-switch naar clusters
+- `Clusters uit vanaf zoom`: gelijk aan `disableClusteringAtZoom` in MarkerCluster
+- `Bij bewegen bijwerken`: off by default (`moveend`/`zoomend` updates only)
 
 Why canvas is default:
 
