@@ -50,6 +50,8 @@ export function initApp() {
   const pointsDisableClusteringAtZoomInput = document.querySelector("#pointsDisableClusteringAtZoomInput");
   const pointsUpdateOnMoveInput = document.querySelector("#pointsUpdateOnMoveInput");
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
+  const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
+  const pointsResetBtn = document.querySelector("#pointsResetBtn");
 
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
@@ -104,7 +106,9 @@ export function initApp() {
     !pointsDisableClusteringAtZoomRow ||
     !pointsDisableClusteringAtZoomInput ||
     !pointsUpdateOnMoveInput ||
-    !pointsSidebarMessage
+    !pointsSidebarMessage ||
+    !speciesViewResetBtn ||
+    !pointsResetBtn
   ) {
     return;
   }
@@ -164,8 +168,20 @@ export function initApp() {
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
+  const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
+  const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
+
+  function removeStorageKeys(keys) {
+    for (const key of keys) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // ignore storage failures
+      }
+    }
+  }
 
   function normalizeOptionalMaxPointsInView(value, fallback = null) {
     if (value == null) return fallback;
@@ -252,8 +268,10 @@ export function initApp() {
 
   function applyPointModeFiltersFromStorage() {
     const saved = readPointModeFiltersFromStorage();
-    pointsModePrivateInput.checked = saved.private;
-    pointsModeIsorgInput.checked = saved.isorg;
+    applyPointModeFilters({
+      privateChecked: saved.private,
+      isorgChecked: saved.isorg,
+    });
   }
 
   function persistPointsSettingsToStorage() {
@@ -304,6 +322,42 @@ export function initApp() {
     updatePointsControlsVisibility();
   }
 
+  function applyPointModeFilters({ privateChecked, isorgChecked }) {
+    pointsModePrivateInput.checked = Boolean(privateChecked);
+    pointsModeIsorgInput.checked = Boolean(isorgChecked);
+  }
+
+  function resetPointsSettings() {
+    const yearDefault = String(yearInput.defaultValue || "").trim();
+    if (yearDefault) yearInput.value = yearDefault;
+    else yearInput.value = String(Number(yearInput.value || 0) || 0);
+
+    pc4Input.value = "";
+    applyPointModeFilters({
+      privateChecked: pointsModePrivateInput.defaultChecked,
+      isorgChecked: pointsModeIsorgInput.defaultChecked,
+    });
+
+    pointsSettings = { ...POINTS_SETTINGS_DEFAULTS };
+    applyPointsSettingsToUI();
+    setPointsSidebarMessage("");
+
+    removeStorageKeys([
+      POINT_MODE_FILTERS_LS_KEY,
+      POINTS_SETTINGS_STORAGE_KEY,
+      POINTS_SIDEBAR_STORAGE_KEY,
+    ]);
+
+    if (pointsClusterLayer?.options) {
+      pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
+    }
+    if (pointRenderKind === "clusters" && typeof pointsClusterLayer.refreshClusters === "function") {
+      pointsClusterLayer.refreshClusters();
+    }
+
+    if (mode === "points") schedulePointTileFetch({ immediate: true });
+  }
+
   function readPointsSettingsFromUI() {
     const next = normalizePointsSettings({
       displayMode: pointsDisplayClusters.checked
@@ -332,11 +386,11 @@ export function initApp() {
 
   // Manual value is always persisted, even when Auto is on (so you can toggle back).
   let gridCellMManual = (() => {
-    const v = Number(localStorage.getItem("tvt:GridCellM"));
+    const v = Number(localStorage.getItem(GRID_CELL_M_LS_KEY));
     return Number.isFinite(v) && v > 0 ? v : GRID_CELL_M_DEFAULT;
   })();
 
-  let gridCellAutoEnabled = readBoolLS("tvt:GridCellAuto", true);
+  let gridCellAutoEnabled = readBoolLS(GRID_CELL_AUTO_LS_KEY, true);
 
   // Effective cell size used by compute. Initialized after map is created.
   let gridCellM = snapGridCellM(gridCellMManual);
@@ -371,7 +425,7 @@ export function initApp() {
       gridCellSlider.addEventListener("input", () => {
         const snapped = snapGridCellM(Number(gridCellSlider.value));
         gridCellMManual = snapped;
-        localStorage.setItem("tvt:GridCellM", String(gridCellMManual));
+        localStorage.setItem(GRID_CELL_M_LS_KEY, String(gridCellMManual));
 
         if (!gridCellAutoEnabled) {
           gridCellM = snapped;
@@ -392,7 +446,7 @@ export function initApp() {
       if (!v) return;
       const snapped = snapGridCellM(Number(v));
       gridCellMManual = snapped;
-      localStorage.setItem("tvt:GridCellM", String(gridCellMManual));
+      localStorage.setItem(GRID_CELL_M_LS_KEY, String(gridCellMManual));
       if (!gridCellAutoEnabled) {
         gridCellM = snapped;
         updateGridCellUI(gridCellM);
@@ -406,7 +460,7 @@ export function initApp() {
 
       gridCellAuto.addEventListener("change", () => {
         gridCellAutoEnabled = Boolean(gridCellAuto.checked);
-        localStorage.setItem("tvt:GridCellAuto", gridCellAutoEnabled ? "1" : "0");
+        localStorage.setItem(GRID_CELL_AUTO_LS_KEY, gridCellAutoEnabled ? "1" : "0");
         gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
         updateGridCellUI(gridCellM);
         schedulePresenceGridCompute();
@@ -517,6 +571,13 @@ export function initApp() {
   // Min. inzendingen per vak.
   let minN = Number(minNSlider?.value || 3);
   minNValue.textContent = String(minN);
+  const SPECIES_VIEW_DEFAULTS = {
+    metric: metricSum.defaultChecked ? "sum" : (metricAvg.defaultChecked ? "avg" : "presence"),
+    style: styleHeatmap.defaultChecked ? "heatmap" : (styleGrid.defaultChecked ? "grid" : "auto"),
+    minN: Math.max(1, Number(minNSlider?.defaultValue || minNSlider?.value || 1)),
+    gridCellMManual: snapGridCellM(Number(gridCellSlider?.defaultValue || GRID_CELL_M_DEFAULT)),
+    gridCellAutoEnabled: gridCellAuto ? Boolean(gridCellAuto.defaultChecked) : true,
+  };
 
   let sidebarOpen = true;
   let hudStats = { entries: 0, birds: 0 };
@@ -1505,6 +1566,25 @@ export function initApp() {
     minNValue.textContent = String(minN);
   }
 
+  function resetSpeciesViewSettings() {
+    metricPresence.checked = SPECIES_VIEW_DEFAULTS.metric === "presence";
+    metricAvg.checked = SPECIES_VIEW_DEFAULTS.metric === "avg";
+    metricSum.checked = SPECIES_VIEW_DEFAULTS.metric === "sum";
+
+    styleAuto.checked = SPECIES_VIEW_DEFAULTS.style === "auto";
+    styleGrid.checked = SPECIES_VIEW_DEFAULTS.style === "grid";
+    styleHeatmap.checked = SPECIES_VIEW_DEFAULTS.style === "heatmap";
+
+    minNSlider.value = String(SPECIES_VIEW_DEFAULTS.minN);
+    gridCellMManual = SPECIES_VIEW_DEFAULTS.gridCellMManual;
+    gridCellAutoEnabled = SPECIES_VIEW_DEFAULTS.gridCellAutoEnabled;
+    gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+    updateGridCellUI(gridCellM);
+
+    removeStorageKeys([GRID_CELL_M_LS_KEY, GRID_CELL_AUTO_LS_KEY]);
+    onSpeciesControlsChanged();
+  }
+
   function onSpeciesControlsChanged() {
     readControls();
     renderSpeciesList({ query: speciesSearchInput.value });
@@ -1522,6 +1602,7 @@ export function initApp() {
   styleGrid.addEventListener("change", onSpeciesControlsChanged);
   styleHeatmap.addEventListener("change", onSpeciesControlsChanged);
   minNSlider.addEventListener("input", onSpeciesControlsChanged);
+  speciesViewResetBtn.addEventListener("click", resetSpeciesViewSettings);
 
   function onPointsControlsChanged({ immediate = true } = {}) {
     readPointsSettingsFromUI();
@@ -1547,6 +1628,7 @@ export function initApp() {
   pointsAutoClusterThresholdInput.addEventListener("change", () => onPointsControlsChanged());
   pointsDisableClusteringAtZoomInput.addEventListener("change", () => onPointsControlsChanged());
   pointsUpdateOnMoveInput.addEventListener("change", () => onPointsControlsChanged({ immediate: false }));
+  pointsResetBtn.addEventListener("click", resetPointsSettings);
 
   function schedulePresenceGridCompute() {
     if (computeTimer) window.clearTimeout(computeTimer);
