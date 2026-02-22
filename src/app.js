@@ -718,7 +718,19 @@ export function initApp() {
     }
 
     hudStats = { entries: inViewEntries, birds: inViewBirds };
-    statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
+    if (mode === "points") {
+      const main = document.createElement("span");
+      main.className = "stats-main";
+      main.textContent = `${fmtInt(inViewEntries)} inzendingen in beeld`;
+
+      const provisional = document.createElement("span");
+      provisional.className = "stats-provisional";
+      provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+
+      statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+    } else {
+      statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
+    }
 
     if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
     if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${inViewIsorg})`;

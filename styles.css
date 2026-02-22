@@ -242,6 +242,17 @@ input {
   font-size: 12px;
 }
 
+.stats-main {
+  color: var(--muted);
+}
+
+.stats-provisional {
+  color: var(--muted-2);
+  opacity: 0.85;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 /* Main map */
 .main {
   flex: 1 1 auto;
