@@ -366,10 +366,44 @@ input {
 }
 
 .sidebar-panel {
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding-top: 10px;
+}
+
+#sidebarPoints .sidebar-panel,
+#sidebarPanelView {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 10px;
+}
+
+#sidebarPanelSpecies {
+  overflow: hidden;
+}
+
+#sidebarPoints .sidebar-advanced,
+#sidebarPoints .sidebar-advanced > .sidebar-fieldset {
+  min-height: 0;
+}
+
+#sidebarPoints .sidebar-advanced {
+  margin: 0;
+}
+
+#sidebarPoints .sidebar-advanced > summary {
+  display: block;
+  line-height: 1.25;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+#sidebarPoints .sidebar-advanced[open] > summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-panel input[type="number"] {
@@ -529,6 +563,16 @@ input {
 .sidebar-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+#sidebarPoints .sidebar-row-full.sidebar-actions {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 0;
 }
 
 .sidebar-reset-btn {
