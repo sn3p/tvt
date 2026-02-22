@@ -292,7 +292,7 @@ export function initApp() {
         showCoverageOnHover: false,
         removeOutsideVisibleBounds: true,
         chunkedLoading: true,
-        spiderfyOnMaxZoom: true,
+        spiderfyOnMaxZoom: false,
         disableClusteringAtZoom: 13,
         iconCreateFunction: (cluster) => {
           const markers = cluster.getAllChildMarkers();
