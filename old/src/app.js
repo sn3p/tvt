@@ -429,7 +429,7 @@ export function initApp() {
   renderAll();
   setStatus(statusBar, "Klaar. Vul een PC4 of adres in.");
 
-  // --- View 2: Mijn Vogeltelling (adres) ---
+  // --- View 2: Mijn telling (adres) ---
   const myYearInput = $("myYearInput");
   const myAddressInput = $("myAddressInput");
   const myIncludeSchoolInput = $("myIncludeSchoolInput");
@@ -557,4 +557,3 @@ export function initApp() {
   myRenderAll();
   setStatus(myStatusBar, "Klaar. Vul een adres in.");
 }
-

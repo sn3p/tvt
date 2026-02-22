@@ -1,4 +1,4 @@
-# Draft — Mijn Vogeltellingen (kaart-gebaseerde visualisaties)
+# Draft — TVT (kaart-gebaseerde visualisaties)
 
 > Doel: een kaart van Nederland (start: gemeente Groningen) die de viewport grotendeels inneemt, met tabs/modi om context te switchen.
 

@@ -1,11 +1,11 @@
-# Mijn Vogeltelling
+# TVT
 
 Lightweight viewer voor resultaten van de Nationale Tuinvogeltelling (Vogelbescherming).
 
 ## Repo structuur (2026)
 
 - **Nieuwe doorstart (dataset-based)**: root `index.html` + `main.js` + `src/app.js`
-  - Dataset staat in `data/2026/municipality_groningen.json` (en `.gz`).
+  - Dataset staat in `public/data/2026/municipality_groningen.json` (en `.gz`).
 - **Oude app (live endpoints)**: `old/` (oude `index.html`, `styles.css`, `main.js`, `src/`), bedoeld om werkend te blijven.
 
 ## Features Draft

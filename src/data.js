@@ -11,7 +11,7 @@ export async function loadMunicipalityDataset({ year, area = "groningen" } = {})
   if (!y) throw new Error("year is required");
   if (area !== "groningen") throw new Error(`unsupported area: ${String(area)}`);
 
-  const url = `./data/${encodeURIComponent(String(y))}/municipality_groningen.json`;
+  const url = `./public/data/${encodeURIComponent(String(y))}/municipality_groningen.json`;
   if (cache.has(url)) return cache.get(url);
 
   const p = fetch(url)
@@ -30,7 +30,7 @@ export async function loadMunicipalityDataset({ year, area = "groningen" } = {})
 }
 
 export async function loadBirdguide() {
-  const url = "./data/birdguide.json";
+  const url = "./public/data/birdguide.json";
   if (cache.has(url)) return cache.get(url);
 
   const p = fetch(url)
@@ -46,4 +46,3 @@ export async function loadBirdguide() {
   cache.set(url, p);
   return p;
 }
-

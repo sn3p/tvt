@@ -72,8 +72,8 @@ Keep the existing Groningen species visualisations working while NL points tiles
 
 `tvt-harvest` produces NL tiles + manifest under `data/compiled/tvt/` and exports them into the webapp under:
 
-- NL tiles: `mijn-vogeltelling/public/data/tvt/`
-- Groningen JSON: `mijn-vogeltelling/public/data/groningen/`
+- NL tiles: `tvt/public/data/tvt/`
+- Groningen JSON: `tvt/public/data/<year>/municipality_groningen.json`
 
 The webapp should treat the relevant manifest(s) as the source of truth (no hardcoded paths).
 

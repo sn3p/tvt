@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mijn Vogeltelling</title>
+  <title>TVT (legacy)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -14,7 +14,7 @@
 <body>
   <header class="app-header">
     <div class="container">
-      <h1>Tuinvogeltelling</h1>
+      <h1>TVT</h1>
       <p class="muted">
         Dit is een viewer voor Tuinvogeltellingen van de Vogelbescherming.
       </p>
@@ -24,7 +24,7 @@
   <nav class="tabs" aria-label="Views">
     <div class="container tabs-inner">
       <a class="tab" href="#/vogeltelling" data-route="vogeltelling">Vogeltelling (postcode)</a>
-      <a class="tab" href="#/mijn" data-route="mijn">Mijn Vogeltelling (adres)</a>
+      <a class="tab" href="#/mijn" data-route="mijn">Mijn telling (adres)</a>
     </div>
   </nav>
 
@@ -92,7 +92,7 @@
 
     <section id="route-mijn" class="route" hidden>
       <section class="card">
-        <h2>Mijn Vogeltelling</h2>
+        <h2>Mijn telling</h2>
         <form id="myForm" class="grid" autocomplete="off">
           <label class="field">
             <span>Jaar</span>
@@ -149,7 +149,7 @@
   <footer class="container footer muted">
     <p>
       Gemaakt door <a href="https://matthijskuiper.nl" target="_blank" rel="noreferrer">Matthijs Kuiper</a>.
-      <a href="https://github.com/sn3p/mijn-vogeltelling" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/sn3p/tvt" target="_blank" rel="noreferrer">GitHub</a>
     </p>
     <p>
       Data &amp; afbeeldingen zijn afkomstig van en eigendom van de
