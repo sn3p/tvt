@@ -56,6 +56,7 @@ export function initApp() {
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
   const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
   const pointsResetBtn = document.querySelector("#pointsResetBtn");
+  const themeToggleBtn = document.querySelector("#themeToggleBtn");
 
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
@@ -173,6 +174,7 @@ export function initApp() {
   }
 
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
+  const THEME_STORAGE_KEY = "tvt:theme";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
@@ -181,6 +183,55 @@ export function initApp() {
   const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
   const WORKER_CLUSTER_FALLBACK_HINT = "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
+  const THEME_DARK = "dark";
+  const THEME_LIGHT = "light";
+
+  function normalizeTheme(value) {
+    return String(value || "").trim().toLowerCase() === THEME_LIGHT ? THEME_LIGHT : THEME_DARK;
+  }
+
+  function readThemeFromStorage() {
+    try {
+      return normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+    } catch {
+      return THEME_DARK;
+    }
+  }
+
+  function persistThemeToStorage(theme) {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function updateThemeToggleUI(theme) {
+    if (!themeToggleBtn) return;
+    const isLight = theme === THEME_LIGHT;
+    themeToggleBtn.textContent = isLight ? "Thema: Licht" : "Thema: Donker";
+    themeToggleBtn.setAttribute("aria-pressed", isLight ? "true" : "false");
+    themeToggleBtn.setAttribute(
+      "aria-label",
+      isLight ? "Schakel naar donker thema" : "Schakel naar licht thema"
+    );
+  }
+
+  function applyTheme(theme, { persist = true } = {}) {
+    const normalized = normalizeTheme(theme);
+    document.body.dataset.theme = normalized;
+    updateThemeToggleUI(normalized);
+    if (persist) persistThemeToStorage(normalized);
+    return normalized;
+  }
+
+  let activeTheme = applyTheme(readThemeFromStorage(), { persist: false });
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+      activeTheme = applyTheme(activeTheme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
+    });
+  }
 
   function removeStorageKeys(keys) {
     for (const key of keys) {
