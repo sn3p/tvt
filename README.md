@@ -85,6 +85,22 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
   - `© OpenStreetMap contributors`
 - Let op: default OSM tiles zijn niet bedoeld voor heavy production use; later evt. eigen tile provider.
 
+## Entries sidebar controls (Tellingen)
+
+Points mode now keeps the top-bar filters (`Particulier`, `School`, `Year`) and adds render/performance controls in the Entries sidebar:
+
+- `Display mode`: `Auto` (default), `Points`, `Clusters`
+- `Details vanaf zoom`: default `12` (below threshold, clicking shows a zoom-in hint and does not fetch details)
+- `Cluster style`: `Auto`, `Count`, `Mixed` (shown only in `Clusters` mode)
+- `Max punten in beeld`: default `20000`
+- `Tile buffer`: `0`, `1` (default), `2`
+- `Update tijdens bewegen`: off by default (`moveend`/`zoomend` updates only)
+
+Why canvas is default:
+
+- `Points` rendering uses canvas-first `circleMarker` drawing to reduce DOM pressure.
+- Markercluster (DOM-based) is only used when explicitly selected (`Clusters`) or when `Auto` chooses clustering for readability/performance.
+
 ### Later (out of scope MVP)
 - Alle PC4 gebieden / heel NL (mogelijk scraping + eigen DB).
 - Soortenlijst interactief maken (klik soort → visualisatie op kaart: heatmap/aantallen).

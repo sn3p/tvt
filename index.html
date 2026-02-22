@@ -7,11 +7,13 @@
   <title>TVT — Tellingen als punten</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    crossorigin="" />
   <link rel="stylesheet" href="https://unpkg.com/tippy.js@6.3.7/dist/tippy.css" crossorigin="" />
   <link rel="stylesheet" href="./styles.css" />
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script defer src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+  <script defer src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+    crossorigin=""></script>
   <script type="importmap">
     {
       "imports": {
@@ -76,7 +78,8 @@
             <span>Weergave</span>
           </button>
         </nav>
-        <button id="sidebarSpeciesCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
+        <button id="sidebarSpeciesCloseBtn" class="sidebar-close-btn" type="button"
+          aria-label="Sluit sidebar">×</button>
       </div>
 
       <div id="sidebarPanelSpecies" class="sidebar-panel">
@@ -197,9 +200,87 @@
         <button id="sidebarPointsCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
       </div>
       <div class="sidebar-panel">
-        <div class="sidebar-row-full">
-          <div class="sidebar-label muted">Opties voor Tellingen komen hier later.</div>
-        </div>
+        <fieldset class="sidebar-fieldset">
+          <legend>Weergave</legend>
+
+          <div class="sidebar-row-full">
+            <div class="sidebar-label muted">Weergavemodus</div>
+            <div class="segmented" role="group" aria-label="Weergavemodus">
+              <label class="seg">
+                <input id="pointsDisplayAuto" type="radio" name="pointsDisplayMode" value="auto" checked>
+                <span>Automatisch</span>
+              </label>
+              <label class="seg">
+                <input id="pointsDisplayPoints" type="radio" name="pointsDisplayMode" value="points">
+                <span>Punten</span>
+              </label>
+              <label class="seg">
+                <input id="pointsDisplayClusters" type="radio" name="pointsDisplayMode" value="clusters">
+                <span>Clusters</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="sidebar-row-full">
+            <div class="sidebar-label muted">Details vanaf zoom</div>
+            <input id="pointsDetailsZoomInput" type="number" min="0" max="22" step="1" value="14">
+            <div class="sidebar-hint muted-2">Zoom in om individuele tellingen te openen.</div>
+          </div>
+
+          <div id="pointsClusterStyleRow" class="sidebar-row-full" hidden>
+            <div class="sidebar-label muted">Clusterstijl</div>
+            <div class="segmented" role="group" aria-label="Clusterstijl">
+              <label class="seg">
+                <input id="pointsClusterStyleBlended" type="radio" name="pointsClusterStyle" value="blended" checked>
+                <span>Samengevoegd</span>
+              </label>
+              <label class="seg">
+                <input id="pointsClusterStyleMixed" type="radio" name="pointsClusterStyle" value="split">
+                <span>Gesplitst</span>
+              </label>
+            </div>
+          </div>
+        </fieldset>
+
+        <details class="sidebar-advanced">
+          <summary>Prestaties</summary>
+          <fieldset class="sidebar-fieldset">
+            <div class="sidebar-row-full">
+              <div class="sidebar-label muted">Max punten in beeld</div>
+              <input id="pointsMaxPointsInput" type="number" min="1" max="500000" step="1000" value="20000">
+              <div class="sidebar-hint muted-2">Bij te veel punten: zoom in of kies Clusters.</div>
+            </div>
+
+            <div class="sidebar-row-full">
+              <div class="sidebar-label muted">Tile buffer</div>
+              <div class="segmented" role="group" aria-label="Tilebuffer">
+                <label class="seg">
+                  <input id="pointsTileBuffer0" type="radio" name="pointsTileBuffer" value="0">
+                  <span>0</span>
+                </label>
+                <label class="seg">
+                  <input id="pointsTileBuffer1" type="radio" name="pointsTileBuffer" value="1" checked>
+                  <span>1</span>
+                </label>
+                <label class="seg">
+                  <input id="pointsTileBuffer2" type="radio" name="pointsTileBuffer" value="2">
+                  <span>2</span>
+                </label>
+              </div>
+              <div class="sidebar-hint muted-2">Meer buffer = minder pop-in, meer data.</div>
+            </div>
+
+            <div class="sidebar-row-full">
+              <div class="sidebar-label muted">Bij bewegen bijwerken</div>
+              <label class="check">
+                <input id="pointsUpdateOnMoveInput" type="checkbox">
+                <span>Aan</span>
+              </label>
+            </div>
+          </fieldset>
+        </details>
+
+        <div id="pointsSidebarMessage" class="sidebar-status muted-2" hidden></div>
       </div>
     </aside>
 

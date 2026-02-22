@@ -34,6 +34,19 @@ export function initApp() {
   const styleHeatmap = document.querySelector("#styleHeatmap");
   const minNSlider = document.querySelector("#minNSlider");
   const minNValue = document.querySelector("#minNValue");
+  const pointsDisplayAuto = document.querySelector("#pointsDisplayAuto");
+  const pointsDisplayPoints = document.querySelector("#pointsDisplayPoints");
+  const pointsDisplayClusters = document.querySelector("#pointsDisplayClusters");
+  const pointsDetailsZoomInput = document.querySelector("#pointsDetailsZoomInput");
+  const pointsClusterStyleRow = document.querySelector("#pointsClusterStyleRow");
+  const pointsClusterStyleBlended = document.querySelector("#pointsClusterStyleBlended");
+  const pointsClusterStyleMixed = document.querySelector("#pointsClusterStyleMixed");
+  const pointsMaxPointsInput = document.querySelector("#pointsMaxPointsInput");
+  const pointsTileBuffer0 = document.querySelector("#pointsTileBuffer0");
+  const pointsTileBuffer1 = document.querySelector("#pointsTileBuffer1");
+  const pointsTileBuffer2 = document.querySelector("#pointsTileBuffer2");
+  const pointsUpdateOnMoveInput = document.querySelector("#pointsUpdateOnMoveInput");
+  const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
 
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
@@ -72,7 +85,20 @@ export function initApp() {
     !styleGrid ||
     !styleHeatmap ||
     !minNSlider ||
-    !minNValue
+    !minNValue ||
+    !pointsDisplayAuto ||
+    !pointsDisplayPoints ||
+    !pointsDisplayClusters ||
+    !pointsDetailsZoomInput ||
+    !pointsClusterStyleRow ||
+    !pointsClusterStyleBlended ||
+    !pointsClusterStyleMixed ||
+    !pointsMaxPointsInput ||
+    !pointsTileBuffer0 ||
+    !pointsTileBuffer1 ||
+    !pointsTileBuffer2 ||
+    !pointsUpdateOnMoveInput ||
+    !pointsSidebarMessage
   ) {
     return;
   }
@@ -130,8 +156,57 @@ export function initApp() {
   }
 
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
-  const POINT_TILE_MODES = ["private", "isorg"];
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
+  const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
+  const POINT_DETAIL_ZOOM_HINT = "Zoom in om individuele tellingen te openen.";
+  const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
+  const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
+
+  const POINTS_SETTINGS_DEFAULTS = {
+    displayMode: pointsDisplayClusters.checked
+      ? "clusters"
+      : (pointsDisplayPoints.checked ? "points" : "auto"),
+    detailsZoom: Math.min(22, Math.max(0, Math.round(Number(pointsDetailsZoomInput.value) || 12))),
+    clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
+    maxPointsInView: Math.min(500000, Math.max(1, Math.round(Number(pointsMaxPointsInput.value) || 20000))),
+    tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
+    updateOnMove: Boolean(pointsUpdateOnMoveInput.checked),
+  };
+
+  function toIntInRange(value, fallback, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(n)));
+  }
+
+  function normalizePointsSettings(raw) {
+    const displayMode = ["auto", "points", "clusters"].includes(raw?.displayMode)
+      ? raw.displayMode
+      : POINTS_SETTINGS_DEFAULTS.displayMode;
+    const clusterStyle = ["blended", "split"].includes(raw?.clusterStyle)
+      ? raw.clusterStyle
+      : POINTS_SETTINGS_DEFAULTS.clusterStyle;
+    return {
+      displayMode,
+      detailsZoom: toIntInRange(raw?.detailsZoom, POINTS_SETTINGS_DEFAULTS.detailsZoom, 0, 22),
+      clusterStyle,
+      maxPointsInView: toIntInRange(raw?.maxPointsInView, POINTS_SETTINGS_DEFAULTS.maxPointsInView, 1, 500000),
+      tileBuffer: toIntInRange(raw?.tileBuffer, POINTS_SETTINGS_DEFAULTS.tileBuffer, 0, 2),
+      updateOnMove: Boolean(raw?.updateOnMove),
+    };
+  }
+
+  function readPointsSettingsFromStorage() {
+    try {
+      const raw = window.localStorage.getItem(POINTS_SETTINGS_STORAGE_KEY);
+      if (!raw) return { ...POINTS_SETTINGS_DEFAULTS };
+      return normalizePointsSettings(JSON.parse(raw));
+    } catch {
+      return { ...POINTS_SETTINGS_DEFAULTS };
+    }
+  }
+
+  let pointsSettings = readPointsSettingsFromStorage();
 
   function readPointModeFiltersFromStorage() {
     try {
@@ -165,7 +240,67 @@ export function initApp() {
     pointsModeIsorgInput.checked = saved.isorg;
   }
 
+  function persistPointsSettingsToStorage() {
+    try {
+      window.localStorage.setItem(POINTS_SETTINGS_STORAGE_KEY, JSON.stringify(pointsSettings));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function updatePointsControlsVisibility() {
+    const clusterStyleEnabled = pointsSettings.displayMode !== "points";
+    pointsClusterStyleRow.hidden = false;
+    pointsClusterStyleRow.classList.toggle("is-disabled", !clusterStyleEnabled);
+    for (const input of pointsClusterStyleRow.querySelectorAll("input")) {
+      input.disabled = !clusterStyleEnabled;
+    }
+  }
+
+  function applyPointsSettingsToUI() {
+    pointsDisplayAuto.checked = pointsSettings.displayMode === "auto";
+    pointsDisplayPoints.checked = pointsSettings.displayMode === "points";
+    pointsDisplayClusters.checked = pointsSettings.displayMode === "clusters";
+
+    pointsDetailsZoomInput.value = String(pointsSettings.detailsZoom);
+
+    pointsClusterStyleBlended.checked = pointsSettings.clusterStyle === "blended";
+    pointsClusterStyleMixed.checked = pointsSettings.clusterStyle === "split";
+
+    pointsMaxPointsInput.value = String(pointsSettings.maxPointsInView);
+
+    pointsTileBuffer0.checked = pointsSettings.tileBuffer === 0;
+    pointsTileBuffer1.checked = pointsSettings.tileBuffer === 1;
+    pointsTileBuffer2.checked = pointsSettings.tileBuffer === 2;
+
+    pointsUpdateOnMoveInput.checked = pointsSettings.updateOnMove;
+    updatePointsControlsVisibility();
+  }
+
+  function readPointsSettingsFromUI() {
+    const next = normalizePointsSettings({
+      displayMode: pointsDisplayClusters.checked
+        ? "clusters"
+        : (pointsDisplayPoints.checked ? "points" : "auto"),
+      detailsZoom: pointsDetailsZoomInput.value,
+      clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
+      maxPointsInView: pointsMaxPointsInput.value,
+      tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
+      updateOnMove: pointsUpdateOnMoveInput.checked,
+    });
+    pointsSettings = next;
+    applyPointsSettingsToUI();
+    persistPointsSettingsToStorage();
+  }
+
+  function setPointsSidebarMessage(message = "") {
+    const text = String(message || "").trim();
+    pointsSidebarMessage.hidden = !text;
+    pointsSidebarMessage.textContent = text;
+  }
+
   applyPointModeFiltersFromStorage();
+  applyPointsSettingsToUI();
 
   // Manual value is always persisted, even when Auto is on (so you can toggle back).
   let gridCellMManual = (() => {
@@ -286,14 +421,20 @@ export function initApp() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
-  function createPointsLayer() {
+  function clusterToneForCounts({ privateCount, isorgCount }) {
+    if (isorgCount === 0) return "private";
+    if (privateCount === 0) return "isorg";
+    return pointsSettings.clusterStyle === "split" ? "mixed-indicator" : "mixed";
+  }
+
+  function createPointsClusterLayer() {
     if (typeof globalThis.L?.markerClusterGroup === "function") {
       return globalThis.L.markerClusterGroup({
         showCoverageOnHover: false,
         removeOutsideVisibleBounds: true,
         chunkedLoading: true,
         spiderfyOnMaxZoom: false,
-        disableClusteringAtZoom: 13,
+        disableClusteringAtZoom: 12,
         iconCreateFunction: (cluster) => {
           const markers = cluster.getAllChildMarkers();
           let privateCount = 0;
@@ -303,9 +444,7 @@ export function initApp() {
             else privateCount += 1;
           }
           const total = privateCount + isorgCount;
-          const tone = isorgCount === 0
-            ? "private"
-            : (privateCount === 0 ? "isorg" : "mixed");
+          const tone = clusterToneForCounts({ privateCount, isorgCount });
 
           return globalThis.L.divIcon({
             className: `tvt-cluster tvt-cluster--${tone}`,
@@ -318,7 +457,15 @@ export function initApp() {
     return globalThis.L.layerGroup();
   }
 
-  const pointsLayer = createPointsLayer().addTo(map);
+  const pointCanvasRenderer = typeof globalThis.L?.canvas === "function"
+    ? globalThis.L.canvas({ padding: 0.25 })
+    : null;
+  const pointsClusterLayer = createPointsClusterLayer();
+  const pointsCanvasLayer = globalThis.L.layerGroup();
+  let pointRenderKind = "points"; // points | clusters
+  let pointsLayer = pointsCanvasLayer;
+  pointsLayer.addTo(map);
+
   const gridLayer = globalThis.L.layerGroup();
 
   let dataset = null;
@@ -353,7 +500,12 @@ export function initApp() {
   let pointTileFetchSeq = 0;
   let pointTileFetchTimer = 0;
   let pointTileAbortController = null;
+  let pointTileYear = 0;
+  let latestPointEntryCount = 0;
+  let isPointCapExceeded = false;
   const pointMarkerStateById = new Map();
+  const pointEntryDetailsPromiseByKey = new Map();
+  const pointEntryDetailsByKey = new Map();
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
@@ -606,6 +758,20 @@ export function initApp() {
     if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
   }
 
+  function setPointRenderKind(nextKind) {
+    const resolved = nextKind === "clusters" ? "clusters" : "points";
+    if (resolved === pointRenderKind) return;
+    const previousLayer = pointsLayer;
+    const wasVisible = map.hasLayer(previousLayer);
+    if (wasVisible) map.removeLayer(previousLayer);
+    if (typeof previousLayer.clearLayers === "function") previousLayer.clearLayers();
+    pointRenderKind = resolved;
+    pointsLayer = pointRenderKind === "clusters" ? pointsClusterLayer : pointsCanvasLayer;
+    pointMarkerStateById.clear();
+    refreshRenderedPointStats();
+    if (wasVisible && mode === "points") pointsLayer.addTo(map);
+  }
+
   // Grid/heatmap legend for species mode (sequential, luminance ramp + gamma).
   const GRID_COLORMAP_GAMMA = 0.6;
   // ColorBrewer "Blues" ramp (light -> dark), sampled densely for smooth interpolation.
@@ -799,6 +965,7 @@ export function initApp() {
       clearPointTileFetchTimer();
       abortPointTileFetchCycle();
       if (prevMode === "points") clearPointMarkers();
+      setPointsSidebarMessage("");
       setPointsLayerVisible(false);
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
       setLegendVisible(false);
@@ -1306,6 +1473,27 @@ export function initApp() {
   styleHeatmap.addEventListener("change", onSpeciesControlsChanged);
   minNSlider.addEventListener("input", onSpeciesControlsChanged);
 
+  function onPointsControlsChanged({ immediate = true } = {}) {
+    readPointsSettingsFromUI();
+    if (pointRenderKind === "clusters" && typeof pointsClusterLayer.refreshClusters === "function") {
+      pointsClusterLayer.refreshClusters();
+    }
+    if (mode !== "points") return;
+    schedulePointTileFetch({ immediate });
+  }
+
+  pointsDisplayAuto.addEventListener("change", () => onPointsControlsChanged());
+  pointsDisplayPoints.addEventListener("change", () => onPointsControlsChanged());
+  pointsDisplayClusters.addEventListener("change", () => onPointsControlsChanged());
+  pointsDetailsZoomInput.addEventListener("change", () => onPointsControlsChanged());
+  pointsClusterStyleBlended.addEventListener("change", () => onPointsControlsChanged());
+  pointsClusterStyleMixed.addEventListener("change", () => onPointsControlsChanged());
+  pointsMaxPointsInput.addEventListener("change", () => onPointsControlsChanged());
+  pointsTileBuffer0.addEventListener("change", () => onPointsControlsChanged());
+  pointsTileBuffer1.addEventListener("change", () => onPointsControlsChanged());
+  pointsTileBuffer2.addEventListener("change", () => onPointsControlsChanged());
+  pointsUpdateOnMoveInput.addEventListener("change", () => onPointsControlsChanged({ immediate: false }));
+
   function schedulePresenceGridCompute() {
     if (computeTimer) window.clearTimeout(computeTimer);
     if (mode !== "species") return;
@@ -1497,10 +1685,11 @@ export function initApp() {
     setComputing(false);
   }
 
-  function popupHtml(entry) {
-    const birds = Array.isArray(entry?.birds) ? entry.birds : [];
+  function popupHtml(entry, birdsOverride = null) {
+    const birds = Array.isArray(birdsOverride)
+      ? birdsOverride
+      : (Array.isArray(entry?.birds) ? entry.birds : []);
     const total = sumBirds(birds);
-    const imgFallback = birdFallbackFilename();
     const rows = birds
       .slice()
       .sort((a, b) => (Number(b?.count ?? 0) || 0) - (Number(a?.count ?? 0) || 0))
@@ -1526,6 +1715,112 @@ export function initApp() {
         <ol class="list">${rows || '<li class="row"><span class="name">Geen soorten</span><span class="count">0</span></li>'}</ol>
       </div>
     `;
+  }
+
+  function popupLoadingHtml(entry) {
+    return `
+      <div class="tvt-popup">
+        <h3>Inzending ${entry.id}</h3>
+        <p class="meta">PC4 ${entry.pc4} • ${labelForEntry(entry)} • details laden…</p>
+        <ol class="list"><li class="row"><span class="name">Laden…</span><span class="count"></span></li></ol>
+      </div>
+    `;
+  }
+
+  function popupErrorHtml(entry, message) {
+    return `
+      <div class="tvt-popup">
+        <h3>Inzending ${entry.id}</h3>
+        <p class="meta">PC4 ${entry.pc4} • ${labelForEntry(entry)}</p>
+        <ol class="list"><li class="row"><span class="name">${escapeHtml(message || "Details laden mislukt.")}</span><span class="count"></span></li></ol>
+      </div>
+    `;
+  }
+
+  function pointDetailsKey({ year, id }) {
+    return `${Number(year) || 0}:${Number(id) || 0}`;
+  }
+
+  function pointDetailsUrl({ id, year, limit = 9999 }) {
+    const params = new URLSearchParams();
+    if (Number(year) > 0) params.set("year", String(Number(year)));
+    params.set("id", String(id));
+    params.set("limit", String(limit));
+    return `${ENTRY_TOP_BIRDS_API_BASE}/entry-top-birds?${params.toString()}`;
+  }
+
+  function normalizeBirdRows(json) {
+    const data = Array.isArray(json?.data) ? json.data : [];
+    return data
+      .map((b) => ({
+        name: String(b?.name ?? b?.vogelnaam ?? "").trim(),
+        count: Number(b?.number ?? b?.count ?? 0) || 0,
+      }))
+      .filter((b) => b.name)
+      .sort((a, b) => b.count - a.count);
+  }
+
+  async function getPointEntryDetails({ year, id }) {
+    const key = pointDetailsKey({ year, id });
+    if (pointEntryDetailsByKey.has(key)) return pointEntryDetailsByKey.get(key);
+    if (pointEntryDetailsPromiseByKey.has(key)) return pointEntryDetailsPromiseByKey.get(key);
+
+    const req = (async () => {
+      const url = pointDetailsUrl({ year, id, limit: 9999 });
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const json = await r.json();
+      const birds = normalizeBirdRows(json);
+      pointEntryDetailsByKey.set(key, birds);
+      return birds;
+    })()
+      .finally(() => {
+        pointEntryDetailsPromiseByKey.delete(key);
+      });
+
+    pointEntryDetailsPromiseByKey.set(key, req);
+    return req;
+  }
+
+  function isPointDetailsZoomAllowed() {
+    return map.getZoom() >= pointsSettings.detailsZoom;
+  }
+
+  function bindPointMarkerPopup(marker, markerId) {
+    marker.on("popupopen", async () => {
+      const state = pointMarkerStateById.get(markerId);
+      if (!state) return;
+
+      if (!isPointDetailsZoomAllowed()) {
+        marker.closePopup();
+        setPointsSidebarMessage(POINT_DETAIL_ZOOM_HINT);
+        return;
+      }
+
+      const entry = state.entry;
+      marker.setPopupContent(popupLoadingHtml(entry));
+
+      try {
+        const birds = await getPointEntryDetails({
+          year: pointTileYear || Number(yearInput.value || 0) || 0,
+          id: entry.id,
+        });
+        const latestState = pointMarkerStateById.get(markerId);
+        if (!latestState || latestState.marker !== marker) return;
+        latestState.entry = { ...latestState.entry, birds };
+        marker.setPopupContent(popupHtml(latestState.entry, birds));
+      } catch (err) {
+        marker.setPopupContent(popupErrorHtml(entry, `Details laden mislukt (${err?.message || "onbekend"}).`));
+      }
+    });
+  }
+
+  if (typeof pointsClusterLayer.on === "function") {
+    pointsClusterLayer.on("clusterclick", () => {
+      if (!isPointDetailsZoomAllowed()) {
+        setPointsSidebarMessage(POINT_DETAIL_ZOOM_HINT);
+      }
+    });
   }
 
   function birdImageHtml(name) {
@@ -1594,7 +1889,8 @@ export function initApp() {
   }
 
   function clearPointMarkers() {
-    if (typeof pointsLayer.clearLayers === "function") pointsLayer.clearLayers();
+    if (typeof pointsCanvasLayer.clearLayers === "function") pointsCanvasLayer.clearLayers();
+    if (typeof pointsClusterLayer.clearLayers === "function") pointsClusterLayer.clearLayers();
     pointMarkerStateById.clear();
     refreshRenderedPointStats();
   }
@@ -1640,10 +1936,61 @@ export function initApp() {
     });
   }
 
+  function pointMarkerPathStyle(isorg) {
+    return {
+      radius: 5,
+      color: "rgba(255,255,255,0.92)",
+      weight: 1.5,
+      fillColor: isorg ? "#60a5fa" : "#fb923c",
+      fillOpacity: 0.9,
+      opacity: 1,
+      renderer: pointCanvasRenderer || undefined,
+    };
+  }
+
   function setPointMarkerVisual(marker, isorg) {
-    marker.setIcon(pointMarkerIcon(isorg));
-    marker.setZIndexOffset(isorg ? 1000 : 0);
+    if (pointRenderKind === "clusters") {
+      marker.setIcon(pointMarkerIcon(isorg));
+      marker.setZIndexOffset(isorg ? 1000 : 0);
+    } else if (typeof marker.setStyle === "function") {
+      marker.setStyle(pointMarkerPathStyle(isorg));
+    }
     marker.options.tvtIsorg = Boolean(isorg);
+  }
+
+  function createPointMarker(latlng, isorg) {
+    if (pointRenderKind === "clusters") {
+      return globalThis.L.marker(latlng, {
+        icon: pointMarkerIcon(isorg),
+        zIndexOffset: isorg ? 1000 : 0,
+        tvtIsorg: isorg,
+      });
+    }
+    return globalThis.L.circleMarker(latlng, {
+      ...pointMarkerPathStyle(isorg),
+      tvtIsorg: isorg,
+    });
+  }
+
+  function resolveAutoPointRenderKind({ zoom }) {
+    return zoom < (pointsSettings.detailsZoom - 2) ? "clusters" : "points";
+  }
+
+  function resolvePointRenderKind({ zoom, totalCount }) {
+    const requested = pointsSettings.displayMode === "auto"
+      ? resolveAutoPointRenderKind({ zoom })
+      : pointsSettings.displayMode;
+    if (pointsSettings.displayMode === "auto" && totalCount > pointsSettings.maxPointsInView) {
+      return "clusters";
+    }
+    return requested === "clusters" ? "clusters" : "points";
+  }
+
+  function maybeMessageForPointCap() {
+    if (!isPointCapExceeded) return;
+    setPointsSidebarMessage(
+      `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`
+    );
   }
 
   function refreshRenderedPointStats() {
@@ -1658,6 +2005,7 @@ export function initApp() {
     }));
     totals = { entries: rendered.length, birds: 0 };
     updateViewportStats();
+    maybeMessageForPointCap();
   }
 
   function upsertPointMarkers(entries) {
@@ -1685,6 +2033,8 @@ export function initApp() {
       const latlng = globalThis.L.latLng(Number(entry.lat), Number(entry.lng));
       const existing = pointMarkerStateById.get(markerId);
       const isorg = pointEntryIsorg(entry);
+      const detailKey = pointDetailsKey({ year: pointTileYear || Number(yearInput.value || 0) || 0, id });
+      const cachedBirds = pointEntryDetailsByKey.get(detailKey) || [];
 
       if (existing) {
         const moved =
@@ -1694,31 +2044,30 @@ export function initApp() {
         if (moved || modeChanged) {
           existing.marker.setLatLng(latlng);
           setPointMarkerVisual(existing.marker, isorg);
-          existing.marker.setPopupContent(popupHtml(entry));
         }
+        existing.marker.setPopupContent(
+          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry)
+        );
         existing.latlng = latlng;
-        existing.entry = entry;
+        existing.entry = cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
         existing.isIsorg = isorg;
         continue;
       }
 
-      const marker = globalThis.L.marker(latlng, {
-        icon: pointMarkerIcon(isorg),
-        zIndexOffset: isorg ? 1000 : 0,
-        tvtIsorg: isorg,
-      })
-        .bindPopup(popupHtml(entry), { maxWidth: 340 })
+      const marker = createPointMarker(latlng, isorg)
+        .bindPopup(cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry), { maxWidth: 340 })
         .addTo(pointsLayer);
+      bindPointMarkerPopup(marker, markerId);
 
       pointMarkerStateById.set(markerId, {
         marker,
         latlng,
-        entry,
+        entry: cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
         isIsorg: isorg,
       });
     }
 
-    if (typeof pointsLayer.refreshClusters === "function") {
+    if (pointRenderKind === "clusters" && typeof pointsLayer.refreshClusters === "function") {
       pointsLayer.refreshClusters();
     }
   }
@@ -1733,7 +2082,7 @@ export function initApp() {
     pointTileFetchTimer = window.setTimeout(() => {
       pointTileFetchTimer = 0;
       void refreshPointTilesForViewport();
-    }, 120);
+    }, 160);
   }
 
   async function refreshPointTilesForViewport() {
@@ -1748,8 +2097,11 @@ export function initApp() {
 
     try {
       if (enabledPointModes.length === 0) {
+        latestPointEntryCount = 0;
+        isPointCapExceeded = false;
         clearPointMarkers();
-        statsEl.textContent = "Select at least one filter.";
+        setPointsSidebarMessage("Selecteer minimaal één filter.");
+        statsEl.textContent = "Selecteer minimaal één filter.";
         return;
       }
 
@@ -1766,17 +2118,25 @@ export function initApp() {
         throw new Error("No tile year available");
       }
       if (yearsAvailable.length > 0 && !yearsAvailable.includes(targetYear)) {
+        latestPointEntryCount = 0;
+        isPointCapExceeded = false;
         clearPointMarkers();
-        statsEl.textContent = `No point-tile dataset available for ${targetYear}.`;
+        setPointsSidebarMessage(`Geen puntendataset beschikbaar voor ${targetYear}.`);
+        statsEl.textContent = `Geen puntendataset beschikbaar voor ${targetYear}.`;
         return;
       }
+
+      pointTileYear = targetYear;
 
       const zoomMin = Number(manifest?.defaults?.zoom_min ?? 6) || 6;
       const zoomMax = Number(manifest?.defaults?.zoom_max ?? 13) || 13;
       const z = Math.max(zoomMin, Math.min(zoomMax, Math.floor(map.getZoom())));
-      const tiles = tilesForBounds(map.getBounds(), z, 1);
+      const tiles = tilesForBounds(map.getBounds(), z, pointsSettings.tileBuffer);
 
       if (tiles.length === 0) {
+        latestPointEntryCount = 0;
+        isPointCapExceeded = false;
+        setPointsSidebarMessage("");
         clearPointMarkers();
         return;
       }
@@ -1792,8 +2152,11 @@ export function initApp() {
       ));
 
       if (fetchModes.length === 0) {
+        latestPointEntryCount = 0;
+        isPointCapExceeded = false;
         clearPointMarkers();
-        statsEl.textContent = "No point-tile dataset available for the selected filters.";
+        setPointsSidebarMessage("Geen puntendataset beschikbaar voor de geselecteerde filters.");
+        statsEl.textContent = "Geen puntendataset beschikbaar voor de geselecteerde filters.";
         return;
       }
 
@@ -1848,12 +2211,30 @@ export function initApp() {
         }
       }
 
-      upsertPointMarkers(Array.from(nextEntriesById.values()));
+      latestPointEntryCount = nextEntriesById.size;
+      isPointCapExceeded = latestPointEntryCount > pointsSettings.maxPointsInView;
+
+      setPointRenderKind(resolvePointRenderKind({
+        zoom: map.getZoom(),
+        totalCount: latestPointEntryCount,
+      }));
+
+      let entriesForRender = Array.from(nextEntriesById.values());
+      if (isPointCapExceeded) {
+        entriesForRender = entriesForRender.slice(0, pointsSettings.maxPointsInView);
+        setPointsSidebarMessage(
+          `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`
+        );
+      } else {
+        setPointsSidebarMessage("");
+      }
+
+      upsertPointMarkers(entriesForRender);
       refreshRenderedPointStats();
     } catch (err) {
       if (isAbortError(err)) return;
       console.warn("Viewport tile fetch failed:", err);
-      statsEl.textContent = `Point tile load failed: ${err?.message || String(err)}`;
+      statsEl.textContent = `Laden van puntentiles mislukt: ${err?.message || String(err)}`;
     } finally {
       if (pointTileAbortController === controller) pointTileAbortController = null;
     }
@@ -2031,7 +2412,7 @@ export function initApp() {
 
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);
-  map.on("moveend", () => {
+  const onViewportSettled = () => {
     if (mode === "points") {
       schedulePointTileFetch();
       updateViewportStats();
@@ -2042,6 +2423,14 @@ export function initApp() {
       if (speciesScope === "viewport") renderSpeciesList({ query: speciesSearchInput.value });
       schedulePresenceGridCompute();
     }
+  };
+
+  map.on("moveend", onViewportSettled);
+  map.on("zoomend", onViewportSettled);
+  map.on("move", () => {
+    if (mode !== "points") return;
+    if (!pointsSettings.updateOnMove) return;
+    schedulePointTileFetch();
   });
 
   // Guard against layout/size timing issues (flex layouts, sticky header).
