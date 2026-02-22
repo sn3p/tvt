@@ -1,6 +1,7 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
 import { StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
+import { WorkerClusterSource } from "./worker_cluster_source.js";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
@@ -48,6 +49,9 @@ export function initApp() {
   const pointsAutoClusterThresholdInput = document.querySelector("#pointsAutoClusterThresholdInput");
   const pointsDisableClusteringAtZoomRow = document.querySelector("#pointsDisableClusteringAtZoomRow");
   const pointsDisableClusteringAtZoomInput = document.querySelector("#pointsDisableClusteringAtZoomInput");
+  const pointsClusterEngineRow = document.querySelector("#pointsClusterEngineRow");
+  const pointsClusterEngineDefault = document.querySelector("#pointsClusterEngineDefault");
+  const pointsClusterEngineWorker = document.querySelector("#pointsClusterEngineWorker");
   const pointsUpdateOnMoveInput = document.querySelector("#pointsUpdateOnMoveInput");
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
   const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
@@ -105,6 +109,9 @@ export function initApp() {
     !pointsAutoClusterThresholdInput ||
     !pointsDisableClusteringAtZoomRow ||
     !pointsDisableClusteringAtZoomInput ||
+    !pointsClusterEngineRow ||
+    !pointsClusterEngineDefault ||
+    !pointsClusterEngineWorker ||
     !pointsUpdateOnMoveInput ||
     !pointsSidebarMessage ||
     !speciesViewResetBtn ||
@@ -172,6 +179,8 @@ export function initApp() {
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
+  const WORKER_CLUSTER_FALLBACK_HINT = "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
+  const WORKER_CLUSTER_RADIUS = 80;
 
   function removeStorageKeys(keys) {
     for (const key of keys) {
@@ -196,6 +205,7 @@ export function initApp() {
     displayMode: pointsDisplayClusters.checked
       ? "clusters"
       : (pointsDisplayPoints.checked ? "points" : "auto"),
+    clusterEngine: pointsClusterEngineWorker.checked ? "worker" : "default",
     clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
     maxPointsInView: normalizeOptionalMaxPointsInView(pointsMaxPointsInput.value, null),
     tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
@@ -214,11 +224,15 @@ export function initApp() {
     const displayMode = ["auto", "points", "clusters"].includes(raw?.displayMode)
       ? raw.displayMode
       : POINTS_SETTINGS_DEFAULTS.displayMode;
+    const clusterEngine = ["default", "worker"].includes(raw?.clusterEngine)
+      ? raw.clusterEngine
+      : POINTS_SETTINGS_DEFAULTS.clusterEngine;
     const clusterStyle = ["blended", "split"].includes(raw?.clusterStyle)
       ? raw.clusterStyle
       : POINTS_SETTINGS_DEFAULTS.clusterStyle;
     return {
       displayMode,
+      clusterEngine,
       clusterStyle,
       maxPointsInView: normalizeOptionalMaxPointsInView(raw?.maxPointsInView, POINTS_SETTINGS_DEFAULTS.maxPointsInView),
       tileBuffer: toIntInRange(raw?.tileBuffer, POINTS_SETTINGS_DEFAULTS.tileBuffer, 0, 2),
@@ -239,6 +253,13 @@ export function initApp() {
   }
 
   let pointsSettings = readPointsSettingsFromStorage();
+  let pointZoomForControls = 11;
+  let controlsRenderKind = "points";
+  let controlsIsCapExceeded = false;
+  let workerClusterSource = null;
+  let workerClusterFailed = false;
+  let workerClusterPointSignature = "";
+  let pointStatsOverride = null;
 
   function readPointModeFiltersFromStorage() {
     try {
@@ -286,6 +307,18 @@ export function initApp() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
     const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
     const disableClusteringAtZoomEnabled = pointsSettings.displayMode !== "points";
+    const workerAvailable = isWorkerClusterAvailable();
+    const autoPrefersClusters = resolveAutoPointRenderKind({ zoom: pointZoomForControls }) === "clusters";
+    const clusterEngineVisible =
+      pointsSettings.displayMode === "clusters" ||
+      (
+        pointsSettings.displayMode === "auto" &&
+        (
+          autoPrefersClusters ||
+          controlsRenderKind === "clusters" ||
+          (hasMaxPointsInViewCap() && controlsIsCapExceeded)
+        )
+      );
 
     pointsClusterStyleRow.hidden = false;
     pointsClusterStyleRow.classList.toggle("is-disabled", !clusterStyleEnabled);
@@ -298,12 +331,24 @@ export function initApp() {
 
     pointsDisableClusteringAtZoomRow.classList.toggle("is-disabled", !disableClusteringAtZoomEnabled);
     pointsDisableClusteringAtZoomInput.disabled = !disableClusteringAtZoomEnabled;
+
+    pointsClusterEngineRow.hidden = !clusterEngineVisible;
+    for (const input of pointsClusterEngineRow.querySelectorAll("input")) {
+      input.disabled = !clusterEngineVisible;
+    }
+    pointsClusterEngineWorker.disabled = !workerAvailable || !clusterEngineVisible;
+    if (!workerAvailable && pointsSettings.clusterEngine === "worker") {
+      pointsClusterEngineDefault.checked = true;
+      pointsClusterEngineWorker.checked = false;
+    }
   }
 
   function applyPointsSettingsToUI() {
     pointsDisplayAuto.checked = pointsSettings.displayMode === "auto";
     pointsDisplayPoints.checked = pointsSettings.displayMode === "points";
     pointsDisplayClusters.checked = pointsSettings.displayMode === "clusters";
+    pointsClusterEngineDefault.checked = pointsSettings.clusterEngine === "default";
+    pointsClusterEngineWorker.checked = pointsSettings.clusterEngine === "worker";
 
     pointsClusterStyleBlended.checked = pointsSettings.clusterStyle === "blended";
     pointsClusterStyleMixed.checked = pointsSettings.clusterStyle === "split";
@@ -351,9 +396,6 @@ export function initApp() {
     if (pointsClusterLayer?.options) {
       pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
     }
-    if (pointRenderKind === "clusters" && typeof pointsClusterLayer.refreshClusters === "function") {
-      pointsClusterLayer.refreshClusters();
-    }
 
     if (mode === "points") schedulePointTileFetch({ immediate: true });
   }
@@ -363,6 +405,7 @@ export function initApp() {
       displayMode: pointsDisplayClusters.checked
         ? "clusters"
         : (pointsDisplayPoints.checked ? "points" : "auto"),
+      clusterEngine: pointsClusterEngineWorker.checked ? "worker" : "default",
       clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
       maxPointsInView: pointsMaxPointsInput.value,
       tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
@@ -543,6 +586,7 @@ export function initApp() {
     ? globalThis.L.canvas({ padding: 0.25 })
     : null;
   const pointsClusterLayer = createPointsClusterLayer();
+  const pointsWorkerClusterLayer = globalThis.L.layerGroup();
   const pointsCanvasLayer = globalThis.L.layerGroup();
   let pointRenderKind = "points"; // points | clusters
   let pointsLayer = pointsCanvasLayer;
@@ -595,9 +639,70 @@ export function initApp() {
   const pointMarkerStateById = new Map();
   const pointEntryDetailsPromiseByKey = new Map();
   const pointEntryDetailsByKey = new Map();
+  const pointEntryByKeyForCurrentRender = new Map();
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
+
+  function isWorkerClusterAvailable() {
+    return Boolean(workerClusterSource) && !workerClusterFailed;
+  }
+
+  function effectiveClusterEngine() {
+    if (pointsSettings.clusterEngine !== "worker") return "default";
+    return isWorkerClusterAvailable() ? "worker" : "default";
+  }
+
+  function resolveClusterLayer() {
+    return effectiveClusterEngine() === "worker"
+      ? pointsWorkerClusterLayer
+      : pointsClusterLayer;
+  }
+
+  function clearWorkerClusterLayer() {
+    if (typeof pointsWorkerClusterLayer.clearLayers === "function") {
+      pointsWorkerClusterLayer.clearLayers();
+    }
+  }
+
+  function fallbackFromWorkerCluster(err) {
+    if (workerClusterFailed) return;
+    workerClusterFailed = true;
+    if (workerClusterSource) {
+      workerClusterSource.destroy();
+      workerClusterSource = null;
+    }
+    console.warn("Worker clustering failed; falling back to default clustering.", err);
+    if (pointsSettings.clusterEngine === "worker") {
+      pointsSettings.clusterEngine = "default";
+      applyPointsSettingsToUI();
+      persistPointsSettingsToStorage();
+      setPointsSidebarMessage(WORKER_CLUSTER_FALLBACK_HINT);
+    }
+    updatePointsControlsVisibility();
+    if (mode === "points" && pointRenderKind === "clusters") {
+      setPointRenderKind("clusters", { force: true });
+      schedulePointTileFetch({ immediate: true });
+    }
+  }
+
+  if (typeof globalThis.Worker === "function") {
+    try {
+      workerClusterSource = new WorkerClusterSource();
+      workerClusterSource.ensureReady().catch((err) => {
+        fallbackFromWorkerCluster(err);
+      });
+    } catch (err) {
+      fallbackFromWorkerCluster(err);
+    }
+  } else {
+    workerClusterFailed = true;
+    if (pointsSettings.clusterEngine === "worker") {
+      pointsSettings.clusterEngine = "default";
+      applyPointsSettingsToUI();
+      persistPointsSettingsToStorage();
+    }
+  }
 
   function readSelectedSpeciesFromStorage() {
     try {
@@ -768,6 +873,29 @@ export function initApp() {
     } catch {
       b = null;
     }
+
+    if (mode === "points" && pointStatsOverride) {
+      const inViewEntries = Number(pointStatsOverride.entries) || 0;
+      const inViewPrivate = Number(pointStatsOverride.privateCount) || 0;
+      const inViewIsorg = Number(pointStatsOverride.isorgCount) || 0;
+      const inViewBirds = 0;
+
+      hudStats = { entries: inViewEntries, birds: inViewBirds };
+      const main = document.createElement("span");
+      main.className = "stats-main";
+      main.textContent = `${fmtInt(inViewEntries)} inzendingen in beeld`;
+
+      const provisional = document.createElement("span");
+      provisional.className = "stats-provisional";
+      provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+
+      statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+      if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
+      if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
+      updateHud();
+      return;
+    }
+
     let inViewEntries = 0;
     let inViewBirds = 0;
     let inViewPrivate = 0;
@@ -858,15 +986,17 @@ export function initApp() {
     if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
   }
 
-  function setPointRenderKind(nextKind) {
+  function setPointRenderKind(nextKind, { force = false } = {}) {
     const resolved = nextKind === "clusters" ? "clusters" : "points";
-    if (resolved === pointRenderKind) return;
+    const nextLayer = resolved === "clusters" ? resolveClusterLayer() : pointsCanvasLayer;
+    if (!force && resolved === pointRenderKind && pointsLayer === nextLayer) return;
     const previousLayer = pointsLayer;
     const wasVisible = map.hasLayer(previousLayer);
     if (wasVisible) map.removeLayer(previousLayer);
     if (typeof previousLayer.clearLayers === "function") previousLayer.clearLayers();
     pointRenderKind = resolved;
-    pointsLayer = pointRenderKind === "clusters" ? pointsClusterLayer : pointsCanvasLayer;
+    controlsRenderKind = pointRenderKind;
+    pointsLayer = nextLayer;
     pointMarkerStateById.clear();
     refreshRenderedPointStats();
     if (wasVisible && mode === "points") pointsLayer.addTo(map);
@@ -1605,13 +1735,17 @@ export function initApp() {
   speciesViewResetBtn.addEventListener("click", resetSpeciesViewSettings);
 
   function onPointsControlsChanged({ immediate = true } = {}) {
+    const prevEngine = pointsSettings.clusterEngine;
     readPointsSettingsFromUI();
+    const engineChanged = prevEngine !== pointsSettings.clusterEngine;
     if (pointsClusterLayer?.options) {
       pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
     }
-    if (pointRenderKind === "clusters" && typeof pointsClusterLayer.refreshClusters === "function") {
-      pointsClusterLayer.refreshClusters();
+    if (engineChanged && pointRenderKind === "clusters") {
+      setPointRenderKind("clusters", { force: true });
+      workerClusterPointSignature = "";
     }
+    updatePointsControlsVisibility();
     if (mode !== "points") return;
     schedulePointTileFetch({ immediate });
   }
@@ -1621,6 +1755,8 @@ export function initApp() {
   pointsDisplayClusters.addEventListener("change", () => onPointsControlsChanged());
   pointsClusterStyleBlended.addEventListener("change", () => onPointsControlsChanged());
   pointsClusterStyleMixed.addEventListener("change", () => onPointsControlsChanged());
+  pointsClusterEngineDefault.addEventListener("change", () => onPointsControlsChanged());
+  pointsClusterEngineWorker.addEventListener("change", () => onPointsControlsChanged());
   pointsMaxPointsInput.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer0.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer1.addEventListener("change", () => onPointsControlsChanged());
@@ -2028,7 +2164,11 @@ export function initApp() {
   function clearPointMarkers() {
     if (typeof pointsCanvasLayer.clearLayers === "function") pointsCanvasLayer.clearLayers();
     if (typeof pointsClusterLayer.clearLayers === "function") pointsClusterLayer.clearLayers();
+    clearWorkerClusterLayer();
+    workerClusterPointSignature = "";
     pointMarkerStateById.clear();
+    pointStatsOverride = null;
+    pointEntryByKeyForCurrentRender.clear();
     refreshRenderedPointStats();
   }
 
@@ -2135,6 +2275,7 @@ export function initApp() {
   }
 
   function refreshRenderedPointStats() {
+    pointStatsOverride = null;
     rendered = Array.from(pointMarkerStateById.values()).map((state) => ({
       latlng: state.latlng,
       birdsTotal: 0,
@@ -2222,6 +2363,210 @@ export function initApp() {
     }
   }
 
+  function buildPointWorkerFeature(entry) {
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [Number(entry.lng), Number(entry.lat)],
+      },
+      properties: {
+        id: Number(entry.id),
+        isorg: Boolean(pointEntryIsorg(entry)),
+      },
+    };
+  }
+
+  function workerClusterMaxZoom() {
+    const disableAt = Number(pointsSettings.disableClusteringAtZoom);
+    if (!Number.isFinite(disableAt)) return 16;
+    return Math.max(0, Math.min(22, Math.round(disableAt) - 1));
+  }
+
+  function buildWorkerClusterOptions() {
+    return {
+      radius: WORKER_CLUSTER_RADIUS,
+      maxZoom: workerClusterMaxZoom(),
+      minPoints: 2,
+    };
+  }
+
+  function buildPointWorkerSignature(entries, options = null) {
+    // Cheap rolling hash to avoid unnecessary worker index rebuilds.
+    let hash = 2166136261;
+    for (const entry of entries) {
+      const id = Number(entry?.id) || 0;
+      const isorg = pointEntryIsorg(entry) ? 1 : 0;
+      hash ^= id & 0xff_ff_ff_ff;
+      hash = Math.imul(hash, 16777619) >>> 0;
+      hash ^= isorg;
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    const optRadius = Number(options?.radius) || 0;
+    const optMaxZoom = Number(options?.maxZoom) || 0;
+    const optMinPoints = Number(options?.minPoints) || 0;
+    return `${pointTileYear}:${entries.length}:${hash >>> 0}:${optRadius}:${optMaxZoom}:${optMinPoints}`;
+  }
+
+  function pointClusterToneForWorkerFeature(clusterProps) {
+    const total = Number(clusterProps?.point_count) || 0;
+    const isorgCount = Number(clusterProps?.isorg_count) || 0;
+    const privateCount = Number(clusterProps?.private_count) || 0;
+    if (total > 0) {
+      return clusterToneForCounts({
+        privateCount: privateCount || Math.max(0, total - isorgCount),
+        isorgCount: isorgCount || Math.max(0, total - privateCount),
+      });
+    }
+    return "mixed";
+  }
+
+  async function onWorkerClusterClick({ clusterId, latlng }) {
+    if (!isWorkerClusterAvailable() || !Number.isFinite(clusterId)) return;
+    const currentZoom = map.getZoom();
+
+    try {
+      const expansion = await workerClusterSource.getClusterExpansionZoom(clusterId);
+      if (Number.isFinite(expansion) && expansion > currentZoom) {
+        map.flyTo(latlng, Math.min(expansion, map.getMaxZoom()));
+        return;
+      }
+    } catch (err) {
+      fallbackFromWorkerCluster(err);
+      return;
+    }
+
+    try {
+      const leaves = await workerClusterSource.getLeaves({ clusterId, limit: 200, offset: 0 });
+      const points = leaves
+        .map((feature) => {
+          const coords = feature?.geometry?.coordinates;
+          if (!Array.isArray(coords) || coords.length < 2) return null;
+          const lng = Number(coords[0]);
+          const lat = Number(coords[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return globalThis.L.latLng(lat, lng);
+        })
+        .filter(Boolean);
+
+      if (points.length > 1) {
+        const bb = globalThis.L.latLngBounds(points);
+        if (bb.isValid()) {
+          map.fitBounds(bb, { padding: [30, 30], maxZoom: map.getMaxZoom() });
+          return;
+        }
+      }
+    } catch (err) {
+      fallbackFromWorkerCluster(err);
+      return;
+    }
+
+    map.flyTo(latlng, Math.min(map.getMaxZoom(), currentZoom + 1));
+  }
+
+  function renderWorkerClusterFeatures(features) {
+    clearWorkerClusterLayer();
+    pointMarkerStateById.clear();
+
+    let inViewEntries = 0;
+    let inViewPrivate = 0;
+    let inViewIsorg = 0;
+
+    for (const feature of features) {
+      const coords = feature?.geometry?.coordinates;
+      if (!Array.isArray(coords) || coords.length < 2) continue;
+      const lng = Number(coords[0]);
+      const lat = Number(coords[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const latlng = globalThis.L.latLng(lat, lng);
+
+      const props = feature?.properties || {};
+      const isCluster = Boolean(props?.cluster);
+      if (isCluster) {
+        const total = Number(props?.point_count) || 0;
+        const isorgCount = Number(props?.isorg_count) || 0;
+        const privateCount = Number(props?.private_count) || 0;
+        const tone = pointClusterToneForWorkerFeature(props);
+
+        const clusterMarker = globalThis.L.marker(latlng, {
+          icon: globalThis.L.divIcon({
+            className: `tvt-cluster tvt-cluster--${tone}`,
+            html: `<div><span>${total}</span></div>`,
+            iconSize: [42, 42],
+          }),
+        });
+        clusterMarker.on("click", () => {
+          void onWorkerClusterClick({
+            clusterId: Number(props?.cluster_id),
+            latlng,
+          });
+        });
+        clusterMarker.addTo(pointsWorkerClusterLayer);
+
+        inViewEntries += total;
+        inViewIsorg += isorgCount;
+        inViewPrivate += privateCount;
+        if (isorgCount + privateCount < total) {
+          inViewPrivate += Math.max(0, total - (isorgCount + privateCount));
+        }
+        continue;
+      }
+
+      const id = Number(props?.id);
+      const isorg = Boolean(props?.isorg);
+      if (!Number.isFinite(id)) continue;
+
+      const markerId = `${isorg ? "isorg" : "private"}:${id}`;
+      const entry =
+        pointEntryByKeyForCurrentRender.get(markerId) ||
+        {
+          id,
+          key: markerId,
+          lat,
+          lng,
+          pc4: "",
+          isorg,
+          modes: [isorg ? "isorg" : "private"],
+          birds: [],
+        };
+      const detailKey = pointDetailsKey({ year: pointTileYear || Number(yearInput.value || 0) || 0, id });
+      const cachedBirds = pointEntryDetailsByKey.get(detailKey) || [];
+
+      const marker = createPointMarker(latlng, isorg)
+        .bindPopup(
+          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry),
+          {
+            maxWidth: 340,
+            closeOnClick: false,
+            autoClose: true,
+          }
+        )
+        .addTo(pointsWorkerClusterLayer);
+      bindPointMarkerPopup(marker, markerId);
+      ensurePointPopupToggle(marker);
+
+      pointMarkerStateById.set(markerId, {
+        marker,
+        latlng,
+        entry: cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
+        isIsorg: isorg,
+      });
+      inViewEntries += 1;
+      if (isorg) inViewIsorg += 1;
+      else inViewPrivate += 1;
+    }
+
+    pointStatsOverride = {
+      entries: inViewEntries,
+      privateCount: inViewPrivate,
+      isorgCount: inViewIsorg,
+    };
+    rendered = [];
+    totals = { entries: latestPointEntryCount, birds: 0 };
+    updateViewportStats();
+    maybeMessageForPointCap();
+  }
+
   function schedulePointTileFetch({ immediate = false } = {}) {
     if (mode !== "points") return;
     clearPointTileFetchTimer();
@@ -2249,6 +2594,8 @@ export function initApp() {
       if (enabledPointModes.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
+        controlsIsCapExceeded = false;
+        updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("Selecteer minimaal één filter.");
         statsEl.textContent = "Selecteer minimaal één filter.";
@@ -2270,6 +2617,8 @@ export function initApp() {
       if (yearsAvailable.length > 0 && !yearsAvailable.includes(targetYear)) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
+        controlsIsCapExceeded = false;
+        updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("");
         statsEl.textContent = `Geen puntendataset beschikbaar voor ${targetYear}.`;
@@ -2286,6 +2635,8 @@ export function initApp() {
       if (tiles.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
+        controlsIsCapExceeded = false;
+        updatePointsControlsVisibility();
         setPointsSidebarMessage("");
         clearPointMarkers();
         return;
@@ -2304,6 +2655,8 @@ export function initApp() {
       if (fetchModes.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
+        controlsIsCapExceeded = false;
+        updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("Geen puntendataset beschikbaar voor de geselecteerde filters.");
         statsEl.textContent = "Geen puntendataset beschikbaar voor de geselecteerde filters.";
@@ -2363,6 +2716,9 @@ export function initApp() {
 
       latestPointEntryCount = nextEntriesById.size;
       isPointCapExceeded = hasMaxPointsInViewCap() && latestPointEntryCount > pointsSettings.maxPointsInView;
+      controlsIsCapExceeded = isPointCapExceeded;
+      pointZoomForControls = map.getZoom();
+      updatePointsControlsVisibility();
 
       setPointRenderKind(resolvePointRenderKind({
         zoom: map.getZoom(),
@@ -2376,11 +2732,54 @@ export function initApp() {
           `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`
         );
       } else {
-        setPointsSidebarMessage("");
+        if (!(workerClusterFailed && pointsSettings.clusterEngine === "worker")) {
+          setPointsSidebarMessage("");
+        }
       }
 
-      upsertPointMarkers(entriesForRender);
-      refreshRenderedPointStats();
+      pointEntryByKeyForCurrentRender.clear();
+      for (const entry of entriesForRender) {
+        pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
+      }
+
+      const wantsWorkerClusters =
+        pointRenderKind === "clusters" &&
+        pointsSettings.clusterEngine === "worker" &&
+        isWorkerClusterAvailable();
+
+      if (wantsWorkerClusters) {
+        try {
+          const features = entriesForRender.map((entry) => buildPointWorkerFeature(entry));
+          const workerClusterOptions = buildWorkerClusterOptions();
+          const signature = buildPointWorkerSignature(entriesForRender, workerClusterOptions);
+          if (signature !== workerClusterPointSignature) {
+            await workerClusterSource.setPoints(features, {
+              signature,
+              options: workerClusterOptions,
+            });
+            workerClusterPointSignature = signature;
+          }
+          if (seq !== pointTileFetchSeq || mode !== "points") return;
+
+          const bounds = map.getBounds();
+          const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+          const workerQueryZoom = Math.floor(map.getZoom());
+          const clusters = await workerClusterSource.getClusters({
+            bbox,
+            zoom: workerQueryZoom,
+          });
+          if (seq !== pointTileFetchSeq || mode !== "points") return;
+          renderWorkerClusterFeatures(clusters);
+        } catch (workerErr) {
+          fallbackFromWorkerCluster(workerErr);
+          setPointRenderKind("clusters", { force: true });
+          upsertPointMarkers(entriesForRender);
+          refreshRenderedPointStats();
+        }
+      } else {
+        upsertPointMarkers(entriesForRender);
+        refreshRenderedPointStats();
+      }
     } catch (err) {
       if (isAbortError(err)) return;
       console.warn("Viewport tile fetch failed:", err);
@@ -2562,7 +2961,11 @@ export function initApp() {
 
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);
+  pointZoomForControls = map.getZoom();
+  updatePointsControlsVisibility();
   const onViewportSettled = () => {
+    pointZoomForControls = map.getZoom();
+    updatePointsControlsVisibility();
     if (mode === "points") {
       schedulePointTileFetch();
       updateViewportStats();
@@ -2580,6 +2983,7 @@ export function initApp() {
   map.on("move", () => {
     if (mode !== "points") return;
     if (!pointsSettings.updateOnMove) return;
+    pointZoomForControls = map.getZoom();
     schedulePointTileFetch();
   });
 
@@ -2597,6 +3001,9 @@ export function initApp() {
     setTimeout(invalidate, 0);
   });
   window.addEventListener("resize", () => invalidate());
+  window.addEventListener("beforeunload", () => {
+    if (workerClusterSource) workerClusterSource.destroy();
+  });
 
   // Initial load (defaults to the year input value).
   probeStaticTilesSource();

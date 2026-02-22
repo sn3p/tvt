@@ -247,6 +247,21 @@
         <details class="sidebar-advanced" open>
           <summary>Prestaties</summary>
           <fieldset class="sidebar-fieldset">
+            <div id="pointsClusterEngineRow" class="sidebar-row-full" hidden>
+              <div class="sidebar-label muted">Clusterengine</div>
+              <div class="segmented" role="group" aria-label="Clusterengine">
+                <label class="seg">
+                  <input id="pointsClusterEngineDefault" type="radio" name="pointsClusterEngine" value="default"
+                    checked>
+                  <span>Standaard</span>
+                </label>
+                <label class="seg">
+                  <input id="pointsClusterEngineWorker" type="radio" name="pointsClusterEngine" value="worker">
+                  <span>Worker</span>
+                </label>
+              </div>
+            </div>
+
             <div class="sidebar-row-full">
               <div class="sidebar-label muted">Max punten in beeld</div>
               <input id="pointsMaxPointsInput" type="number" min="1" max="500000" step="1000" placeholder="Oneindig">
