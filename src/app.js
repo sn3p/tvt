@@ -9,8 +9,8 @@ export function initApp() {
   const modeSpeciesBtn = document.querySelector("#modeSpeciesBtn");
   const yearInput = document.querySelector("#yearInput");
   const pc4Input = document.querySelector("#pc4Input");
-  const includeType1Input = document.querySelector("#includeType1Input");
-  const includeIsorgInput = document.querySelector("#includeIsorgInput");
+  const pointsModeType1Input = document.querySelector("#pointsModeType1Input");
+  const pointsModeIsorgInput = document.querySelector("#pointsModeIsorgInput");
   const filtersForm = document.querySelector("#filtersForm");
   const sidebarEl = document.querySelector("#sidebar");
   const sidebarTabSpecies = document.querySelector("#sidebarTabSpecies");
@@ -44,8 +44,8 @@ export function initApp() {
     !statsEl ||
     !yearInput ||
     !pc4Input ||
-    !includeType1Input ||
-    !includeIsorgInput ||
+    !pointsModeType1Input ||
+    !pointsModeIsorgInput ||
     !filtersForm ||
     !sidebarEl ||
     !sidebarTabSpecies ||
@@ -244,7 +244,20 @@ export function initApp() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
-  const pointsLayer = globalThis.L.layerGroup().addTo(map);
+  function createPointsLayer() {
+    if (typeof globalThis.L?.markerClusterGroup === "function") {
+      return globalThis.L.markerClusterGroup({
+        showCoverageOnHover: false,
+        removeOutsideVisibleBounds: true,
+        chunkedLoading: true,
+        spiderfyOnMaxZoom: true,
+        disableClusteringAtZoom: 13,
+      });
+    }
+    return globalThis.L.layerGroup();
+  }
+
+  const pointsLayer = createPointsLayer().addTo(map);
   const gridLayer = globalThis.L.layerGroup();
 
   let dataset = null;
@@ -436,12 +449,6 @@ export function initApp() {
       .filter(Boolean);
   }
 
-  function colorForEntry(entry) {
-    const isIsorg = entryHasMode(entry, "isorg");
-    if (isIsorg) return "#60a5fa"; // blue
-    return "#fb923c"; // orange (type1)
-  }
-
   function labelForEntry(entry) {
     const isIsorg = entryHasMode(entry, "isorg");
     if (isIsorg) return "Schoolinzending";
@@ -449,8 +456,6 @@ export function initApp() {
   }
 
   function updateViewportStats() {
-    if (!dataset) return;
-
     const b = map.getBounds();
     let inViewEntries = 0;
     let inViewBirds = 0;
@@ -1476,9 +1481,10 @@ export function initApp() {
   function getFilters() {
     const year = Number(yearInput.value || 0) || 0;
     const pc4 = normalizePc4(pc4Input.value);
-    const includeType1 = Boolean(includeType1Input.checked);
-    const includeIsorg = Boolean(includeIsorgInput.checked);
-    return { year, pc4, includeType1, includeIsorg };
+    const pointsMode = pointsModeIsorgInput.checked ? "isorg" : "type1";
+    const includeType1 = mode === "species" ? true : pointsMode === "type1";
+    const includeIsorg = mode === "species" ? true : pointsMode === "isorg";
+    return { year, pc4, includeType1, includeIsorg, pointsMode };
   }
 
   function abortPointTileFetchCycle() {
@@ -1525,13 +1531,20 @@ export function initApp() {
     return out;
   }
 
-  function setPointMarkerVisual(marker, entry) {
-    marker.setStyle({
-      color: "rgba(255,255,255,0.9)",
-      weight: 2,
-      fillColor: colorForEntry(entry),
-      fillOpacity: 0.85,
+  function pointMarkerIcon(entry) {
+    const kind = entryHasMode(entry, "isorg") ? "isorg" : "type1";
+    return globalThis.L.divIcon({
+      className: "tvt-point-marker-wrap",
+      html: `<span class="tvt-point-marker ${kind}"></span>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+      popupAnchor: [0, -8],
     });
+  }
+
+  function setPointMarkerVisual(marker, entry) {
+    marker.setIcon(pointMarkerIcon(entry));
+    marker.setZIndexOffset(entryHasMode(entry, "isorg") ? 1000 : 0);
   }
 
   function upsertPointMarkers(entries) {
@@ -1566,30 +1579,24 @@ export function initApp() {
         existing.modeKey = modeKey;
         existing.latlng = latlng;
         existing.entry = entry;
-        existing.isType1 = entryHasMode(entry, "type1") && !entryHasMode(entry, "isorg");
+        existing.isType1 = entryHasMode(entry, "type1");
         existing.isIsorg = entryHasMode(entry, "isorg");
-        if (existing.isIsorg && existing.marker?.bringToFront) existing.marker.bringToFront();
         continue;
       }
 
-      const marker = globalThis.L.circleMarker(latlng, {
-        radius: 6,
-        color: "rgba(255,255,255,0.9)",
-        weight: 2,
-        fillColor: colorForEntry(entry),
-        fillOpacity: 0.85,
+      const marker = globalThis.L.marker(latlng, {
+        icon: pointMarkerIcon(entry),
+        zIndexOffset: entryHasMode(entry, "isorg") ? 1000 : 0,
       })
         .bindPopup(popupHtml(entry), { maxWidth: 340 })
         .addTo(pointsLayer);
-
-      if (entryHasMode(entry, "isorg") && marker?.bringToFront) marker.bringToFront();
 
       pointMarkerStateById.set(id, {
         marker,
         modeKey,
         latlng,
         entry,
-        isType1: entryHasMode(entry, "type1") && !entryHasMode(entry, "isorg"),
+        isType1: entryHasMode(entry, "type1"),
         isIsorg: entryHasMode(entry, "isorg"),
       });
     }
@@ -1629,11 +1636,7 @@ export function initApp() {
     const controller = new AbortController();
     pointTileAbortController = controller;
 
-    const { year, pc4, includeType1, includeIsorg } = getFilters();
-    if (!includeType1 && !includeIsorg) {
-      clearPointMarkers();
-      return;
-    }
+    const { year, pc4, pointsMode } = getFilters();
 
     try {
       const manifest = await pointTilesSource.getManifest();
@@ -1670,21 +1673,15 @@ export function initApp() {
           .filter(Boolean)
       );
 
-      const modeSet = new Set();
-      if (includeType1) modeSet.add("type1");
-      if (includeIsorg || includeType1) modeSet.add("isorg");
-      const modes = Array.from(modeSet).filter((m) => modesAvailable.size === 0 || modesAvailable.has(m));
-
-      if (modes.length === 0) {
+      const requestedMode = pointsMode === "isorg" ? "isorg" : "type1";
+      if (modesAvailable.size > 0 && !modesAvailable.has(requestedMode)) {
         clearPointMarkers();
         return;
       }
 
       const requests = [];
-      for (const modeName of modes) {
-        for (const tile of tiles) {
-          requests.push({ mode: modeName, z: tile.z, x: tile.x, y: tile.y });
-        }
+      for (const tile of tiles) {
+        requests.push({ mode: requestedMode, z: tile.z, x: tile.x, y: tile.y });
       }
 
       const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
@@ -1716,11 +1713,8 @@ export function initApp() {
             lat,
             lng,
             pc4: String(p?.pc4 ?? ""),
-            hasType1: false,
-            hasIsorg: false,
+            mode: result.mode,
           };
-          if (result.mode === "type1") existing.hasType1 = true;
-          if (result.mode === "isorg") existing.hasIsorg = true;
           if (!existing.pc4 && p?.pc4 != null) existing.pc4 = String(p.pc4);
           byId.set(id, existing);
         }
@@ -1729,20 +1723,13 @@ export function initApp() {
       const nextEntries = [];
       for (const p of byId.values()) {
         if (pc4 && p.pc4 !== pc4) continue;
-        const isPrivate = p.hasType1 && !p.hasIsorg;
-        const isOrg = p.hasIsorg;
-        if (!((includeType1 && isPrivate) || (includeIsorg && isOrg))) continue;
-
-        const modesForEntry = [];
-        if (p.hasType1) modesForEntry.push("type1");
-        if (p.hasIsorg) modesForEntry.push("isorg");
 
         nextEntries.push({
           id: p.id,
           lat: p.lat,
           lng: p.lng,
           pc4: p.pc4,
-          modes: modesForEntry,
+          modes: [p.mode === "isorg" ? "isorg" : "type1"],
           birds: [],
         });
       }
@@ -1914,8 +1901,8 @@ export function initApp() {
     loadForYear(year);
   });
   pc4Input.addEventListener("change", onFiltersChanged);
-  includeType1Input.addEventListener("change", onFiltersChanged);
-  includeIsorgInput.addEventListener("change", onFiltersChanged);
+  pointsModeType1Input.addEventListener("change", onFiltersChanged);
+  pointsModeIsorgInput.addEventListener("change", onFiltersChanged);
 
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);

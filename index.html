@@ -6,9 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TVT — Tellingen als punten</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
   <link rel="stylesheet" href="https://unpkg.com/tippy.js@6.3.7/dist/tippy.css" crossorigin="" />
   <link rel="stylesheet" href="./styles.css" />
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script defer src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
   <script type="importmap">
     {
       "imports": {
@@ -45,15 +48,15 @@
             maxlength="4" pattern="[0-9]{4}">
         </label>
 
-        <div class="check-group">
+        <div class="check-group" role="group" aria-label="Puntenmodus">
           <label class="check">
-            <input id="includeType1Input" name="includeType1" type="checkbox" checked>
-            <span>Inzending</span>
+            <input id="pointsModeType1Input" name="pointsMode" type="radio" value="type1" checked>
+            <span>Inzendingen</span>
           </label>
 
           <label class="check">
-            <input id="includeIsorgInput" name="includeIsorg" type="checkbox" checked>
-            <span>Schoolinzending</span>
+            <input id="pointsModeIsorgInput" name="pointsMode" type="radio" value="isorg">
+            <span>Schoolinzendingen</span>
           </label>
         </div>
       </form>
