@@ -20,7 +20,7 @@ A future backend can replace either dataset without changing UI by swapping the 
 ## Dataset A — NL Points Tiles (v0)
 
 ### Scope (v0)
-- Mode: **Mode 1 (Points map)**
+- Mode: **Mode 1 (Points) v0**
 - Data: entry locations only (`id`, `lat`, `lng`)
 - Popover details: fetched on-demand from the live endpoint (see below)
 - Clustering: client-side, based on points in view
@@ -35,18 +35,27 @@ Rationale:
 - z9–11: city/province
 - z12–13: neighbourhood detail
 
-### Modes and semantics (IMPORTANT)
+### Modes and semantics (IMPORTANT)a
 The TVT API behaviour suggests `isorg=true` is a **subset** of `type=1`.
 
-We therefore define modes as:
+We compile from source sets:
 
 - `type1` tiles: **all local entries** (includes school/org)
 - `isorg` tiles: **school/org entries only** (subset of `type1`)
 
+Published point modes for the webapp are disjoint:
+- `private` tiles: **private/local-only entries** (`type1 - isorg`)
+- `isorg` tiles: **school/org entries**
+
 Consumer rules:
-- Treat `isorg` as a **filter/subset**, not additive.
-- Do **not** sum/merge `type1` + `isorg` as if disjoint.
-- “Private only” (`type1 - isorg`) is out-of-scope for v0 (better with backend/dedup logic).
+- `private` and `isorg` are **disjoint** (no duplicate ids across both modes for a tile/year).
+- The webapp may merge both modes into one list in memory:
+  - `entries = [{ id, lat, lng, isorg: true|false }]`
+- “All entries” in the UI is: `private ∪ isorg`.
+
+Tile path examples:
+- `public/data/tvt/tiles/<year>/private/points/<z>/<x>/<y>.json`
+- `public/data/tvt/tiles/<year>/isorg/points/<z>/<x>/<y>.json`
 
 ---
 
@@ -88,10 +97,10 @@ Fields (v1 minimal):
 - `contract_version` (number)
 - `generated_at_utc` (ISO string)
 - `years_available` (array of numbers)
-- `modes_available` (array of strings) — v0: `["type1","isorg"]`
+- `modes_available` (array of strings) — v0: `["private","isorg"]`
 - `defaults` (object):
   - `year` (number)
-  - `mode` (string) — recommended default: `"type1"`
+  - `mode` (string) — recommended default: `"private"`
   - `zoom_min` (number)
   - `zoom_max` (number)
 - `paths` (object):
@@ -115,7 +124,7 @@ Path:
 Tile payload (v1):
 - `contract_version` (number)
 - `year` (number)
-- `mode` (string) — `"type1"` or `"isorg"`
+- `mode` (string) — `"private"` or `"isorg"`
 - `z`, `x`, `y` (numbers)
 - `tileSize` (number, default 256)
 - `points` (array):
@@ -129,7 +138,7 @@ Example:
 {
   "contract_version": 1,
   "year": 2026,
-  "mode": "type1",
+  "mode": "private",
   "z": 10,
   "x": 537,
   "y": 344,

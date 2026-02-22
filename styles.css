@@ -624,9 +624,38 @@ input {
   background: #60a5fa;
 }
 
-/* Make cluster labels readable on map backgrounds. */
-.marker-cluster span {
-  font-weight: 700;
+.tvt-cluster {
+  background: transparent;
+  border: 0;
+}
+
+.tvt-cluster > div {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.36);
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  color: #fff;
+  font-weight: 800;
+}
+
+.tvt-cluster > div > span {
+  font-size: 13px;
+}
+
+.tvt-cluster--private > div {
+  background: rgba(251, 146, 60, 0.92);
+}
+
+.tvt-cluster--isorg > div {
+  background: rgba(96, 165, 250, 0.92);
+}
+
+.tvt-cluster--mixed > div {
+  background: rgba(139, 92, 246, 0.9);
 }
 
 /* Sidebar toggle */

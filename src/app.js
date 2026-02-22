@@ -289,15 +289,31 @@ export function initApp() {
         chunkedLoading: true,
         spiderfyOnMaxZoom: true,
         disableClusteringAtZoom: 13,
+        iconCreateFunction: (cluster) => {
+          const markers = cluster.getAllChildMarkers();
+          let privateCount = 0;
+          let isorgCount = 0;
+          for (const marker of markers) {
+            if (marker?.options?.tvtIsorg) isorgCount += 1;
+            else privateCount += 1;
+          }
+          const total = privateCount + isorgCount;
+          const tone = isorgCount === 0
+            ? "private"
+            : (privateCount === 0 ? "isorg" : "mixed");
+
+          return globalThis.L.divIcon({
+            className: `tvt-cluster tvt-cluster--${tone}`,
+            html: `<div><span>${total}</span></div>`,
+            iconSize: [42, 42],
+          });
+        },
       });
     }
     return globalThis.L.layerGroup();
   }
 
-  const pointLayersByMode = {
-    private: createPointsLayer().addTo(map),
-    isorg: createPointsLayer().addTo(map),
-  };
+  const pointsLayer = createPointsLayer().addTo(map);
   const gridLayer = globalThis.L.layerGroup();
 
   let dataset = null;
@@ -331,10 +347,7 @@ export function initApp() {
   let pointTileFetchSeq = 0;
   let pointTileFetchTimer = 0;
   let pointTileAbortController = null;
-  const pointMarkerStateByMode = {
-    private: new Map(),
-    isorg: new Map(),
-  };
+  const pointMarkerStateById = new Map();
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
@@ -493,7 +506,7 @@ export function initApp() {
   }
 
   function labelForEntry(entry) {
-    return pointModeForEntry(entry) === "isorg" ? "School/Org" : "Particulier";
+    return pointEntryIsorg(entry) ? "School" : "Particulier";
   }
 
   function updateViewportStats() {
@@ -515,7 +528,7 @@ export function initApp() {
     statsEl.textContent = `${inViewEntries} inzendingen in beeld (totaal ${totals.entries}) • ${inViewBirds} vogels geteld (totaal ${totals.birds})`;
 
     if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
-    if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School/Org (${inViewIsorg})`;
+    if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
     updateHud();
   }
 
@@ -549,7 +562,7 @@ export function initApp() {
     );
     div.appendChild(
       row({
-        label: "School/Org (0)",
+        label: "School (0)",
         color: "#60a5fa",
         getTextEl: (el) => {
           legendIsorgTextEl = el;
@@ -572,15 +585,12 @@ export function initApp() {
     }
   }
 
-  function setPointLayersVisible(show) {
-    for (const pointMode of POINT_TILE_MODES) {
-      const layer = pointLayersByMode[pointMode];
-      if (show) {
-        if (!map.hasLayer(layer)) layer.addTo(map);
-      } else if (map.hasLayer(layer)) {
-        map.removeLayer(layer);
-      }
+  function setPointsLayerVisible(show) {
+    if (show) {
+      if (!map.hasLayer(pointsLayer)) pointsLayer.addTo(map);
+      return;
     }
+    if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
   }
 
   // Grid/heatmap legend for species mode (sequential, luminance ramp + gamma).
@@ -777,14 +787,14 @@ export function initApp() {
       clearPointTileFetchTimer();
       abortPointTileFetchCycle();
       if (prevMode === "points") clearPointMarkers();
-      setPointLayersVisible(false);
+      setPointsLayerVisible(false);
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
       setLegendVisible(false);
       setGridLegendVisible(true);
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
-      setPointLayersVisible(true);
+      setPointsLayerVisible(true);
       setLegendVisible(true);
       setGridLegendVisible(false);
     }
@@ -1554,9 +1564,8 @@ export function initApp() {
   }
 
   function clearPointMarkers() {
-    for (const pointMode of POINT_TILE_MODES) {
-      clearPointMarkersForMode(pointMode);
-    }
+    if (typeof pointsLayer.clearLayers === "function") pointsLayer.clearLayers();
+    pointMarkerStateById.clear();
     refreshRenderedPointStats();
   }
 
@@ -1578,14 +1587,20 @@ export function initApp() {
     return out;
   }
 
-  function pointModeForEntry(entry) {
-    if (entryHasMode(entry, "isorg")) return "isorg";
-    if (entryHasMode(entry, "private")) return "private";
-    if (entryHasMode(entry, "type1")) return "private";
-    return "private";
+  function pointEntryIsorg(entry) {
+    if (typeof entry?.isorg === "boolean") return entry.isorg;
+    return entryHasMode(entry, "isorg");
   }
 
-  function pointMarkerIcon(pointMode) {
+  function pointMarkerIdKey(entry) {
+    if (entry?.key != null) return String(entry.key);
+    const id = Number(entry?.id);
+    const safeId = Number.isFinite(id) ? String(id) : "unknown";
+    return `${pointEntryIsorg(entry) ? "isorg" : "private"}:${safeId}`;
+  }
+
+  function pointMarkerIcon(isorg) {
+    const pointMode = isorg ? "isorg" : "private";
     return globalThis.L.divIcon({
       className: "tvt-point-marker-wrap",
       html: `<span class="tvt-point-marker ${pointMode}"></span>`,
@@ -1595,96 +1610,86 @@ export function initApp() {
     });
   }
 
-  function setPointMarkerVisual(marker, pointMode) {
-    marker.setIcon(pointMarkerIcon(pointMode));
-    marker.setZIndexOffset(pointMode === "isorg" ? 1000 : 0);
-  }
-
-  function clearPointMarkersForMode(pointMode) {
-    const layer = pointLayersByMode[pointMode];
-    if (layer && typeof layer.clearLayers === "function") layer.clearLayers();
-    pointMarkerStateByMode[pointMode].clear();
+  function setPointMarkerVisual(marker, isorg) {
+    marker.setIcon(pointMarkerIcon(isorg));
+    marker.setZIndexOffset(isorg ? 1000 : 0);
+    marker.options.tvtIsorg = Boolean(isorg);
   }
 
   function refreshRenderedPointStats() {
-    const nextRendered = [];
-    for (const pointMode of POINT_TILE_MODES) {
-      for (const state of pointMarkerStateByMode[pointMode].values()) {
-        nextRendered.push({
-          latlng: state.latlng,
-          birdsTotal: 0,
-          isPrivate: state.isPrivate,
-          isIsorg: state.isIsorg,
-          birdIds: new Set(),
-          birdNames: new Set(),
-          entry: state.entry,
-        });
-      }
-    }
-    rendered = nextRendered;
+    rendered = Array.from(pointMarkerStateById.values()).map((state) => ({
+      latlng: state.latlng,
+      birdsTotal: 0,
+      isPrivate: !state.isIsorg,
+      isIsorg: state.isIsorg,
+      birdIds: new Set(),
+      birdNames: new Set(),
+      entry: state.entry,
+    }));
     totals = { entries: rendered.length, birds: 0 };
     updateViewportStats();
   }
 
-  function upsertPointMarkersForMode(pointMode, entries) {
-    const layer = pointLayersByMode[pointMode];
-    const stateById = pointMarkerStateByMode[pointMode];
+  function upsertPointMarkers(entries) {
     const nextById = new Map();
     for (const entry of entries) {
       const id = Number(entry?.id);
-      if (!Number.isFinite(id)) continue;
-      nextById.set(id, entry);
+      const lat = Number(entry?.lat);
+      const lng = Number(entry?.lng);
+      if (!Number.isFinite(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      nextById.set(pointMarkerIdKey(entry), entry);
     }
 
-    for (const [id, state] of stateById.entries()) {
-      if (nextById.has(id)) continue;
+    for (const [markerId, state] of pointMarkerStateById.entries()) {
+      if (nextById.has(markerId)) continue;
       try {
-        layer.removeLayer(state.marker);
+        pointsLayer.removeLayer(state.marker);
       } catch {
         // ignore
       }
-      stateById.delete(id);
+      pointMarkerStateById.delete(markerId);
     }
 
-    for (const entry of nextById.values()) {
+    for (const [markerId, entry] of nextById.entries()) {
       const id = Number(entry.id);
       const latlng = globalThis.L.latLng(Number(entry.lat), Number(entry.lng));
-      const existing = stateById.get(id);
-      const entryPointMode = pointModeForEntry(entry);
+      const existing = pointMarkerStateById.get(markerId);
+      const isorg = pointEntryIsorg(entry);
 
       if (existing) {
         const moved =
           Math.abs(existing.latlng.lat - latlng.lat) > 1e-9 ||
           Math.abs(existing.latlng.lng - latlng.lng) > 1e-9;
-        const modeChanged = existing.pointMode !== entryPointMode;
+        const modeChanged = existing.isIsorg !== isorg;
         if (moved || modeChanged) {
           existing.marker.setLatLng(latlng);
-          setPointMarkerVisual(existing.marker, entryPointMode);
+          setPointMarkerVisual(existing.marker, isorg);
           existing.marker.setPopupContent(popupHtml(entry));
         }
-        existing.pointMode = entryPointMode;
         existing.latlng = latlng;
         existing.entry = entry;
-        existing.isPrivate = entryPointMode === "private";
-        existing.isIsorg = entryHasMode(entry, "isorg");
+        existing.isIsorg = isorg;
         continue;
       }
 
       const marker = globalThis.L.marker(latlng, {
-        icon: pointMarkerIcon(entryPointMode),
-        zIndexOffset: entryPointMode === "isorg" ? 1000 : 0,
+        icon: pointMarkerIcon(isorg),
+        zIndexOffset: isorg ? 1000 : 0,
+        tvtIsorg: isorg,
       })
         .bindPopup(popupHtml(entry), { maxWidth: 340 })
-        .addTo(layer);
+        .addTo(pointsLayer);
 
-      stateById.set(id, {
+      pointMarkerStateById.set(markerId, {
         marker,
-        pointMode: entryPointMode,
         latlng,
         entry,
-        isPrivate: entryPointMode === "private",
-        isIsorg: entryHasMode(entry, "isorg"),
+        isIsorg: isorg,
       });
+    }
+
+    if (typeof pointsLayer.refreshClusters === "function") {
+      pointsLayer.refreshClusters();
     }
   }
 
@@ -1712,13 +1717,8 @@ export function initApp() {
     const { year, pc4, enabledPointModes } = getFilters();
 
     try {
-      for (const pointMode of POINT_TILE_MODES) {
-        if (enabledPointModes.includes(pointMode)) continue;
-        clearPointMarkersForMode(pointMode);
-      }
-      refreshRenderedPointStats();
-
       if (enabledPointModes.length === 0) {
+        clearPointMarkers();
         statsEl.textContent = "Select at least one filter.";
         return;
       }
@@ -1761,13 +1761,8 @@ export function initApp() {
         modesAvailable.size === 0 || modesAvailable.has(pointMode)
       ));
 
-      for (const pointMode of POINT_TILE_MODES) {
-        if (fetchModes.includes(pointMode)) continue;
-        clearPointMarkersForMode(pointMode);
-      }
-
       if (fetchModes.length === 0) {
-        refreshRenderedPointStats();
+        clearPointMarkers();
         statsEl.textContent = "No point-tile dataset available for the selected filters.";
         return;
       }
@@ -1793,16 +1788,12 @@ export function initApp() {
 
       if (seq !== pointTileFetchSeq || mode !== "points") return;
 
-      const nextEntriesByMode = {
-        private: new Map(),
-        isorg: new Map(),
-      };
+      const nextEntriesById = new Map();
 
       for (const result of tileResults) {
         const tileJson = result?.json;
         const points = Array.isArray(tileJson?.points) ? tileJson.points : [];
-        const pointMode = result?.mode === "isorg" ? "isorg" : "private";
-        const byId = nextEntriesByMode[pointMode];
+        const isorg = result?.mode === "isorg";
         for (const p of points) {
           const id = Number(p?.id);
           const lat = Number(p?.lat);
@@ -1811,21 +1802,23 @@ export function initApp() {
           const pc4Value = String(p?.pc4 ?? "");
           if (pc4 && pc4Value !== pc4) continue;
 
-          if (byId.has(id)) continue;
-          byId.set(id, {
+          const markerId = `${isorg ? "isorg" : "private"}:${id}`;
+          if (nextEntriesById.has(markerId)) continue;
+
+          nextEntriesById.set(markerId, {
             id,
+            key: markerId,
             lat,
             lng,
             pc4: pc4Value,
-            modes: [pointMode],
+            isorg,
+            modes: [isorg ? "isorg" : "private"],
             birds: [],
           });
         }
       }
 
-      for (const pointMode of fetchModes) {
-        upsertPointMarkersForMode(pointMode, Array.from(nextEntriesByMode[pointMode].values()));
-      }
+      upsertPointMarkers(Array.from(nextEntriesById.values()));
       refreshRenderedPointStats();
     } catch (err) {
       if (isAbortError(err)) return;
