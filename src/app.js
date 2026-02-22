@@ -209,12 +209,10 @@ export function initApp() {
   function updateThemeToggleUI(theme) {
     if (!themeToggleBtn) return;
     const isLight = theme === THEME_LIGHT;
-    themeToggleBtn.textContent = isLight ? "Thema: Licht" : "Thema: Donker";
     themeToggleBtn.setAttribute("aria-pressed", isLight ? "true" : "false");
-    themeToggleBtn.setAttribute(
-      "aria-label",
-      isLight ? "Schakel naar donker thema" : "Schakel naar licht thema"
-    );
+    const label = isLight ? "Schakel naar donker thema" : "Schakel naar licht thema";
+    themeToggleBtn.setAttribute("aria-label", label);
+    themeToggleBtn.setAttribute("title", label);
   }
 
   function applyTheme(theme, { persist = true } = {}) {
