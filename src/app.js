@@ -1,5 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
-import { StaticTilesSource } from "./data_source.js";
+import { StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 
 export function initApp() {
@@ -275,6 +275,10 @@ export function initApp() {
   let sidebarToggleControl = null;
   let isComputing = false;
   const pointTilesSource = new StaticTilesSource();
+  let pointTileFetchSeq = 0;
+  let pointTileFetchTimer = 0;
+  let pointTileAbortController = null;
+  const pointMarkerStateById = new Map();
 
   let legendType1TextEl = null;
   let legendIsorgTextEl = null;
@@ -336,16 +340,6 @@ export function initApp() {
   function normalizePc4(v) {
     const m = String(v ?? "").match(/(\d{4})/);
     return m ? m[1] : "";
-  }
-
-  function lngLatToTileXY({ lng, lat, z }) {
-    const n = 2 ** z;
-    const x = Math.floor(((lng + 180) / 360) * n);
-    const latRad = (lat * Math.PI) / 180;
-    const y = Math.floor(
-      ((1 - Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI) / 2) * n
-    );
-    return { x, y };
   }
 
   function sumBirds(birds) {
@@ -703,6 +697,7 @@ export function initApp() {
   }
 
   function setMode(nextMode) {
+    const prevMode = mode;
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
 
@@ -722,6 +717,9 @@ export function initApp() {
     updateSidebarToggleControl();
 
     if (mode === "species") {
+      clearPointTileFetchTimer();
+      abortPointTileFetchCycle();
+      if (prevMode === "points") clearPointMarkers();
       if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
       setLegendVisible(false);
@@ -1483,27 +1481,294 @@ export function initApp() {
     return { year, pc4, includeType1, includeIsorg };
   }
 
-  function entryIncludedByModes(entry, { includeType1, includeIsorg }) {
-    const isType1 = entryHasMode(entry, "type1");
-    const isIsorg = entryHasMode(entry, "isorg");
-    // IMPORTANT: we de-dupe by treating `isorg` as a strict subset of `type1` when both are present.
-    // Rationale: upstream (VBN) endpoints can return `isorg=true` entries in the `type=1` list too.
-    // Semantics in UI:
-    // - **Inzending** = `type1` but NOT `isorg`
-    // - **Schoolinzending** = `isorg` (regardless of `type1`)
-    const isPrivate = isType1 && !isIsorg;
-    const isOrg = isIsorg;
-    return (includeType1 && isPrivate) || (includeIsorg && isOrg);
+  function abortPointTileFetchCycle() {
+    if (!pointTileAbortController) return;
+    pointTileAbortController.abort();
+    pointTileAbortController = null;
+  }
+
+  function clearPointTileFetchTimer() {
+    if (!pointTileFetchTimer) return;
+    window.clearTimeout(pointTileFetchTimer);
+    pointTileFetchTimer = 0;
+  }
+
+  function clearPointMarkers() {
+    for (const state of pointMarkerStateById.values()) {
+      try {
+        pointsLayer.removeLayer(state.marker);
+      } catch {
+        // ignore
+      }
+    }
+    pointMarkerStateById.clear();
+    rendered = [];
+    totals = { entries: 0, birds: 0 };
+    updateViewportStats();
+  }
+
+  async function mapWithConcurrency(items, limit, worker) {
+    const out = new Array(items.length);
+    let cursor = 0;
+    const workers = Math.max(1, Math.min(Number(limit) || 1, items.length || 1));
+
+    async function run() {
+      while (true) {
+        const i = cursor;
+        cursor += 1;
+        if (i >= items.length) return;
+        out[i] = await worker(items[i], i);
+      }
+    }
+
+    await Promise.all(Array.from({ length: workers }, () => run()));
+    return out;
+  }
+
+  function setPointMarkerVisual(marker, entry) {
+    marker.setStyle({
+      color: "rgba(255,255,255,0.9)",
+      weight: 2,
+      fillColor: colorForEntry(entry),
+      fillOpacity: 0.85,
+    });
+  }
+
+  function upsertPointMarkers(entries) {
+    const nextById = new Map(entries.map((entry) => [entry.id, entry]));
+
+    for (const [id, state] of pointMarkerStateById.entries()) {
+      if (nextById.has(id)) continue;
+      try {
+        pointsLayer.removeLayer(state.marker);
+      } catch {
+        // ignore
+      }
+      pointMarkerStateById.delete(id);
+    }
+
+    for (const entry of entries) {
+      const id = Number(entry.id);
+      const latlng = globalThis.L.latLng(Number(entry.lat), Number(entry.lng));
+      const existing = pointMarkerStateById.get(id);
+      const modeKey = Array.isArray(entry.modes) ? entry.modes.slice().sort().join("|") : "";
+
+      if (existing) {
+        const moved =
+          Math.abs(existing.latlng.lat - latlng.lat) > 1e-9 ||
+          Math.abs(existing.latlng.lng - latlng.lng) > 1e-9;
+        const modeChanged = existing.modeKey !== modeKey;
+        if (moved || modeChanged) {
+          existing.marker.setLatLng(latlng);
+          setPointMarkerVisual(existing.marker, entry);
+          existing.marker.setPopupContent(popupHtml(entry));
+        }
+        existing.modeKey = modeKey;
+        existing.latlng = latlng;
+        existing.entry = entry;
+        existing.isType1 = entryHasMode(entry, "type1") && !entryHasMode(entry, "isorg");
+        existing.isIsorg = entryHasMode(entry, "isorg");
+        if (existing.isIsorg && existing.marker?.bringToFront) existing.marker.bringToFront();
+        continue;
+      }
+
+      const marker = globalThis.L.circleMarker(latlng, {
+        radius: 6,
+        color: "rgba(255,255,255,0.9)",
+        weight: 2,
+        fillColor: colorForEntry(entry),
+        fillOpacity: 0.85,
+      })
+        .bindPopup(popupHtml(entry), { maxWidth: 340 })
+        .addTo(pointsLayer);
+
+      if (entryHasMode(entry, "isorg") && marker?.bringToFront) marker.bringToFront();
+
+      pointMarkerStateById.set(id, {
+        marker,
+        modeKey,
+        latlng,
+        entry,
+        isType1: entryHasMode(entry, "type1") && !entryHasMode(entry, "isorg"),
+        isIsorg: entryHasMode(entry, "isorg"),
+      });
+    }
+
+    rendered = Array.from(pointMarkerStateById.values()).map((state) => ({
+      latlng: state.latlng,
+      birdsTotal: 0,
+      isType1: state.isType1,
+      isIsorg: state.isIsorg,
+      birdIds: new Set(),
+      birdNames: new Set(),
+      entry: state.entry,
+    }));
+
+    totals = { entries: rendered.length, birds: 0 };
+    updateViewportStats();
+  }
+
+  function schedulePointTileFetch({ immediate = false } = {}) {
+    if (mode !== "points") return;
+    clearPointTileFetchTimer();
+    if (immediate) {
+      void refreshPointTilesForViewport();
+      return;
+    }
+    pointTileFetchTimer = window.setTimeout(() => {
+      pointTileFetchTimer = 0;
+      void refreshPointTilesForViewport();
+    }, 120);
+  }
+
+  async function refreshPointTilesForViewport() {
+    if (mode !== "points") return;
+
+    const seq = ++pointTileFetchSeq;
+    abortPointTileFetchCycle();
+    const controller = new AbortController();
+    pointTileAbortController = controller;
+
+    const { year, pc4, includeType1, includeIsorg } = getFilters();
+    if (!includeType1 && !includeIsorg) {
+      clearPointMarkers();
+      return;
+    }
+
+    try {
+      const manifest = await pointTilesSource.getManifest();
+      if (seq !== pointTileFetchSeq || mode !== "points") return;
+
+      const yearsAvailable = Array.isArray(manifest?.years_available)
+        ? manifest.years_available.map((v) => Number(v)).filter((v) => Number.isFinite(v))
+        : [];
+      const defaultYear = Number(manifest?.defaults?.year ?? yearsAvailable[0] ?? 0) || 0;
+      const targetYear = Number(year || 0) || defaultYear;
+
+      if (!targetYear) {
+        throw new Error("No tile year available");
+      }
+      if (yearsAvailable.length > 0 && !yearsAvailable.includes(targetYear)) {
+        clearPointMarkers();
+        statsEl.textContent = `No point-tile dataset available for ${targetYear}.`;
+        return;
+      }
+
+      const zoomMin = Number(manifest?.defaults?.zoom_min ?? 6) || 6;
+      const zoomMax = Number(manifest?.defaults?.zoom_max ?? 13) || 13;
+      const z = Math.max(zoomMin, Math.min(zoomMax, Math.floor(map.getZoom())));
+      const tiles = tilesForBounds(map.getBounds(), z, 1);
+
+      if (tiles.length === 0) {
+        clearPointMarkers();
+        return;
+      }
+
+      const modesAvailable = new Set(
+        (Array.isArray(manifest?.modes_available) ? manifest.modes_available : [])
+          .map((m) => String(m || "").trim())
+          .filter(Boolean)
+      );
+
+      const modeSet = new Set();
+      if (includeType1) modeSet.add("type1");
+      if (includeIsorg || includeType1) modeSet.add("isorg");
+      const modes = Array.from(modeSet).filter((m) => modesAvailable.size === 0 || modesAvailable.has(m));
+
+      if (modes.length === 0) {
+        clearPointMarkers();
+        return;
+      }
+
+      const requests = [];
+      for (const modeName of modes) {
+        for (const tile of tiles) {
+          requests.push({ mode: modeName, z: tile.z, x: tile.x, y: tile.y });
+        }
+      }
+
+      const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
+        const json = await pointTilesSource.getPointTile({
+          year: targetYear,
+          mode: req.mode,
+          z: req.z,
+          x: req.x,
+          y: req.y,
+          signal: controller.signal,
+        });
+        return { mode: req.mode, json };
+      });
+
+      if (seq !== pointTileFetchSeq || mode !== "points") return;
+
+      const byId = new Map();
+      for (const result of tileResults) {
+        const tileJson = result?.json;
+        const points = Array.isArray(tileJson?.points) ? tileJson.points : [];
+        for (const p of points) {
+          const id = Number(p?.id);
+          const lat = Number(p?.lat);
+          const lng = Number(p?.lng);
+          if (!Number.isFinite(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+
+          const existing = byId.get(id) || {
+            id,
+            lat,
+            lng,
+            pc4: String(p?.pc4 ?? ""),
+            hasType1: false,
+            hasIsorg: false,
+          };
+          if (result.mode === "type1") existing.hasType1 = true;
+          if (result.mode === "isorg") existing.hasIsorg = true;
+          if (!existing.pc4 && p?.pc4 != null) existing.pc4 = String(p.pc4);
+          byId.set(id, existing);
+        }
+      }
+
+      const nextEntries = [];
+      for (const p of byId.values()) {
+        if (pc4 && p.pc4 !== pc4) continue;
+        const isPrivate = p.hasType1 && !p.hasIsorg;
+        const isOrg = p.hasIsorg;
+        if (!((includeType1 && isPrivate) || (includeIsorg && isOrg))) continue;
+
+        const modesForEntry = [];
+        if (p.hasType1) modesForEntry.push("type1");
+        if (p.hasIsorg) modesForEntry.push("isorg");
+
+        nextEntries.push({
+          id: p.id,
+          lat: p.lat,
+          lng: p.lng,
+          pc4: p.pc4,
+          modes: modesForEntry,
+          birds: [],
+        });
+      }
+
+      upsertPointMarkers(nextEntries);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      console.warn("Viewport tile fetch failed:", err);
+      statsEl.textContent = `Point tile load failed: ${err?.message || String(err)}`;
+    } finally {
+      if (pointTileAbortController === controller) pointTileAbortController = null;
+    }
   }
 
   function render() {
+    if (mode === "points") {
+      schedulePointTileFetch({ immediate: true });
+      return;
+    }
+
     if (!dataset) return;
 
     const { year, pc4, includeType1, includeIsorg } = getFilters();
     const dataYear = Number(dataset?.meta?.year ?? 0) || 0;
 
     if (year && dataYear && year !== dataYear) {
-      pointsLayer.clearLayers();
       gridLayer.clearLayers();
       statsEl.textContent = `Geen dataset voor ${year} (alleen ${dataYear} beschikbaar).`;
       return;
@@ -1525,31 +1790,6 @@ export function initApp() {
     }));
 
     const bounds = filtered.map((p) => p.latlng);
-
-    // Mode 1: draw point markers. Mode 2: hide points.
-    pointsLayer.clearLayers();
-    if (mode === "points") {
-      const privateEntries = filtered.filter((p) => p.isPrivate);
-      const orgEntries = filtered.filter((p) => p.isOrg);
-
-      const draw = (p, { bringToFront = false } = {}) => {
-        const marker = globalThis.L.circleMarker(p.latlng, {
-          radius: 6,
-          color: "rgba(255,255,255,0.9)",
-          weight: 2,
-          fillColor: colorForEntry(p.entry),
-          fillOpacity: 0.85,
-        })
-          .bindPopup(popupHtml(p.entry), { maxWidth: 340 })
-          .addTo(pointsLayer);
-
-        if (bringToFront && marker?.bringToFront) marker.bringToFront();
-      };
-
-      // Draw private first, org last.
-      for (const p of privateEntries) draw(p);
-      for (const p of orgEntries) draw(p, { bringToFront: true });
-    }
 
     totals = {
       entries: filtered.length,
@@ -1580,7 +1820,7 @@ export function initApp() {
     // Initial stats for current viewport (moveend will keep it updated).
     updateViewportStats();
 
-    if (mode === "species") schedulePresenceGridCompute();
+    schedulePresenceGridCompute();
   }
 
   function onFiltersChanged() {
@@ -1635,9 +1875,11 @@ export function initApp() {
       preparedEntries = [];
       speciesIndex = [];
       setSelectedSpecies(null);
-      pointsLayer.clearLayers();
-      gridLayer.clearLayers();
-      statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
+      if (mode === "species") {
+        pointsLayer.clearLayers();
+        gridLayer.clearLayers();
+        statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
+      }
     }
   }
 
@@ -1663,7 +1905,14 @@ export function initApp() {
     }
   }
 
-  yearInput.addEventListener("change", () => loadForYear(Number(yearInput.value || 0) || 0));
+  yearInput.addEventListener("change", () => {
+    const year = Number(yearInput.value || 0) || 0;
+    if (mode === "points") {
+      render();
+      return;
+    }
+    loadForYear(year);
+  });
   pc4Input.addEventListener("change", onFiltersChanged);
   includeType1Input.addEventListener("change", onFiltersChanged);
   includeIsorgInput.addEventListener("change", onFiltersChanged);
@@ -1671,6 +1920,11 @@ export function initApp() {
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);
   map.on("moveend", () => {
+    if (mode === "points") {
+      schedulePointTileFetch();
+      updateViewportStats();
+      return;
+    }
     updateViewportStats();
     if (mode === "species") {
       if (speciesScope === "viewport") renderSpeciesList({ query: speciesSearchInput.value });

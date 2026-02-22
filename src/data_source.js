@@ -32,6 +32,91 @@ function applyTemplate(template, vars) {
   });
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toAbortError() {
+  try {
+    return new DOMException("The operation was aborted.", "AbortError");
+  } catch {
+    const e = new Error("The operation was aborted.");
+    e.name = "AbortError";
+    return e;
+  }
+}
+
+export function isAbortError(err) {
+  return Boolean(err && typeof err === "object" && err.name === "AbortError");
+}
+
+export function lngLatToTileXY({ lng, lat, z }) {
+  const zoom = toSafeInt(z, "z");
+  const n = 2 ** zoom;
+  const latClamped = clamp(Number(lat), -85.05112878, 85.05112878);
+  const lngNorm = Number(lng);
+  const x = Math.floor(((lngNorm + 180) / 360) * n);
+  const latRad = (latClamped * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI) / 2) * n
+  );
+  return {
+    x: clamp(x, 0, n - 1),
+    y: clamp(y, 0, n - 1),
+  };
+}
+
+function boundsToEdges(bounds) {
+  if (bounds && typeof bounds.getWest === "function") {
+    return {
+      west: Number(bounds.getWest()),
+      south: Number(bounds.getSouth()),
+      east: Number(bounds.getEast()),
+      north: Number(bounds.getNorth()),
+    };
+  }
+
+  if (
+    bounds &&
+    Number.isFinite(Number(bounds.west)) &&
+    Number.isFinite(Number(bounds.south)) &&
+    Number.isFinite(Number(bounds.east)) &&
+    Number.isFinite(Number(bounds.north))
+  ) {
+    return {
+      west: Number(bounds.west),
+      south: Number(bounds.south),
+      east: Number(bounds.east),
+      north: Number(bounds.north),
+    };
+  }
+
+  throw new Error("tilesForBounds requires Leaflet bounds or {west,south,east,north}");
+}
+
+export function tilesForBounds(bounds, z, bufferTiles = 1) {
+  const zoom = toSafeInt(z, "z");
+  const worldMax = (2 ** zoom) - 1;
+  const buffer = toSafeInt(bufferTiles, "bufferTiles");
+  const { west, south, east, north } = boundsToEdges(bounds);
+
+  const nw = lngLatToTileXY({ lng: west, lat: north, z: zoom });
+  const se = lngLatToTileXY({ lng: east, lat: south, z: zoom });
+
+  const minX = clamp(Math.min(nw.x, se.x) - buffer, 0, worldMax);
+  const maxX = clamp(Math.max(nw.x, se.x) + buffer, 0, worldMax);
+  const minY = clamp(Math.min(nw.y, se.y) - buffer, 0, worldMax);
+  const maxY = clamp(Math.max(nw.y, se.y) + buffer, 0, worldMax);
+
+  const out = [];
+  for (let x = minX; x <= maxX; x += 1) {
+    for (let y = minY; y <= maxY; y += 1) {
+      out.push({ z: zoom, x, y, key: `${zoom}/${x}/${y}` });
+    }
+  }
+  return out;
+}
+
 export class StaticTilesSource extends DataSource {
   constructor({ baseUrl = DATA_BASE_URL, fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
     super();
@@ -42,6 +127,7 @@ export class StaticTilesSource extends DataSource {
     this.fetchImpl = fetchImpl;
     this.manifestPromise = null;
     this.tilePromiseByUrl = new Map();
+    this.tileDataByUrl = new Map();
     this.baseUrlCandidates = [this.baseUrl];
     if (this.baseUrl === DATA_BASE_URL && DATA_BASE_URL_FALLBACK !== DATA_BASE_URL) {
       this.baseUrlCandidates.push(DATA_BASE_URL_FALLBACK);
@@ -76,7 +162,7 @@ export class StaticTilesSource extends DataSource {
     return this.manifestPromise;
   }
 
-  async getPointTile({ year, mode, z, x, y }) {
+  async getPointTile({ year, mode, z, x, y, signal } = {}) {
     const manifest = await this.getManifest();
     const template = String(manifest?.paths?.points_root || "").trim();
     if (!template) {
@@ -93,19 +179,42 @@ export class StaticTilesSource extends DataSource {
     const path = applyTemplate(template, vars);
     const url = joinUrl(this.baseUrl, path);
 
-    if (this.tilePromiseByUrl.has(url)) return this.tilePromiseByUrl.get(url);
+    if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
 
-    const p = this.fetchImpl(url)
+    if (signal?.aborted) throw toAbortError();
+
+    // Only share in-flight promises if no abort signal is provided.
+    if (!signal && this.tilePromiseByUrl.has(url)) return this.tilePromiseByUrl.get(url);
+
+    const p = this.fetchImpl(url, signal ? { signal } : undefined)
       .then((r) => {
+        // Sparse exports may omit empty tiles on disk. Treat 404 as an empty tile.
+        if (r.status === 404) {
+          return {
+            contract_version: Number(manifest?.contract_version ?? 1) || 1,
+            year: vars.year,
+            mode: vars.mode,
+            z: vars.z,
+            x: vars.x,
+            y: vars.y,
+            tileSize: 256,
+            points: [],
+          };
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status} while loading point tile (${url})`);
         return r.json();
       })
+      .then((json) => {
+        this.tileDataByUrl.set(url, json);
+        return json;
+      })
       .catch((err) => {
-        this.tilePromiseByUrl.delete(url);
+        if (!signal) this.tilePromiseByUrl.delete(url);
+        if (isAbortError(err)) throw err;
         throw err;
       });
 
-    this.tilePromiseByUrl.set(url, p);
+    if (!signal) this.tilePromiseByUrl.set(url, p);
     return p;
   }
 }
