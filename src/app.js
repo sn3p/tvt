@@ -2271,7 +2271,7 @@ export function initApp() {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
         clearPointMarkers();
-        setPointsSidebarMessage(`Geen puntendataset beschikbaar voor ${targetYear}.`);
+        setPointsSidebarMessage("");
         statsEl.textContent = `Geen puntendataset beschikbaar voor ${targetYear}.`;
         return;
       }
