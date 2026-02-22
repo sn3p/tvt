@@ -1,0 +1,16 @@
+{
+  "contract_version": 1,
+  "year": 2025,
+  "mode": "private",
+  "z": 13,
+  "x": 4224,
+  "y": 2676,
+  "tileSize": 256,
+  "points": [
+    {
+      "id": 524210,
+      "lat": 52.79035309,
+      "lng": 5.64161912
+    }
+  ]
+}
