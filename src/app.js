@@ -1837,6 +1837,25 @@ export function initApp() {
     });
   }
 
+  function ensurePointPopupToggle(marker) {
+    if (!marker || marker.__tvtPopupToggleBound) return;
+
+    // Replace Leaflet's default click->open handler with explicit toggle behavior.
+    if (typeof marker.off === "function") {
+      marker.off("click");
+    }
+
+    marker.on("click", () => {
+      if (typeof marker.isPopupOpen === "function" && marker.isPopupOpen()) {
+        marker.closePopup();
+        return;
+      }
+      marker.openPopup();
+    });
+
+    marker.__tvtPopupToggleBound = true;
+  }
+
   function birdImageHtml(name) {
     const filename = guessImageFilename(name);
     const src = birdImageUrl(filename);
@@ -2066,6 +2085,7 @@ export function initApp() {
         existing.marker.setPopupContent(
           cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry)
         );
+        ensurePointPopupToggle(existing.marker);
         existing.latlng = latlng;
         existing.entry = cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
         existing.isIsorg = isorg;
@@ -2073,9 +2093,17 @@ export function initApp() {
       }
 
       const marker = createPointMarker(latlng, isorg)
-        .bindPopup(cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry), { maxWidth: 340 })
+        .bindPopup(
+          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry),
+          {
+            maxWidth: 340,
+            closeOnClick: false,
+            autoClose: true,
+          }
+        )
         .addTo(pointsLayer);
       bindPointMarkerPopup(marker, markerId);
+      ensurePointPopupToggle(marker);
 
       pointMarkerStateById.set(markerId, {
         marker,
