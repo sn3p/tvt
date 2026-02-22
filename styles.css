@@ -291,16 +291,6 @@ input {
 }
 .sidebar-close-btn:hover { background: rgba(0, 0, 0, 0.30); }
 
-.sidebar-title {
-  font-weight: 900;
-  letter-spacing: 0.2px;
-}
-
-.sidebar-status {
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .sidebar-tabs {
   display: flex;
   gap: 18px;
@@ -308,18 +298,41 @@ input {
   min-height: 48px;
 }
 
+/* Class display rules can override the browser's `[hidden]` default. */
+.sidebar-tabs[hidden],
+.sidebar-title[hidden] {
+  display: none !important;
+}
+
 .sidebar-tab {
   appearance: none;
   border: 0;
   background: transparent;
   color: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  position: relative;
+}
+
+.sidebar-tab,
+.sidebar-title {
   font: inherit;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.2px;
   padding: 14px 2px 12px;
-  cursor: pointer;
-  position: relative;
+}
+
+.sidebar-title {
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+}
+
+.sidebar-status {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .sidebar-tab[aria-pressed="true"] {

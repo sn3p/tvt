@@ -12,14 +12,16 @@ export function initApp() {
   const pointsModePrivateInput = document.querySelector("#pointsModePrivateInput");
   const pointsModeIsorgInput = document.querySelector("#pointsModeIsorgInput");
   const filtersForm = document.querySelector("#filtersForm");
-  const sidebarEl = document.querySelector("#sidebar");
+  const sidebarSpeciesEl = document.querySelector("#sidebarSpecies");
+  const sidebarPointsEl = document.querySelector("#sidebarPoints");
   const sidebarTabSpecies = document.querySelector("#sidebarTabSpecies");
   const sidebarTabView = document.querySelector("#sidebarTabView");
   const sidebarPanelSpecies = document.querySelector("#sidebarPanelSpecies");
   const sidebarPanelView = document.querySelector("#sidebarPanelView");
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
-  const sidebarCloseBtn = document.querySelector("#sidebarCloseBtn");
+  const sidebarSpeciesCloseBtn = document.querySelector("#sidebarSpeciesCloseBtn");
+  const sidebarPointsCloseBtn = document.querySelector("#sidebarPointsCloseBtn");
   const speciesScopeViewport = document.querySelector("#speciesScopeViewport");
   const speciesScopeAll = document.querySelector("#speciesScopeAll");
   const speciesSortMost = document.querySelector("#speciesSortMost");
@@ -47,14 +49,16 @@ export function initApp() {
     !pointsModePrivateInput ||
     !pointsModeIsorgInput ||
     !filtersForm ||
-    !sidebarEl ||
+    !sidebarSpeciesEl ||
+    !sidebarPointsEl ||
     !sidebarTabSpecies ||
     !sidebarTabView ||
     !sidebarPanelSpecies ||
     !sidebarPanelView ||
     !speciesSearchInput ||
     !speciesListEl ||
-    !sidebarCloseBtn ||
+    !sidebarSpeciesCloseBtn ||
+    !sidebarPointsCloseBtn ||
     !modePointsBtn ||
     !modeSpeciesBtn ||
     !speciesScopeViewport ||
@@ -127,6 +131,7 @@ export function initApp() {
 
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
   const POINT_TILE_MODES = ["private", "isorg"];
+  const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
 
   function readPointModeFiltersFromStorage() {
     try {
@@ -342,6 +347,7 @@ export function initApp() {
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
   let sidebarToggleControl = null;
+  let sidebarTab = "species"; // "species" | "view"
   let isComputing = false;
   const pointTilesSource = new StaticTilesSource();
   let pointTileFetchSeq = 0;
@@ -781,11 +787,10 @@ export function initApp() {
     // Allow mode-based styling without touching JS again.
     document.body.dataset.mode = mode;
 
-    // Mode 1 never shows sidebar.
-    if (mode !== "species") {
-      setSidebarOpen(false, { persist: false, reason: "mode1" });
-    } else {
+    if (mode === "species") {
       initSidebarOpenOnEnterSpeciesMode();
+    } else {
+      initSidebarOpenOnEnterPointsMode();
     }
 
     updateSidebarToggleControl();
@@ -861,21 +866,14 @@ export function initApp() {
     return window.matchMedia && window.matchMedia("(max-width: 880px)").matches;
   }
 
-  function sidebarStorageKey() {
+  function sidebarStorageKeyForMode(targetMode) {
+    if (targetMode === "points") return POINTS_SIDEBAR_STORAGE_KEY;
     return `tvt:speciesSidebarOpen:${isMobile() ? "mobile" : "desktop"}`;
   }
 
-  function hasSidebarPreference() {
+  function getSavedSidebarOpen(targetMode) {
     try {
-      return window.localStorage.getItem(sidebarStorageKey()) != null;
-    } catch {
-      return false;
-    }
-  }
-
-  function getSavedSidebarOpen() {
-    try {
-      const v = window.localStorage.getItem(sidebarStorageKey());
+      const v = window.localStorage.getItem(sidebarStorageKeyForMode(targetMode));
       if (v == null) return null;
       return v === "1" || v === "true" || v === "open";
     } catch {
@@ -883,9 +881,9 @@ export function initApp() {
     }
   }
 
-  function saveSidebarOpen(open) {
+  function saveSidebarOpenForMode(targetMode, open) {
     try {
-      window.localStorage.setItem(sidebarStorageKey(), open ? "open" : "closed");
+      window.localStorage.setItem(sidebarStorageKeyForMode(targetMode), open ? "open" : "closed");
     } catch {
       // ignore
     }
@@ -893,14 +891,24 @@ export function initApp() {
 
   function setSidebarOpen(open, { persist = true, reason = "" } = {}) {
     sidebarOpen = Boolean(open);
-    sidebarEl.hidden = !(mode === "species" && sidebarOpen);
+    if (mode === "species") {
+      sidebarSpeciesEl.hidden = !sidebarOpen;
+      sidebarPointsEl.hidden = true;
+    } else if (mode === "points") {
+      sidebarPointsEl.hidden = !sidebarOpen;
+      sidebarSpeciesEl.hidden = true;
+    } else {
+      sidebarSpeciesEl.hidden = true;
+      sidebarPointsEl.hidden = true;
+    }
     updateSidebarToggleControl();
 
-    if (mode === "species") {
-      if (sidebarOpen) {
-        if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
-      }
-      // sidebar open/close changes map size
+    if (mode === "species" && sidebarOpen) {
+      if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
+    }
+
+    if (mode === "species" || mode === "points") {
+      // Sidebar open/close changes map size.
       try {
         map.invalidateSize({ animate: false });
       } catch {
@@ -915,13 +923,13 @@ export function initApp() {
       }, 0);
     }
 
-    if (persist) saveSidebarOpen(sidebarOpen);
+    if (persist) saveSidebarOpenForMode(mode, sidebarOpen);
     updateHud();
     if (mode === "species" && !sidebarOpen) schedulePresenceGridCompute();
   }
 
   function initSidebarOpenOnEnterSpeciesMode() {
-    const saved = getSavedSidebarOpen();
+    const saved = getSavedSidebarOpen("species");
     if (saved == null) {
       // First time: open sidebar (friendly), except on mobile with species selected.
       if (isMobile() && selectedSpecies) setSidebarOpen(false, { persist: false, reason: "mobile-default-closed" });
@@ -931,13 +939,28 @@ export function initApp() {
     setSidebarOpen(saved, { persist: false, reason: "restore" });
   }
 
-  sidebarCloseBtn.addEventListener("click", () => {
+  function initSidebarOpenOnEnterPointsMode() {
+    const saved = getSavedSidebarOpen("points");
+    if (saved == null) {
+      // Points sidebar starts collapsed by default on desktop and mobile.
+      setSidebarOpen(false, { persist: false, reason: "points-default-collapsed" });
+      return;
+    }
+    setSidebarOpen(saved, { persist: false, reason: "restore" });
+  }
+
+  sidebarSpeciesCloseBtn.addEventListener("click", () => {
     if (mode !== "species") return;
     setSidebarOpen(false, { persist: true, reason: "close" });
   });
 
+  sidebarPointsCloseBtn.addEventListener("click", () => {
+    if (mode !== "points") return;
+    setSidebarOpen(false, { persist: true, reason: "close" });
+  });
+
   function updateSidebarToggleControl() {
-    if (mode !== "species") {
+    if (mode !== "species" && mode !== "points") {
       if (sidebarToggleControl) {
         try { sidebarToggleControl.remove(); } catch { /* ignore */ }
       }
@@ -963,7 +986,8 @@ export function initApp() {
     const el = sidebarToggleControl.getContainer();
     if (el) {
       el.dataset.iconSrcValue = sidebarOpen ? "img/icons/sidebar-close.svg" : "img/icons/sidebar-open.svg";
-      el.ariaLabel = sidebarOpen ? "Zijbalk sluiten" : "Zijbalk openen";
+      const sidebarName = mode === "species" ? "Soorten" : "Tellingen";
+      el.ariaLabel = sidebarOpen ? `${sidebarName}-zijbalk sluiten` : `${sidebarName}-zijbalk openen`;
     }
   }
 
@@ -1033,10 +1057,11 @@ export function initApp() {
       hudControl.onAdd = () => {
         const div = globalThis.L.DomUtil.create("div", "tvt-hud");
         div.tabIndex = 0;
+        const imageName = selectedSpecies?.name || "";
 
         const imgEl = document.createElement("div");
         imgEl.className = "tvt-hud-image";
-        imgEl.innerHTML = birdImageHtml(selectedSpecies.name);
+        imgEl.innerHTML = birdImageHtml(imageName);
         div.appendChild(imgEl);
 
         const nameEl = document.createElement("div");
@@ -1069,7 +1094,7 @@ export function initApp() {
     const el = hudControl.getContainer();
     const refs = el?.__tvt;
     if (refs) {
-      refs.imgEl.innerHTML = birdImageHtml(selectedSpecies.name);
+      refs.imgEl.innerHTML = birdImageHtml(selectedSpecies?.name || "");
       refs.nameEl.textContent = hudName;
       refs.styleEl.textContent = hudStyle;
       refs.metricEl.textContent = hudMetric;
@@ -1117,8 +1142,6 @@ export function initApp() {
     isComputing = Boolean(next);
     updateHud();
   }
-
-  let sidebarTab = "species"; // "species" | "view"
 
   function setSidebarTab(next) {
     sidebarTab = next === "view" ? "view" : "species";

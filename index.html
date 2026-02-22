@@ -66,7 +66,7 @@
   </header>
 
   <main class="main" role="main">
-    <aside id="sidebar" class="sidebar" aria-label="Soorten" hidden>
+    <aside id="sidebarSpecies" class="sidebar" aria-label="Soorten" hidden>
       <div class="sidebar-header">
         <nav class="sidebar-tabs" aria-label="Sidebar tabs">
           <button id="sidebarTabSpecies" class="sidebar-tab" type="button" aria-pressed="true">
@@ -76,7 +76,7 @@
             <span>Weergave</span>
           </button>
         </nav>
-        <button id="sidebarCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
+        <button id="sidebarSpeciesCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
       </div>
 
       <div id="sidebarPanelSpecies" class="sidebar-panel">
@@ -187,6 +187,18 @@
             <div id="minNValue" class="muted slider-value"></div>
           </div>
           <div class="sidebar-hint muted-2">Lager = meer detail, hoger = minder ruis.</div>
+        </div>
+      </div>
+    </aside>
+
+    <aside id="sidebarPoints" class="sidebar" aria-label="Tellingen" hidden>
+      <div class="sidebar-header">
+        <div class="sidebar-title">Tellingen</div>
+        <button id="sidebarPointsCloseBtn" class="sidebar-close-btn" type="button" aria-label="Sluit sidebar">×</button>
+      </div>
+      <div class="sidebar-panel">
+        <div class="sidebar-row-full">
+          <div class="sidebar-label muted">Opties voor Tellingen komen hier later.</div>
         </div>
       </div>
     </aside>
