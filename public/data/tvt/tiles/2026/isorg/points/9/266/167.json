@@ -1,0 +1,16 @@
+{
+  "contract_version": 1,
+  "year": 2026,
+  "mode": "isorg",
+  "z": 9,
+  "x": 266,
+  "y": 167,
+  "tileSize": 256,
+  "points": [
+    {
+      "id": 632167,
+      "lat": 52.88102633,
+      "lng": 7.04946103
+    }
+  ]
+}
