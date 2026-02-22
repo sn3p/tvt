@@ -510,14 +510,21 @@ export function initApp() {
   }
 
   function updateViewportStats() {
-    const b = map.getBounds();
+    // During early startup (e.g. mode=species from URL), this can run before setView().
+    // In that case Leaflet throws "Set map center and zoom first.".
+    let b = null;
+    try {
+      b = map.getBounds();
+    } catch {
+      b = null;
+    }
     let inViewEntries = 0;
     let inViewBirds = 0;
     let inViewPrivate = 0;
     let inViewIsorg = 0;
 
     for (const r of rendered) {
-      if (!b.contains(r.latlng)) continue;
+      if (b && !b.contains(r.latlng)) continue;
       inViewEntries += 1;
       inViewBirds += r.birdsTotal;
       if (r.isPrivate) inViewPrivate += 1;
