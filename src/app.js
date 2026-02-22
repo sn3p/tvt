@@ -590,7 +590,10 @@ export function initApp() {
   }
 
   // Restore last selected species (removed when user toggles it off).
-  setSelectedSpecies(readSelectedSpeciesFromStorage(), { persist: false });
+  const restoredSelectedSpecies = readSelectedSpeciesFromStorage();
+  const shouldAutoSelectInitialSpecies = !restoredSelectedSpecies;
+  let didAutoSelectInitialSpecies = false;
+  setSelectedSpecies(restoredSelectedSpecies, { persist: false });
 
   function normalizePc4(v) {
     const m = String(v ?? "").match(/(\d{4})/);
@@ -1431,6 +1434,17 @@ export function initApp() {
             if (sb.sum !== sa.sum) return sb.sum - sa.sum;
             return a.name.localeCompare(b.name, "nl");
           });
+
+    // If there is no stored selection, auto-select the first visible species once.
+    if (
+      shouldAutoSelectInitialSpecies &&
+      !didAutoSelectInitialSpecies &&
+      !selectedSpecies &&
+      list.length > 0
+    ) {
+      setSelectedSpecies(list[0], { persist: false });
+      didAutoSelectInitialSpecies = true;
+    }
 
     speciesListEl.innerHTML = "";
 
