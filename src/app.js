@@ -307,18 +307,8 @@ export function initApp() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
     const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
     const disableClusteringAtZoomEnabled = pointsSettings.displayMode !== "points";
+    const clusterEngineEnabled = pointsSettings.displayMode !== "points";
     const workerAvailable = isWorkerClusterAvailable();
-    const autoPrefersClusters = resolveAutoPointRenderKind({ zoom: pointZoomForControls }) === "clusters";
-    const clusterEngineVisible =
-      pointsSettings.displayMode === "clusters" ||
-      (
-        pointsSettings.displayMode === "auto" &&
-        (
-          autoPrefersClusters ||
-          controlsRenderKind === "clusters" ||
-          (hasMaxPointsInViewCap() && controlsIsCapExceeded)
-        )
-      );
 
     pointsClusterStyleRow.hidden = false;
     pointsClusterStyleRow.classList.toggle("is-disabled", !clusterStyleEnabled);
@@ -332,11 +322,12 @@ export function initApp() {
     pointsDisableClusteringAtZoomRow.classList.toggle("is-disabled", !disableClusteringAtZoomEnabled);
     pointsDisableClusteringAtZoomInput.disabled = !disableClusteringAtZoomEnabled;
 
-    pointsClusterEngineRow.hidden = !clusterEngineVisible;
+    pointsClusterEngineRow.hidden = false;
+    pointsClusterEngineRow.classList.toggle("is-disabled", !clusterEngineEnabled);
     for (const input of pointsClusterEngineRow.querySelectorAll("input")) {
-      input.disabled = !clusterEngineVisible;
+      input.disabled = !clusterEngineEnabled;
     }
-    pointsClusterEngineWorker.disabled = !workerAvailable || !clusterEngineVisible;
+    pointsClusterEngineWorker.disabled = !workerAvailable || !clusterEngineEnabled;
     if (!workerAvailable && pointsSettings.clusterEngine === "worker") {
       pointsClusterEngineDefault.checked = true;
       pointsClusterEngineWorker.checked = false;
