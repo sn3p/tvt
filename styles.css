@@ -212,11 +212,11 @@ input {
   height: 14px;
 }
 
-.check input[type="radio"]#pointsModeType1Input {
+.check input[type="checkbox"]#pointsModePrivateInput {
   accent-color: rgb(251, 146, 60);
 }
 
-.check input[type="radio"]#pointsModeIsorgInput {
+.check input[type="checkbox"]#pointsModeIsorgInput {
   accent-color: rgb(96, 165, 250);
 }
 
@@ -615,6 +615,7 @@ input {
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
 }
 
+.tvt-point-marker.private,
 .tvt-point-marker.type1 {
   background: #fb923c;
 }

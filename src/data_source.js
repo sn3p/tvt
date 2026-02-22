@@ -171,7 +171,7 @@ export class StaticTilesSource extends DataSource {
 
     const vars = {
       year: toSafeInt(year, "year"),
-      mode: String(mode || "").trim() || "type1",
+      mode: String(mode || "").trim() || "private",
       z: toSafeInt(z, "z"),
       x: toSafeInt(x, "x"),
       y: toSafeInt(y, "y"),
