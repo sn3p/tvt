@@ -6,8 +6,8 @@
   --panel: rgba(255, 255, 255, 0.06);
   --panel-2: rgba(255, 255, 255, 0.09);
   --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.68);
-  --muted-2: rgba(255, 255, 255, 0.48);
+  --muted: rgba(255, 255, 255, 0.78);
+  --muted-2: rgba(255, 255, 255, 0.50);
   --text-soft: rgba(255, 255, 255, 0.85);
   --border: rgba(255, 255, 255, 0.12);
   --border-strong: rgba(255, 255, 255, 0.10);
@@ -40,6 +40,9 @@
   --theme-toggle-icon-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M21 13.06A9 9 0 1 1 10.94 3 7 7 0 0 0 21 13.06Z'/%3E%3C/svg%3E");
   --theme-toggle-icon-sun: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='black'%3E%3Ccircle cx='12' cy='12' r='4.25'/%3E%3Cpath d='M11 0h2v4h-2zm0 20h2v4h-2zM0 11h4v2H0zm20 0h4v2h-4zM3.52 4.93l1.41-1.41 2.83 2.83-1.41 1.41zm12.73 12.73 1.41-1.41 2.83 2.83-1.41 1.41zM16.34 7.76l2.83-2.83 1.41 1.41-2.83 2.83zM3.52 19.07l2.83-2.83 1.41 1.41-2.83 2.83z'/%3E%3C/g%3E%3C/svg%3E");
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --map-shell-border: var(--border);
+  --map-shell-bg: var(--panel);
+  --map-shell-shadow: var(--shadow);
   --accent: #0275ff;
   --ok: #34d399;
   --warn: #fbbf24;
@@ -53,8 +56,8 @@ body[data-theme="light"] {
   --panel: rgba(255, 255, 255, 0.82);
   --panel-2: rgba(255, 255, 255, 0.90);
   --text: rgba(15, 23, 42, 0.92);
-  --muted: rgba(15, 23, 42, 0.70);
-  --muted-2: rgba(15, 23, 42, 0.56);
+  --muted: rgba(15, 23, 42, 0.78);
+  --muted-2: rgba(15, 23, 42, 0.52);
   --text-soft: rgba(15, 23, 42, 0.82);
   --border: rgba(15, 23, 42, 0.16);
   --border-strong: rgba(15, 23, 42, 0.14);
@@ -85,6 +88,11 @@ body[data-theme="light"] {
   --theme-toggle-outline: rgba(2, 117, 255, 0.24);
   --theme-toggle-knob-bg: rgba(226, 232, 240, 0.98);
   --shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  --map-shell-border: rgba(15, 23, 42, 0.22);
+  --map-shell-bg: rgba(255, 255, 255, 0.94);
+  --map-shell-shadow:
+    0 14px 30px rgba(15, 23, 42, 0.14),
+    0 2px 8px rgba(15, 23, 42, 0.10);
 }
 
 * { box-sizing: border-box; }
@@ -781,9 +789,9 @@ input {
 .map-shell {
   flex: 1 1 auto;
   border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--map-shell-border);
+  background: var(--map-shell-bg);
+  box-shadow: var(--map-shell-shadow);
   overflow: hidden;
   min-height: 0;
   position: relative;
@@ -811,7 +819,9 @@ input {
   color: rgba(255, 255, 255, 0.75) !important;
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 10px;
-  padding: 4px 8px;
+  padding: 2px 4px 2px 6px;
+  margin-right: 10px;
+  margin-bottom: 10px;
 }
 
 .leaflet-control-attribution a { color: rgba(255, 255, 255, 0.85) !important; }
