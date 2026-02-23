@@ -57,6 +57,10 @@ export function initApp() {
   const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
   const pointsResetBtn = document.querySelector("#pointsResetBtn");
   const themeToggleBtn = document.querySelector("#themeToggleBtn");
+  const openInfoDialogBtn = document.querySelector("#openInfoDialogBtn");
+  const infoDialog = document.querySelector("#infoDialog");
+  const closeInfoDialogBtn = document.querySelector("#closeInfoDialogBtn");
+  const dismissInfoDialogBtn = document.querySelector("#dismissInfoDialogBtn");
 
   // Grid cell size (meters) — persistent and zoom-reactive.
   const gridCellSlider = document.querySelector("#gridCellSlider");
@@ -175,6 +179,7 @@ export function initApp() {
 
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
   const THEME_STORAGE_KEY = "tvt:theme";
+  const INFO_DIALOG_SEEN_KEY = "tvt:ui:infoDialogSeen";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
@@ -229,6 +234,120 @@ export function initApp() {
     themeToggleBtn.addEventListener("click", () => {
       activeTheme = applyTheme(activeTheme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
     });
+  }
+
+  function markInfoDialogSeen() {
+    try {
+      window.localStorage.setItem(INFO_DIALOG_SEEN_KEY, "1");
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function hasSeenInfoDialog() {
+    try {
+      return window.localStorage.getItem(INFO_DIALOG_SEEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function getDialogFocusableElements(dialogEl) {
+    if (!dialogEl) return [];
+    const selectors = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ];
+    return Array.from(dialogEl.querySelectorAll(selectors.join(",")))
+      .filter((el) => !el.hasAttribute("hidden") && el.offsetParent !== null);
+  }
+
+  function closeInfoDialog() {
+    if (!infoDialog || !infoDialog.open) return;
+    if (typeof infoDialog.close === "function") infoDialog.close();
+    else infoDialog.removeAttribute("open");
+  }
+
+  function openInfoDialog() {
+    if (!infoDialog || infoDialog.open) return;
+    if (typeof infoDialog.showModal === "function") infoDialog.showModal();
+    else infoDialog.setAttribute("open", "");
+
+    markInfoDialogSeen();
+    const focusables = getDialogFocusableElements(infoDialog);
+    if (focusables.length > 0) {
+      window.requestAnimationFrame(() => {
+        try {
+          focusables[0].focus();
+        } catch {
+          // ignore
+        }
+      });
+    }
+  }
+
+  function onInfoDialogKeydown(event) {
+    if (!infoDialog || !infoDialog.open) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeInfoDialog();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+    const focusables = getDialogFocusableElements(infoDialog);
+    if (focusables.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey) {
+      if (active === first || !infoDialog.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+      return;
+    }
+
+    if (active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  if (openInfoDialogBtn) {
+    openInfoDialogBtn.addEventListener("click", () => {
+      openInfoDialog();
+    });
+  }
+
+  if (closeInfoDialogBtn) {
+    closeInfoDialogBtn.addEventListener("click", closeInfoDialog);
+  }
+
+  if (dismissInfoDialogBtn) {
+    dismissInfoDialogBtn.addEventListener("click", closeInfoDialog);
+  }
+
+  if (infoDialog) {
+    infoDialog.addEventListener("keydown", onInfoDialogKeydown);
+    infoDialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeInfoDialog();
+    });
+    infoDialog.addEventListener("click", (event) => {
+      if (event.target === infoDialog) closeInfoDialog();
+    });
+    if (!hasSeenInfoDialog()) openInfoDialog();
   }
 
   function removeStorageKeys(keys) {
