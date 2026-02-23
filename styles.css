@@ -43,6 +43,11 @@
   --map-shell-border: var(--border);
   --map-shell-bg: var(--panel);
   --map-shell-shadow: var(--shadow);
+  --leaflet-panel-bg: rgba(0, 0, 0, 0.35);
+  --leaflet-panel-bg-hover: rgba(0, 0, 0, 0.52);
+  --leaflet-panel-text: rgba(255, 255, 255, 0.90);
+  --leaflet-panel-link: rgba(255, 255, 255, 0.85);
+  --leaflet-panel-border: rgba(255, 255, 255, 0.10);
   --accent: #0275ff;
   --ok: #34d399;
   --warn: #fbbf24;
@@ -93,6 +98,11 @@ body[data-theme="light"] {
   --map-shell-shadow:
     0 14px 30px rgba(15, 23, 42, 0.14),
     0 2px 8px rgba(15, 23, 42, 0.10);
+  --leaflet-panel-bg: rgba(255, 255, 255, 0.92);
+  --leaflet-panel-bg-hover: rgba(255, 255, 255, 0.98);
+  --leaflet-panel-text: rgba(15, 23, 42, 0.86);
+  --leaflet-panel-link: rgba(15, 23, 42, 0.90);
+  --leaflet-panel-border: rgba(15, 23, 42, 0.22);
 }
 
 * { box-sizing: border-box; }
@@ -815,16 +825,48 @@ input {
 }
 
 .leaflet-control-attribution {
-  background: rgba(0, 0, 0, 0.35) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 10px;
-  padding: 2px 4px 2px 6px;
-  margin-right: 10px;
-  margin-bottom: 10px;
+  background: transparent !important;
+  color: inherit !important;
+  border: 0 !important;
+  border-radius: 0;
+  padding: 0;
+  margin-right: 10px !important;
+  margin-bottom: 5px !important;
+  backdrop-filter: none;
+  box-shadow: none;
+  color: rgba(0, 0, 0, 0.6) !important;
 }
 
-.leaflet-control-attribution a { color: rgba(255, 255, 255, 0.85) !important; }
+.leaflet-control-attribution a {
+  color: inherit !important;
+}
+
+.leaflet-attribution-flag {
+  display: none !important;
+}
+
+.leaflet-bar {
+  background: var(--leaflet-panel-bg) !important;
+  border: 1px solid var(--leaflet-panel-border) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: none !important;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: transparent !important;
+  color: var(--leaflet-panel-text) !important;
+  border-bottom: 1px solid var(--leaflet-panel-border) !important;
+}
+
+.leaflet-bar a:hover {
+  background: var(--leaflet-panel-bg-hover) !important;
+}
+
+.leaflet-bar a:last-child {
+  border-bottom: 0 !important;
+}
 
 .leaflet-top.leaflet-left {
   display: flex;
@@ -921,6 +963,17 @@ input {
   color: var(--sidebar-toggle-icon-hover);
 }
 
+body:not([data-theme="light"]) .tvt-sidebar-toggle-btn {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body:not([data-theme="light"]) .tvt-sidebar-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.52);
+  color: rgba(255, 255, 255, 0.92);
+}
+
 /* HUD */
 .tvt-hud {
   display: grid;
@@ -938,6 +991,11 @@ input {
   cursor: pointer;
   user-select: none;
   font-size: 12px;
+}
+
+body:not([data-theme="light"]) .tvt-hud {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .tvt-hud-image {
@@ -1140,6 +1198,12 @@ body[data-theme="light"] .theme-toggle-btn::after {
   border-radius: 12px;
   color: var(--text);
   max-width: 220px;
+  margin-bottom: 5px !important;
+}
+
+body:not([data-theme="light"]) .tvt-legend {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .tvt-legend-row {
