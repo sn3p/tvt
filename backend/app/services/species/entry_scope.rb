@@ -4,6 +4,8 @@ module Species
     TRUE_VALUES = %w[1 true yes on].freeze
     FALSE_VALUES = %w[0 false no off].freeze
 
+    attr_reader :bbox, :include_isorg, :include_private, :pc4, :scope, :year
+
     def initialize(area_slug:, year:, pc4: nil, include_private: nil, include_isorg: nil, scope: nil, bbox: nil)
       @area = Areas::Catalog.fetch!(area_slug)
       @year = Integer(year)
@@ -25,7 +27,7 @@ module Species
 
     private
 
-    attr_reader :area, :year, :pc4, :include_private, :include_isorg, :scope, :bbox
+    attr_reader :area
 
     def allowed_pc4_codes
       @allowed_pc4_codes ||= area.pc4_codes
@@ -34,8 +36,7 @@ module Species
     def normalize_pc4(value)
       str = value.to_s.strip
       return nil if str.empty?
-      match = str.match(/\A\d{4}\z/)
-      raise ArgumentError, "invalid pc4" unless match
+      raise ArgumentError, "invalid pc4" unless str.match?(/\A\d{4}\z/)
 
       str
     end

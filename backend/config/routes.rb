@@ -7,6 +7,7 @@ Rails.application.routes.draw do
       get "years/:year/entries/:id/top_birds", to: "entries#top_birds"
       get "areas/:area/species_manifest", to: "area_species#manifest"
       get "areas/:area/species_catalog", to: "area_species#catalog"
+      get "areas/:area/species_grid", to: "area_species#grid"
     end
   end
 

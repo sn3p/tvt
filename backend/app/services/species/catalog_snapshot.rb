@@ -12,8 +12,6 @@ module Species
         bbox: bbox,
       )
       @year = Integer(year)
-      @pc4 = pc4.to_s.strip.presence
-      @scope = entry_scope.send(:scope)
     end
 
     def as_json(*)
@@ -25,12 +23,12 @@ module Species
           code: area.code,
         },
         year: year,
-        scope: scope,
+        scope: entry_scope.scope,
         filters: {
-          pc4: pc4,
-          include_private: include_private?,
-          include_isorg: include_isorg?,
-          bbox: entry_scope_bbox,
+          pc4: entry_scope.pc4,
+          include_private: entry_scope.include_private,
+          include_isorg: entry_scope.include_isorg,
+          bbox: serialized_bbox,
         },
         species: species_rows,
       }
@@ -38,7 +36,7 @@ module Species
 
     private
 
-    attr_reader :area, :entry_scope, :year, :pc4, :scope
+    attr_reader :area, :entry_scope, :year
 
     def base_relation
       @base_relation ||= EntryBirdCount.joins(:entry, :bird).merge(entry_scope.relation)
@@ -68,18 +66,10 @@ module Species
       end
     end
 
-    def include_private?
-      entry_scope.relation.where_values_hash.fetch("is_org", nil) != true
-    end
+    def serialized_bbox
+      return nil unless entry_scope.scope == "viewport"
 
-    def include_isorg?
-      entry_scope.relation.where_values_hash.fetch("is_org", nil) != false
-    end
-
-    def entry_scope_bbox
-      return nil unless scope == "viewport"
-
-      bbox = entry_scope.send(:bbox)
+      bbox = entry_scope.bbox
       [bbox[:west], bbox[:south], bbox[:east], bbox[:north]]
     end
   end

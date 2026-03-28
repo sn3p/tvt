@@ -18,6 +18,26 @@ module Api
         render json: { error: "invalid species catalog parameters" }, status: :unprocessable_entity
       end
 
+      def grid
+        snapshot = Species::GridSnapshot.new(
+          area_slug: params[:area],
+          year: params[:year],
+          bird_id: params[:bird_id],
+          metric: params[:metric],
+          cell_size_m: params[:cell_size_m],
+          min_n: params[:min_n] || 1,
+          pc4: params[:pc4],
+          include_private: params[:include_private],
+          include_isorg: params[:include_isorg],
+          bbox: params[:bbox],
+        )
+        render json: snapshot.as_json
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "area not found" }, status: :not_found
+      rescue ArgumentError, TypeError
+        render json: { error: "invalid species grid parameters" }, status: :unprocessable_entity
+      end
+
       def manifest
         snapshot = Species::ManifestSnapshot.new(area_slug: params[:area], year: params[:year])
         render json: snapshot.as_json

@@ -304,6 +304,85 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     ], body["species"]
   end
 
+  test "species grid returns aggregated viewport cells" do
+    inside_a = Entry.create!(
+      year: 2026,
+      external_id: 3201,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+    inside_b = Entry.create!(
+      year: 2026,
+      external_id: 3202,
+      pc4: "9711",
+      lat: 53.2200,
+      lng: 6.5680,
+      is_org: true,
+    )
+    inside_c = Entry.create!(
+      year: 2026,
+      external_id: 3203,
+      pc4: "9721",
+      lat: 53.2210,
+      lng: 6.5690,
+      is_org: false,
+    )
+    outside_bbox = Entry.create!(
+      year: 2026,
+      external_id: 3204,
+      pc4: "9721",
+      lat: 53.3000,
+      lng: 6.8000,
+      is_org: false,
+    )
+
+    ekster = Bird.create!(external_id: 9, name: "Ekster")
+    merel = Bird.create!(external_id: 50, name: "Merel")
+
+    EntryBirdCount.create!(entry: inside_a, bird: ekster, rank: 1, count: 3, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: inside_b, bird: ekster, rank: 1, count: 1, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: inside_c, bird: merel, rank: 1, count: 2, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: outside_bbox, bird: ekster, rank: 1, count: 8, bird_name_cache: "Ekster")
+
+    get "/api/v1/areas/groningen/species_grid", params: {
+      year: 2026,
+      bird_id: 9,
+      metric: "presence",
+      bbox: "6.55,53.21,6.58,53.23",
+      cell_size_m: 100000,
+      min_n: 1,
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 9, body["bird_id"]
+    assert_equal "presence", body["metric"]
+    assert_equal 100000, body["cell_size_m"]
+    assert_equal 1, body["min_n"]
+    assert_equal [6.55, 53.21, 6.58, 53.23], body.dig("filters", "bbox")
+    assert_equal 1, body["cells"].length
+    cell = body["cells"].first
+    assert_equal 3, cell["entry_count"]
+    assert_equal 2, cell["with_count"]
+    assert_equal 4, cell["sum_count"]
+    assert_in_delta (2.0 / 3.0), cell["value"], 0.0001
+  end
+
+  test "species grid rejects invalid parameters" do
+    get "/api/v1/areas/groningen/species_grid", params: {
+      year: 2026,
+      bird_id: 9,
+      metric: "presence",
+      cell_size_m: 1000,
+    }
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid species grid parameters", body["error"]
+  end
+
   test "species catalog rejects invalid parameters" do
     get "/api/v1/areas/groningen/species_catalog", params: { year: 2026, scope: "viewport" }
 
