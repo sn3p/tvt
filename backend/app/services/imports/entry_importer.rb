@@ -47,7 +47,7 @@ module Imports
 
     def ingest_mode(records, year:, mode:, is_org:)
       source.entry_index_files(year:, mode:).each do |path|
-        path.foreach(chomp: true) do |line|
+        path.each_line(chomp: true) do |line|
           next if line.blank?
 
           row = JSON.parse(line)

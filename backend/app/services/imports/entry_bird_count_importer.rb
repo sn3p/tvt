@@ -68,7 +68,7 @@ module Imports
       payloads = {}
 
       source.entry_top_birds_files(year:).each do |path|
-        path.foreach(chomp: true) do |line|
+        path.each_line(chomp: true) do |line|
           next if line.blank?
 
           row = JSON.parse(line)

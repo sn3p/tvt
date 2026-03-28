@@ -11,7 +11,6 @@ class CreateEntryBirdCounts < ActiveRecord::Migration[7.2]
     end
 
     add_index :entry_bird_counts, [:entry_id, :bird_id], unique: true
-    add_index :entry_bird_counts, :bird_id
     add_index :entry_bird_counts, [:entry_id, :rank]
   end
 end
