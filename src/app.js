@@ -800,6 +800,19 @@ export function initApp() {
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
+  let activePointTilesSourceLabel = "backend";
+  let activePointDetailsSourceLabel = "backend";
+  let pointSourceStatusMessage = "";
+
+  function setPointSourceStatus(message = "") {
+    pointSourceStatusMessage = String(message || "").trim();
+  }
+
+  function pointSourceSummaryText() {
+    const parts = [`punten: ${activePointTilesSourceLabel}`, `details: ${activePointDetailsSourceLabel}`];
+    if (pointSourceStatusMessage) parts.push(pointSourceStatusMessage);
+    return parts.join(" • ");
+  }
 
   async function getPointManifest() {
     try {
@@ -808,6 +821,8 @@ export function initApp() {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
       console.warn("Backend point manifest load failed, falling back to static tiles:", err);
       pointTilesSource = pointTilesFallbackSource;
+      activePointTilesSourceLabel = "fallback";
+      setPointSourceStatus("backend punten niet beschikbaar; statische tiles gebruikt");
       return pointTilesSource.getManifest();
     }
   }
@@ -819,6 +834,8 @@ export function initApp() {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
       console.warn("Backend point tile load failed, falling back to static tiles:", err);
       pointTilesSource = pointTilesFallbackSource;
+      activePointTilesSourceLabel = "fallback";
+      setPointSourceStatus("backend punten niet beschikbaar; statische tiles gebruikt");
       return pointTilesSource.getPointTile(params);
     }
   }
@@ -1066,7 +1083,7 @@ export function initApp() {
 
       const provisional = document.createElement("span");
       provisional.className = "stats-provisional";
-      provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+      provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal) • ${pointSourceSummaryText()}`;
 
       statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
       if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
@@ -1095,7 +1112,7 @@ export function initApp() {
 
     const provisional = document.createElement("span");
     provisional.className = "stats-provisional";
-    provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+    provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal) • ${pointSourceSummaryText()}`;
 
     statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
 
@@ -2201,8 +2218,11 @@ export function initApp() {
       let birds;
       try {
         birds = await pointDetailsSource.getEntryTopBirds({ year, id });
+        activePointDetailsSourceLabel = "backend";
       } catch (_backendErr) {
         birds = await pointTilesFallbackSource.getEntryTopBirds({ year, id, limit: 9999 });
+        activePointDetailsSourceLabel = "upstream";
+        setPointSourceStatus("backend details niet beschikbaar; upstream endpoint gebruikt");
       }
       pointEntryDetailsByKey.set(key, birds);
       return birds;
