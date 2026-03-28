@@ -22,6 +22,20 @@ bundle install
 bin/rails db:prepare
 ```
 
+## Local runbook
+
+```bash
+bin/rails tvt:import_all
+bin/rails server
+```
+
+Inspect current backend status:
+
+```bash
+bin/rails tvt:status
+curl http://localhost:3000/api/v1/status
+```
+
 ## Import harvested data
 
 Import all harvested years visible in `../tvt-harvest/data/raw`:
@@ -49,6 +63,8 @@ If `tvt-harvest` is not in the expected sibling location, set:
 TVT_HARVEST_ROOT=/absolute/path/to/tvt-harvest
 ```
 
+Each import/rebuild task prints a per-year JSON summary after it finishes.
+
 ## Run the server
 
 ```bash
@@ -64,6 +80,20 @@ Useful endpoints:
 - `GET /up`
 - `GET /api/v1/status`
 - `GET /api/v1/point_tiles/manifest`
+
+## Runtime / deployment notes
+
+- local frontend defaults to `http://localhost:3000/api/v1`
+- non-local frontend defaults to same-origin `/api/v1`
+- CORS is only needed when frontend and backend are on different origins
+- set `TVT_ALLOWED_ORIGINS` to a comma-separated allowlist when you do need cross-origin access
+- keep `TVT_ALLOWED_ORIGINS` empty for same-origin deployments
+
+Example:
+
+```bash
+TVT_ALLOWED_ORIGINS=https://app.example.com,https://staging.example.com
+```
 
 ## Test
 

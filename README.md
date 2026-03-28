@@ -32,7 +32,16 @@ Start de backend:
 cd backend
 bundle install
 bin/rails db:prepare
+bin/rails tvt:import_all
 bin/rails server
+```
+
+Inspecteer backend status:
+
+```bash
+cd backend
+bin/rails tvt:status
+curl http://localhost:3000/api/v1/status
 ```
 
 Importeer harvested data uit `../tvt-harvest`:
@@ -78,6 +87,7 @@ Belangrijk:
 - `entryTopBirdsApiBase` bepaalt het upstream detail-endpoint voor expliciete fallback
 - `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
 - `allowStaticDataFallback` en `allowUpstreamDetailsFallback` staan lokaal standaard aan, maar in niet-lokale omgevingen standaard uit
+- voor cross-origin frontend/backend deployments moet de backend `TVT_ALLOWED_ORIGINS` expliciet toestaan
 - je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
