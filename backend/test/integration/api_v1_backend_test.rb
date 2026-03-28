@@ -192,6 +192,126 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert body["latest_update_utc"].present?
   end
 
+  test "species catalog returns scoped species aggregates" do
+    private_inside = Entry.create!(
+      year: 2026,
+      external_id: 3001,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+    isorg_inside = Entry.create!(
+      year: 2026,
+      external_id: 3002,
+      pc4: "9711",
+      lat: 53.2200,
+      lng: 6.5680,
+      is_org: true,
+    )
+    private_other_pc4 = Entry.create!(
+      year: 2026,
+      external_id: 3003,
+      pc4: "9731",
+      lat: 53.2300,
+      lng: 6.5900,
+      is_org: false,
+    )
+    outside_bbox = Entry.create!(
+      year: 2026,
+      external_id: 3004,
+      pc4: "9721",
+      lat: 53.2600,
+      lng: 6.7000,
+      is_org: false,
+    )
+
+    ekster = Bird.create!(external_id: 9, name: "Ekster")
+    merel = Bird.create!(external_id: 50, name: "Merel")
+    kauw = Bird.create!(external_id: 26, name: "Kauw")
+
+    EntryBirdCount.create!(entry: private_inside, bird: ekster, rank: 1, count: 3, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: private_inside, bird: merel, rank: 2, count: 1, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: isorg_inside, bird: ekster, rank: 1, count: 1, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: isorg_inside, bird: kauw, rank: 2, count: 5, bird_name_cache: "Kauw")
+    EntryBirdCount.create!(entry: private_other_pc4, bird: merel, rank: 1, count: 4, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: outside_bbox, bird: merel, rank: 1, count: 7, bird_name_cache: "Merel")
+
+    get "/api/v1/areas/groningen/species_catalog", params: {
+      year: 2026,
+      scope: "viewport",
+      bbox: "6.55,53.21,6.58,53.23",
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "viewport", body["scope"]
+    assert_equal [6.55, 53.21, 6.58, 53.23], body.dig("filters", "bbox")
+    assert_equal [
+      { "bird_id" => 9, "name" => "Ekster", "with_count" => 2, "sum_count" => 4 },
+      { "bird_id" => 26, "name" => "Kauw", "with_count" => 1, "sum_count" => 5 },
+      { "bird_id" => 50, "name" => "Merel", "with_count" => 1, "sum_count" => 1 },
+    ], body["species"]
+  end
+
+  test "species catalog applies pc4 and mode filters" do
+    private_entry = Entry.create!(
+      year: 2026,
+      external_id: 3101,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+    isorg_entry = Entry.create!(
+      year: 2026,
+      external_id: 3102,
+      pc4: "9721",
+      lat: 53.2200,
+      lng: 6.5680,
+      is_org: true,
+    )
+    other_pc4 = Entry.create!(
+      year: 2026,
+      external_id: 3103,
+      pc4: "9711",
+      lat: 53.2210,
+      lng: 6.5690,
+      is_org: true,
+    )
+
+    ekster = Bird.create!(external_id: 9, name: "Ekster")
+    merel = Bird.create!(external_id: 50, name: "Merel")
+
+    EntryBirdCount.create!(entry: private_entry, bird: ekster, rank: 1, count: 2, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: isorg_entry, bird: merel, rank: 1, count: 3, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: other_pc4, bird: ekster, rank: 1, count: 4, bird_name_cache: "Ekster")
+
+    get "/api/v1/areas/groningen/species_catalog", params: {
+      year: 2026,
+      pc4: "9721",
+      include_private: 0,
+      include_isorg: 1,
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "9721", body.dig("filters", "pc4")
+    assert_equal false, body.dig("filters", "include_private")
+    assert_equal true, body.dig("filters", "include_isorg")
+    assert_equal [
+      { "bird_id" => 50, "name" => "Merel", "with_count" => 1, "sum_count" => 3 },
+    ], body["species"]
+  end
+
+  test "species catalog rejects invalid parameters" do
+    get "/api/v1/areas/groningen/species_catalog", params: { year: 2026, scope: "viewport" }
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid species catalog parameters", body["error"]
+  end
+
   test "species manifest rejects invalid parameters" do
     get "/api/v1/areas/groningen/species_manifest", params: { year: "not-a-year" }
 
