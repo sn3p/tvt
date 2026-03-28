@@ -3190,12 +3190,35 @@ export function initApp() {
       const sampleTile = await getPointTile({ year, mode, z, x, y });
 
       globalThis.__tvtPointTilesProbe = {
+        ok: true,
         manifest,
         sampleTile,
         request: { year, mode, z, x, y },
       };
     } catch (err) {
+      globalThis.__tvtPointTilesProbe = {
+        ok: false,
+        error: err?.message || String(err),
+      };
       console.warn("Point tiles source probe failed:", err);
+    }
+  }
+
+  async function probeBackendStatus() {
+    try {
+      const status = await pointTilesPrimarySource.getStatus();
+      globalThis.__tvtBackendStatusProbe = {
+        ok: true,
+        status,
+        fetchedAtUtc: new Date().toISOString(),
+      };
+    } catch (err) {
+      globalThis.__tvtBackendStatusProbe = {
+        ok: false,
+        error: err?.message || String(err),
+        fetchedAtUtc: new Date().toISOString(),
+      };
+      console.warn("Backend status probe failed:", err);
     }
   }
 
@@ -3258,6 +3281,7 @@ export function initApp() {
   });
 
   // Initial load (defaults to the year input value).
+  probeBackendStatus();
   probePointTilesSource();
   loadForYear(Number(yearInput.value || 0) || 0);
 }

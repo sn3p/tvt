@@ -19,6 +19,10 @@ export class DataSource {
   async getEntryTopBirds(_params) {
     throw new Error("DataSource.getEntryTopBirds() not implemented");
   }
+
+  async getStatus() {
+    throw new Error("DataSource.getStatus() not implemented");
+  }
 }
 
 function joinUrl(baseUrl, path) {
@@ -359,5 +363,12 @@ export class BackendApiSource extends DataSource {
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point details (${url})`);
     return normalizeBirdRows(await r.json());
+  }
+
+  async getStatus({ signal } = {}) {
+    const url = joinUrl(this.baseUrl, "status");
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend status (${url})`);
+    return r.json();
   }
 }
