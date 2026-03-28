@@ -30,6 +30,9 @@ module Species
           include_isorg: entry_scope.include_isorg,
           bbox: serialized_bbox,
         },
+        entry_count: entries.count,
+        private_entries_count: entries.where(is_org: false).count,
+        isorg_entries_count: entries.where(is_org: true).count,
         species: species_rows,
       }
     end
@@ -38,8 +41,12 @@ module Species
 
     attr_reader :area, :entry_scope, :year
 
+    def entries
+      @entries ||= entry_scope.relation
+    end
+
     def base_relation
-      @base_relation ||= EntryBirdCount.joins(:entry, :bird).merge(entry_scope.relation)
+      @base_relation ||= EntryBirdCount.joins(:entry, :bird).merge(entries)
     end
 
     def species_rows

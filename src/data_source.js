@@ -24,6 +24,18 @@ export class DataSource {
   async getStatus() {
     throw new Error("DataSource.getStatus() not implemented");
   }
+
+  async getSpeciesManifest(_params) {
+    throw new Error("DataSource.getSpeciesManifest() not implemented");
+  }
+
+  async getSpeciesCatalog(_params) {
+    throw new Error("DataSource.getSpeciesCatalog() not implemented");
+  }
+
+  async getSpeciesGrid(_params) {
+    throw new Error("DataSource.getSpeciesGrid() not implemented");
+  }
 }
 
 function joinUrl(baseUrl, path) {
@@ -45,6 +57,22 @@ function applyTemplate(template, vars) {
     if (!(key in vars)) throw new Error(`missing template variable: ${key}`);
     return encodeURIComponent(String(vars[key]));
   });
+}
+
+function appendIfPresent(params, key, value) {
+  if (value == null) return;
+  const text = String(value).trim();
+  if (!text) return;
+  params.set(key, text);
+}
+
+function bboxToParam(bbox) {
+  if (!bbox) return "";
+  if (Array.isArray(bbox) && bbox.length === 4) {
+    return bbox.map((v) => Number(v)).join(",");
+  }
+  const { west, south, east, north } = boundsToEdges(bbox);
+  return [west, south, east, north].join(",");
 }
 
 function clamp(value, min, max) {
@@ -370,6 +398,51 @@ export class BackendApiSource extends DataSource {
     const url = joinUrl(this.baseUrl, "status");
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend status (${url})`);
+    return r.json();
+  }
+
+  async getSpeciesManifest({ year, area = "groningen", signal } = {}) {
+    const safeYear = toSafeInt(year, "year");
+    const safeArea = String(area || "groningen").trim() || "groningen";
+    const params = new URLSearchParams({ year: String(safeYear) });
+    const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_manifest?${params.toString()}`);
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species manifest (${url})`);
+    return r.json();
+  }
+
+  async getSpeciesCatalog({ year, area = "groningen", pc4, includePrivate = true, includeIsorg = true, scope = "all", bbox, signal } = {}) {
+    const safeYear = toSafeInt(year, "year");
+    const safeArea = String(area || "groningen").trim() || "groningen";
+    const params = new URLSearchParams({ year: String(safeYear), scope: String(scope || "all") });
+    appendIfPresent(params, "pc4", pc4);
+    params.set("include_private", includePrivate ? "1" : "0");
+    params.set("include_isorg", includeIsorg ? "1" : "0");
+    if (scope === "viewport") appendIfPresent(params, "bbox", bboxToParam(bbox));
+    const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_catalog?${params.toString()}`);
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species catalog (${url})`);
+    return r.json();
+  }
+
+  async getSpeciesGrid({ year, area = "groningen", birdId, metric, cellSizeM, minN = 1, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
+    const safeYear = toSafeInt(year, "year");
+    const safeBirdId = toSafeInt(birdId, "birdId");
+    const safeArea = String(area || "groningen").trim() || "groningen";
+    const params = new URLSearchParams({
+      year: String(safeYear),
+      bird_id: String(safeBirdId),
+      metric: String(metric || "presence"),
+      cell_size_m: String(toSafeInt(cellSizeM, "cellSizeM")),
+      min_n: String(toSafeInt(minN, "minN")),
+    });
+    appendIfPresent(params, "pc4", pc4);
+    params.set("include_private", includePrivate ? "1" : "0");
+    params.set("include_isorg", includeIsorg ? "1" : "0");
+    appendIfPresent(params, "bbox", bboxToParam(bbox));
+    const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_grid?${params.toString()}`);
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species grid (${url})`);
     return r.json();
   }
 }

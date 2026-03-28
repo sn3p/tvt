@@ -42,6 +42,7 @@ module Species
           include_isorg: entry_scope.include_isorg,
           bbox: serialized_bbox,
         },
+        summary: summary,
         cells: cells,
       }
     end
@@ -56,6 +57,19 @@ module Species
 
     def cells
       @cells ||= begin
+        grouped.values.filter_map do |cell|
+          next if cell[:entry_count] < min_n
+
+          value = metric_value(cell)
+          next unless value.positive?
+
+          cell.merge(value: value)
+        end.sort_by { |cell| [cell[:iy], cell[:ix]] }
+      end
+    end
+
+    def grouped
+      @grouped ||= begin
         grouped = Hash.new { |hash, key| hash[key] = { ix: key[0], iy: key[1], entry_count: 0, with_count: 0, sum_count: 0 } }
 
         entries.each do |entry|
@@ -70,14 +84,21 @@ module Species
           cell[:sum_count] += count
         end
 
-        grouped.values.filter_map do |cell|
-          next if cell[:entry_count] < min_n
+        grouped
+      end
+    end
 
-          value = metric_value(cell)
-          next unless value.positive?
-
-          cell.merge(value: value)
-        end.sort_by { |cell| [cell[:iy], cell[:ix]] }
+    def summary
+      @summary ||= begin
+        entry_count = entries.length
+        with_count = grouped.values.sum { |cell| cell[:with_count].to_i }
+        sum_count = grouped.values.sum { |cell| cell[:sum_count].to_i }
+        {
+          entry_count: entry_count,
+          with_count: with_count,
+          sum_count: sum_count,
+          avg_count: entry_count.positive? ? (sum_count.to_f / entry_count) : 0.0,
+        }
       end
     end
 

@@ -809,6 +809,20 @@ export function initApp() {
   let pointTilesFallbackDeclined = false;
   let pointTilesFallbackAccepted = false;
   let pointSourceStatusMessage = "";
+  const speciesSource = new BackendApiSource();
+  let speciesManifest = null;
+  let speciesCatalogRows = [];
+  let speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+  let speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+  let speciesUseStaticFallback = false;
+  let speciesFallbackAccepted = false;
+  let speciesFallbackDeclined = false;
+  let speciesBackendUnavailable = false;
+  let speciesCatalogFetchTimer = 0;
+  let speciesCatalogAbortController = null;
+  let speciesGridAbortController = null;
+  let speciesCatalogSeq = 0;
+  let speciesGridSeq = 0;
 
   function pointSourceSummaryText() {
     const parts = [`punten: ${activePointTilesSourceLabel}`, `details: ${activePointDetailsSourceLabel}`];
@@ -920,6 +934,309 @@ export function initApp() {
       activePointTilesSourceLabel = "fallback";
       refreshPointSourceStatus();
       return pointTilesSource.getPointTile(params);
+    }
+  }
+
+  function confirmSpeciesFallback() {
+    if (!ALLOW_STATIC_DATA_FALLBACK) return false;
+    if (speciesFallbackAccepted) return true;
+    if (speciesFallbackDeclined) return false;
+
+    const accepted = window.confirm(
+      "Backend soortendata is niet beschikbaar.\n\nWil je doorgaan met lokale fallback-data?"
+    );
+
+    speciesFallbackAccepted = accepted;
+    speciesFallbackDeclined = !accepted;
+    return accepted;
+  }
+
+  function currentSpeciesBounds() {
+    try {
+      return map.getBounds();
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadStaticSpeciesDataset(year, seq) {
+    const json = await loadMunicipalityDataset({ year, area: "groningen" });
+    if (seq !== loadSeq) return;
+
+    dataset = json;
+    datasetYear = year;
+    didFitOnce = false;
+
+    prepareDataset(json);
+    speciesManifest = null;
+    speciesCatalogRows = [];
+    speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+    speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+
+    if (!speciesIndex || speciesIndex.length === 0) {
+      try {
+        const guide = await loadBirdguide();
+        if (seq !== loadSeq) return;
+        speciesIndex = (Array.isArray(guide) ? guide : [])
+          .map((name) => ({ id: null, name: String(name || "").trim() }))
+          .filter((s) => s.name)
+          .sort((a, b) => a.name.localeCompare(b.name, "nl"));
+      } catch {
+        // ignore fallback failure
+      }
+    }
+
+    if (selectedSpecies) {
+      const ok = speciesIndex.some((s) => s.id === selectedSpecies.id && s.name === selectedSpecies.name);
+      if (!ok) setSelectedSpecies(null);
+    }
+
+    setComputing(false);
+    renderSpeciesList({ query: speciesSearchInput.value });
+    render();
+  }
+
+  function scheduleSpeciesCatalogFetch({ immediate = false } = {}) {
+    if (speciesCatalogFetchTimer) window.clearTimeout(speciesCatalogFetchTimer);
+    if (mode !== "species" || speciesUseStaticFallback) return;
+
+    const run = () => {
+      speciesCatalogFetchTimer = 0;
+      refreshSpeciesCatalog();
+    };
+
+    if (immediate) {
+      run();
+      return;
+    }
+
+    speciesCatalogFetchTimer = window.setTimeout(run, 120);
+  }
+
+  async function refreshSpeciesCatalog() {
+    if (mode !== "species" || speciesUseStaticFallback) return;
+
+    const year = Number(yearInput.value || 0) || 0;
+    if (!year) return;
+
+    const seq = ++speciesCatalogSeq;
+    const controller = new AbortController();
+    if (speciesCatalogAbortController) speciesCatalogAbortController.abort();
+    speciesCatalogAbortController = controller;
+
+    try {
+      const bounds = speciesScope === "viewport" ? currentSpeciesBounds() : null;
+      const json = await speciesSource.getSpeciesCatalog({
+        year,
+        area: "groningen",
+        pc4: normalizePc4(pc4Input.value),
+        includePrivate: true,
+        includeIsorg: true,
+        scope: speciesScope,
+        bbox: bounds,
+        signal: controller.signal,
+      });
+      if (seq !== speciesCatalogSeq || mode !== "species" || speciesUseStaticFallback) return;
+
+      speciesBackendUnavailable = false;
+      speciesCatalogRows = Array.isArray(json?.species)
+        ? json.species.map((row) => ({
+          id: Number(row?.bird_id ?? NaN),
+          name: String(row?.name ?? "").trim(),
+          withCount: Number(row?.with_count ?? 0) || 0,
+          sumCount: Number(row?.sum_count ?? 0) || 0,
+        })).filter((row) => Number.isFinite(row.id) && row.name)
+        : [];
+      speciesIndex = speciesCatalogRows.map((row) => ({ id: row.id, name: row.name }));
+      speciesCatalogStats = {
+        entryCount: Number(json?.entry_count ?? 0) || 0,
+        privateCount: Number(json?.private_entries_count ?? 0) || 0,
+        isorgCount: Number(json?.isorg_entries_count ?? 0) || 0,
+      };
+
+      if (selectedSpecies) {
+        const ok = speciesCatalogRows.some((row) => row.id === selectedSpecies.id && row.name === selectedSpecies.name);
+        if (!ok) setSelectedSpecies(null);
+      }
+
+      renderSpeciesList({ query: speciesSearchInput.value });
+      updateViewportStats();
+    } catch (err) {
+      if (isAbortError(err)) return;
+      speciesBackendUnavailable = true;
+      if (confirmSpeciesFallback()) {
+        speciesUseStaticFallback = true;
+        await loadForYear(year);
+        return;
+      }
+      if (mode === "species") {
+        statsEl.textContent = `Soortencatalogus laden mislukt: ${err?.message || String(err)}`;
+      }
+    } finally {
+      if (speciesCatalogAbortController === controller) speciesCatalogAbortController = null;
+    }
+  }
+
+  function speciesSummaryFromGridResponse(json) {
+    return {
+      total: Number(json?.summary?.entry_count ?? 0) || 0,
+      with: Number(json?.summary?.with_count ?? 0) || 0,
+      sum: Number(json?.summary?.sum_count ?? 0) || 0,
+      avg: Number(json?.summary?.avg_count ?? 0) || 0,
+    };
+  }
+
+  function renderBackendSpeciesGrid(json) {
+    const cells = Array.isArray(json?.cells) ? json.cells : [];
+    if (!cells.length) {
+      updateGridLegend({ metric, maxMetric: 0, effectiveStyle: style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style });
+      setComputing(false);
+      updateHud();
+      return;
+    }
+
+    const effectiveStyle = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
+    let maxMetric = 0;
+    for (const cell of cells) {
+      const value = Number(cell?.value ?? 0) || 0;
+      if (value > maxMetric) maxMetric = value;
+    }
+    updateGridLegend({ metric, maxMetric, effectiveStyle });
+
+    const crs = map.options.crs;
+    for (const cell of cells) {
+      const total = Number(cell?.entry_count ?? 0) || 0;
+      const withN = Number(cell?.with_count ?? 0) || 0;
+      const sum = Number(cell?.sum_count ?? 0) || 0;
+      const value = Number(cell?.value ?? 0) || 0;
+      if (!value) continue;
+
+      const vNorm =
+        metric === "presence"
+          ? clamp01(value)
+          : (maxMetric ? clamp01(value / maxMetric) : 0);
+      if (!vNorm) continue;
+
+      const nScale = Math.min(1, Math.sqrt(total) / 3);
+      const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
+      const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
+      const fillColor = colorFromBluesRamp(applyHighEndGamma(vNorm));
+
+      const ix = Number(cell?.ix ?? 0) || 0;
+      const iy = Number(cell?.iy ?? 0) || 0;
+      const x0m = ix * cellSizeM;
+      const y0m = iy * cellSizeM;
+      const x1m = x0m + cellSizeM;
+      const y1m = y0m + cellSizeM;
+      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
+      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
+      const bb = globalThis.L.latLngBounds(sw, ne);
+
+      let tooltip = `<b>${selectedSpecies?.name || "Soort"}</b> — `;
+      switch (metric) {
+        case "presence": {
+          const pct = formatNumber((total ? (withN / total) * 100 : 0), { maxDecimals: 1 });
+          tooltip += `aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen (${pct}%)`;
+          break;
+        }
+        case "avg": {
+          const avgFmt = formatNumber((total ? sum / total : 0), { maxDecimals: 2 });
+          tooltip += `gemiddeld ${avgFmt} per inzending in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
+          break;
+        }
+        default: {
+          const sumFmt = formatNumber(sum, { maxDecimals: 0 });
+          tooltip += `totaal ${sumFmt} geteld in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
+          break;
+        }
+      }
+
+      if (effectiveStyle === "heatmap") {
+        const cxm = x0m + cellSizeM / 2;
+        const cym = y0m + cellSizeM / 2;
+        const center = crs.unproject(globalThis.L.point(cxm, cym));
+        const circle = globalThis.L.circle(center, {
+          radius: Math.max(30, cellSizeM * 0.6),
+          stroke: false,
+          fillColor,
+          fillOpacity,
+        });
+        circle.bindTooltip(tooltip, { sticky: false });
+        circle.addTo(gridLayer);
+      } else {
+        const rect = globalThis.L.rectangle(bb, {
+          color: "rgba(255,255,255,0.18)",
+          weight: 1,
+          fillColor,
+          fillOpacity,
+        });
+        rect.bindTooltip(tooltip, { sticky: false });
+        rect.addTo(gridLayer);
+      }
+    }
+  }
+
+  async function computeBackendSpeciesGrid() {
+    gridLayer.clearLayers();
+    if (!selectedSpecies) {
+      speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+      setComputing(false);
+      updateHud();
+      return;
+    }
+
+    const bounds = currentSpeciesBounds();
+    if (!bounds) {
+      setComputing(false);
+      return;
+    }
+
+    const year = Number(yearInput.value || 0) || 0;
+    if (!year) {
+      setComputing(false);
+      return;
+    }
+
+    const seq = ++speciesGridSeq;
+    const controller = new AbortController();
+    if (speciesGridAbortController) speciesGridAbortController.abort();
+    speciesGridAbortController = controller;
+    setComputing(true);
+
+    try {
+      const json = await speciesSource.getSpeciesGrid({
+        year,
+        area: "groningen",
+        birdId: selectedSpecies.id,
+        metric,
+        cellSizeM: gridCellM,
+        minN,
+        pc4: normalizePc4(pc4Input.value),
+        includePrivate: true,
+        includeIsorg: true,
+        bbox: bounds,
+        signal: controller.signal,
+      });
+      if (seq !== speciesGridSeq || mode !== "species" || speciesUseStaticFallback) return;
+
+      speciesBackendUnavailable = false;
+      speciesGridSummary = speciesSummaryFromGridResponse(json);
+      renderBackendSpeciesGrid(json);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      speciesBackendUnavailable = true;
+      if (confirmSpeciesFallback()) {
+        speciesUseStaticFallback = true;
+        await loadForYear(year);
+        return;
+      }
+      gridLayer.clearLayers();
+      setComputing(false);
+      statsEl.textContent = `Soortenraster laden mislukt: ${err?.message || String(err)}`;
+      updateHud();
+    } finally {
+      if (speciesGridAbortController === controller) speciesGridAbortController = null;
     }
   }
 
@@ -1151,6 +1468,27 @@ export function initApp() {
       b = map.getBounds();
     } catch {
       b = null;
+    }
+
+    if (mode === "species" && !speciesUseStaticFallback) {
+      const inScopeEntries = Number(speciesCatalogStats.entryCount) || 0;
+      hudStats = { entries: inScopeEntries, birds: 0 };
+
+      const main = document.createElement("span");
+      main.className = "stats-main";
+      main.textContent = speciesScope === "viewport"
+        ? `${fmtInt(inScopeEntries)} inzendingen in beeld`
+        : `${fmtInt(inScopeEntries)} inzendingen in selectie`;
+
+      const provisional = document.createElement("span");
+      provisional.className = "stats-provisional";
+      provisional.textContent = `${fmtInt(speciesCatalogStats.privateCount)} particulier • ${fmtInt(speciesCatalogStats.isorgCount)} school`;
+
+      statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+      if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${fmtInt(speciesCatalogStats.privateCount)})`;
+      if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${fmtInt(speciesCatalogStats.isorgCount)})`;
+      updateHud();
+      return;
     }
 
     if (mode === "points" && pointStatsOverride) {
@@ -1782,6 +2120,10 @@ export function initApp() {
     const out = { total: 0, with: 0, sum: 0, avg: 0 };
     if (!selectedSpecies) return out;
 
+    if (!speciesUseStaticFallback) {
+      return { ...speciesGridSummary };
+    }
+
     let bounds = null;
     try {
       bounds = map.getBounds();
@@ -1844,72 +2186,64 @@ export function initApp() {
 
   function renderSpeciesList({ query = "" } = {}) {
     const q = normalizeSpeciesName(query);
-    const baseAll = filteredPreparedEntries();
-    const bounds = (() => {
-      try {
-        return map.getBounds();
-      } catch {
-        return null;
-      }
-    })();
-    const base =
-      speciesScope === "all" || !bounds
-        ? baseAll
-        : baseAll.filter((p) => bounds.contains(p.latlng));
 
-    // Compute "most observed" stats within current scope (and current filters).
-    const statsByKey = new Map(); // key -> { with, sum }
-    for (const e of base) {
-      const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
-      for (const b of birds) {
-        const id = Number(b?.bird_id ?? NaN);
-        const name = String(b?.name ?? "").trim();
-        const key = Number.isFinite(id) ? `id:${id}` : `name:${normalizeSpeciesName(name)}`;
-        if (!key) continue;
-        const count = Number(b?.count ?? 0) || 0;
-        if (!statsByKey.has(key)) statsByKey.set(key, { with: 0, sum: 0 });
-        const st = statsByKey.get(key);
-        if (count > 0) st.with += 1;
-        st.sum += count;
-      }
-    }
+    const listBase = speciesUseStaticFallback
+      ? (() => {
+        const baseAll = filteredPreparedEntries();
+        const bounds = currentSpeciesBounds();
+        const base =
+          speciesScope === "all" || !bounds
+            ? baseAll
+            : baseAll.filter((p) => bounds.contains(p.latlng));
 
-    const inScope = speciesIndex.filter((s) => {
-      const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
-      return statsByKey.has(key);
-    });
+        const statsByKey = new Map();
+        for (const e of base) {
+          const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
+          for (const b of birds) {
+            const id = Number(b?.bird_id ?? NaN);
+            const name = String(b?.name ?? "").trim();
+            const key = Number.isFinite(id) ? `id:${id}` : `name:${normalizeSpeciesName(name)}`;
+            if (!key) continue;
+            const count = Number(b?.count ?? 0) || 0;
+            if (!statsByKey.has(key)) statsByKey.set(key, { with: 0, sum: 0 });
+            const st = statsByKey.get(key);
+            if (count > 0) st.with += 1;
+            st.sum += count;
+          }
+        }
 
-    // Expectation: list contains *observed* species under current filters (and scope).
-    const listUnfiltered = inScope;
+        return speciesIndex
+          .filter((s) => {
+            const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
+            return statsByKey.has(key);
+          })
+          .map((s) => {
+            const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
+            const st = statsByKey.get(key) || { with: 0, sum: 0 };
+            return { ...s, withCount: st.with, sumCount: st.sum };
+          });
+      })()
+      : speciesCatalogRows.slice();
 
     const listFiltered = q
-      ? listUnfiltered.filter((s) => normalizeSpeciesName(s.name).includes(q))
-      : listUnfiltered;
+      ? listBase.filter((s) => normalizeSpeciesName(s.name).includes(q))
+      : listBase;
 
-    const list =
-      speciesSort === "az"
-        ? listFiltered.slice().sort((a, b) => a.name.localeCompare(b.name, "nl"))
-        : listFiltered
-          .slice()
-          .sort((a, b) => {
-            const ka = a.id != null ? `id:${a.id}` : `name:${normalizeSpeciesName(a.name)}`;
-            const kb = b.id != null ? `id:${b.id}` : `name:${normalizeSpeciesName(b.name)}`;
-            const sa = statsByKey.get(ka) || { with: 0, sum: 0 };
-            const sb = statsByKey.get(kb) || { with: 0, sum: 0 };
-            // Most observed = N_with desc, then sum desc, then name.
-            if (sb.with !== sa.with) return sb.with - sa.with;
-            if (sb.sum !== sa.sum) return sb.sum - sa.sum;
-            return a.name.localeCompare(b.name, "nl");
-          });
+    const list = speciesSort === "az"
+      ? listFiltered.slice().sort((a, b) => a.name.localeCompare(b.name, "nl"))
+      : listFiltered.slice().sort((a, b) => {
+        if ((b.withCount || 0) !== (a.withCount || 0)) return (b.withCount || 0) - (a.withCount || 0);
+        if ((b.sumCount || 0) !== (a.sumCount || 0)) return (b.sumCount || 0) - (a.sumCount || 0);
+        return a.name.localeCompare(b.name, "nl");
+      });
 
-    // If there is no stored selection, auto-select the first visible species once.
     if (
       shouldAutoSelectInitialSpecies &&
       !didAutoSelectInitialSpecies &&
       !selectedSpecies &&
       list.length > 0
     ) {
-      setSelectedSpecies(list[0], { persist: false });
+      setSelectedSpecies({ id: list[0].id, name: list[0].name }, { persist: false });
       didAutoSelectInitialSpecies = true;
     }
 
@@ -1934,26 +2268,17 @@ export function initApp() {
       btn.appendChild(title);
 
       const meta = document.createElement("small");
-      const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
-      const st = statsByKey.get(key);
-      meta.textContent =
-        st && speciesSort === "most"
-          ? `${st.with}×`
-          : (s.id != null ? `id ${s.id}` : "");
+      meta.textContent = speciesSort === "most"
+        ? `${Number(s.withCount || 0)}×`
+        : (s.id != null ? `id ${s.id}` : "");
       btn.appendChild(meta);
 
       btn.addEventListener("click", () => {
-        // Toggle behavior: clicking the selected species deselects it.
-        const isSame =
-          selectedSpecies &&
-          selectedSpecies.id === s.id &&
-          selectedSpecies.name === s.name;
-        setSelectedSpecies(isSame ? null : s);
+        const isSame = selectedSpecies && selectedSpecies.id === s.id && selectedSpecies.name === s.name;
+        setSelectedSpecies(isSame ? null : { id: s.id, name: s.name });
         renderSpeciesList({ query: speciesSearchInput.value });
         schedulePresenceGridCompute();
         updateHud();
-        // Mobile UX: selecting a species should immediately show the map.
-        // This auto-close does NOT persist preference (user intent wins).
         if (mode === "species" && isMobile() && selectedSpecies) {
           setSidebarOpen(false, { persist: false, reason: "mobile-autoclose-on-select" });
         }
@@ -1997,6 +2322,7 @@ export function initApp() {
 
   function onSpeciesControlsChanged() {
     readControls();
+    if (!speciesUseStaticFallback) scheduleSpeciesCatalogFetch({ immediate: true });
     renderSpeciesList({ query: speciesSearchInput.value });
     schedulePresenceGridCompute();
   }
@@ -2057,6 +2383,10 @@ export function initApp() {
 
   function computePresenceGrid() {
     if (mode !== "species") return;
+    if (!speciesUseStaticFallback) {
+      computeBackendSpeciesGrid();
+      return;
+    }
 
     gridLayer.clearLayers();
 
@@ -2076,19 +2406,14 @@ export function initApp() {
     const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
     const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
 
-    // We anchor the grid in projected CRS meters (EPSG:3857), not to the viewport pixels.
-    // This makes the grid stable under pan/zoom and makes `gridCellM` truly "meters".
     const crs = map.options.crs;
     const bounds = map.getBounds();
-
-    // Aggregate by (ix, iy) where each cell is gridCellM x gridCellM meters in projected space.
-    const cells = new Map(); // key -> { total, withN, sum, ix, iy }
+    const cells = new Map();
 
     for (const e of entries) {
-      // Only consider points currently in view (keeps it fast and matches HUD wording).
       if (!bounds.contains(e.latlng)) continue;
 
-      const p = crs.project(e.latlng); // meters-ish in WebMercator
+      const p = crs.project(e.latlng);
       const ix = Math.floor(p.x / gridCellM);
       const iy = Math.floor(p.y / gridCellM);
       const key = `${ix},${iy}`;
@@ -2109,7 +2434,6 @@ export function initApp() {
       if (has) {
         cell.withN += 1;
 
-        // For avg/sum we need the per-entry count for this species.
         let cnt = 0;
         const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
         for (const b of birds) {
@@ -2129,7 +2453,6 @@ export function initApp() {
       return;
     }
 
-    // Normalize metric per viewport for visualization.
     let maxMetric = 0;
     for (const cell of cells.values()) {
       const total = cell.total;
@@ -2139,81 +2462,59 @@ export function initApp() {
           ? cell.sum
           : metric === "avg"
             ? cell.sum / total
-            : (cell.withN / total); // presence
+            : (cell.withN / total);
       cell.v = v;
       if (v > maxMetric) maxMetric = v;
     }
 
-    // Decide render style (auto mapping or explicit override).
-    const effectiveStyle =
-      style === "auto"
-        ? (metric === "sum" ? "heatmap" : "grid")
-        : style;
-
+    const effectiveStyle = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
     updateGridLegend({ metric, maxMetric, effectiveStyle });
 
-    // Render cells. We only render cells that have enough sample size (minN).
-    // Opacity scales by both value and sample size to hint uncertainty.
     for (const cell of cells.values()) {
       const total = cell.total;
       const withN = cell.withN;
       const sum = cell.sum;
       const v = cell.v || 0;
-
       if (total < minN) continue;
 
-      // Presence is already bounded 0..1; keep it on an absolute scale for interpretability.
-      const vNorm =
-        metric === "presence"
-          ? clamp01(v)
-          : (maxMetric ? clamp01(v / maxMetric) : 0);
+      const vNorm = metric === "presence" ? clamp01(v) : (maxMetric ? clamp01(v / maxMetric) : 0);
       if (!vNorm) continue;
 
-      const nScale = Math.min(1, Math.sqrt(total) / 3); // tune: 3 ~= "reasonable N"
+      const nScale = Math.min(1, Math.sqrt(total) / 3);
       const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
       const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
       const fillColor = colorFromBluesRamp(applyHighEndGamma(vNorm));
-
-      // Cell bounds in projected meters
       const x0m = cell.ix * gridCellM;
       const y0m = cell.iy * gridCellM;
       const x1m = x0m + gridCellM;
       const y1m = y0m + gridCellM;
-
-      // Convert projected meters back to lat/lng for Leaflet layers.
       const sw = crs.unproject(globalThis.L.point(x0m, y0m));
       const ne = crs.unproject(globalThis.L.point(x1m, y1m));
       const bb = globalThis.L.latLngBounds(sw, ne);
 
       let tooltip = `<b>${selectedSpecies.name}</b> — `;
-
       switch (metric) {
-        case "presence":
-          // aanwezig in 20/23 inzendingen (87%)
-          // 	N_present=20, N_total=23
+        case "presence": {
           const pct = formatNumber((total ? (withN / total) * 100 : 0), { maxDecimals: 1 });
           tooltip += `aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen (${pct}%)`;
           break;
-        case "avg":
-          // gem. 2,8 per inzending · N=23 inzendingen
-          // avg = sum / N
+        }
+        case "avg": {
           const avgFmt = formatNumber((total ? sum / total : 0), { maxDecimals: 2 });
           tooltip += `gemiddeld ${avgFmt} per inzending in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
           break;
-        case "sum":
-          // totaal 45 geteld in 23 inzendingen
-          // sum = Σ aantal per inzending
+        }
+        default: {
           const sumFmt = formatNumber(sum, { maxDecimals: 0 });
           tooltip += `totaal ${sumFmt} geteld in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
           break;
+        }
       }
 
       if (effectiveStyle === "heatmap") {
-        // Heatmap-ish: circles centered on the cell, radius ~ half a cell.
         const cxm = x0m + gridCellM / 2;
         const cym = y0m + gridCellM / 2;
         const center = crs.unproject(globalThis.L.point(cxm, cym));
-
         const circle = globalThis.L.circle(center, {
           radius: Math.max(30, gridCellM * 0.6),
           stroke: false,
@@ -3067,6 +3368,15 @@ export function initApp() {
       return;
     }
 
+    if (!speciesUseStaticFallback) {
+      rendered = [];
+      totals = { entries: Number(speciesCatalogStats.entryCount || 0), birds: 0 };
+      scheduleSpeciesCatalogFetch({ immediate: true });
+      updateViewportStats();
+      schedulePresenceGridCompute();
+      return;
+    }
+
     if (!dataset) return;
 
     const { year, pc4, includePrivate, includeIsorg } = getFilters();
@@ -3100,12 +3410,9 @@ export function initApp() {
       birds: rendered.reduce((acc, r) => acc + r.birdsTotal, 0),
     };
 
-    // Fit bounds on first load, and when PC4 filter changes.
     if (!didFitOnce || pc4 !== lastPc4) {
       if (bounds.length) {
-        // Ensure we have an actual bounds object (more robust than raw arrays).
         const bb = globalThis.L.latLngBounds(bounds);
-        // Ensure map has measured size before fitting.
         try {
           map.invalidateSize({ animate: false });
         } catch {
@@ -3114,16 +3421,12 @@ export function initApp() {
         map.fitBounds(bb, { padding: [20, 20] });
         didFitOnce = true;
       } else {
-        // Groningen-ish default view
         map.setView([53.22, 6.57], 11);
       }
     }
 
     lastPc4 = pc4;
-
-    // Initial stats for current viewport (moveend will keep it updated).
     updateViewportStats();
-
     schedulePresenceGridCompute();
   }
 
@@ -3142,43 +3445,53 @@ export function initApp() {
 
     statsEl.textContent = `Dataset ${y} laden…`;
 
-    try {
-      const json = await loadMunicipalityDataset({ year: y, area: "groningen" });
-      if (seq !== loadSeq) return; // stale request
-      dataset = json;
-      datasetYear = y;
-      didFitOnce = false; // refit when switching datasets
-
-      prepareDataset(json);
-      if (!speciesIndex || speciesIndex.length === 0) {
-        // Fallback: birdguide is a plain array of names (no IDs).
-        try {
-          const guide = await loadBirdguide();
-          if (seq !== loadSeq) return; // stale request
-          speciesIndex = (Array.isArray(guide) ? guide : [])
-            .map((name) => ({ id: null, name: String(name || "").trim() }))
-            .filter((s) => s.name)
-            .sort((a, b) => a.name.localeCompare(b.name, "nl"));
-        } catch {
-          // ignore fallback failure
+    if (!speciesUseStaticFallback) {
+      try {
+        const manifest = await speciesSource.getSpeciesManifest({ year: y, area: "groningen" });
+        if (seq !== loadSeq) return;
+        speciesManifest = manifest;
+        speciesBackendUnavailable = false;
+        dataset = null;
+        datasetYear = y;
+        preparedEntries = [];
+        speciesIndex = [];
+        speciesCatalogRows = [];
+        speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+        speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+        didFitOnce = false;
+        setComputing(false);
+        render();
+        return;
+      } catch (err) {
+        if (seq !== loadSeq) return;
+        speciesBackendUnavailable = true;
+        if (!confirmSpeciesFallback()) {
+          dataset = null;
+          datasetYear = 0;
+          preparedEntries = [];
+          speciesIndex = [];
+          speciesCatalogRows = [];
+          setSelectedSpecies(null);
+          if (mode === "species") {
+            clearPointMarkers();
+            gridLayer.clearLayers();
+            statsEl.textContent = `Soortendata laden mislukt: ${err?.message || String(err)}`;
+          }
+          return;
         }
+        speciesUseStaticFallback = true;
       }
+    }
 
-      // Reset selection if it's not in the new list.
-      if (selectedSpecies) {
-        const ok = speciesIndex.some((s) => s.id === selectedSpecies.id && s.name === selectedSpecies.name);
-        if (!ok) setSelectedSpecies(null);
-      }
-
-      setComputing(false);
-      renderSpeciesList({ query: speciesSearchInput.value });
-      render();
+    try {
+      await loadStaticSpeciesDataset(y, seq);
     } catch (err) {
-      if (seq !== loadSeq) return; // stale request
+      if (seq !== loadSeq) return;
       dataset = null;
       datasetYear = 0;
       preparedEntries = [];
       speciesIndex = [];
+      speciesCatalogRows = [];
       setSelectedSpecies(null);
       if (mode === "species") {
         clearPointMarkers();
@@ -3268,7 +3581,10 @@ export function initApp() {
     }
     updateViewportStats();
     if (mode === "species") {
-      if (speciesScope === "viewport") renderSpeciesList({ query: speciesSearchInput.value });
+      if (speciesScope === "viewport") {
+        if (speciesUseStaticFallback) renderSpeciesList({ query: speciesSearchInput.value });
+        else scheduleSpeciesCatalogFetch({ immediate: true });
+      }
       schedulePresenceGridCompute();
     }
   };
