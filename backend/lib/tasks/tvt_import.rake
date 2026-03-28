@@ -37,4 +37,22 @@ namespace :tvt do
   task status: :environment do
     puts(JSON.pretty_generate(Ops::StatusSnapshot.new.as_json))
   end
+
+  desc "Verify imported DB counts against harvested source data"
+  task :verify_imports, [:years] => :environment do |_task, args|
+    raw_years = [args[:years], *Array(args.extras), ENV["YEARS"]].compact.join(",")
+    years = raw_years
+      .split(",")
+      .map { |value| Integer(value, exception: false) }
+      .compact
+      .uniq
+    years = Ops::StatusSnapshot.new.as_json.fetch(:years).map { |row| row.fetch(:year) } if years.empty?
+
+    verifier = Ops::ImportVerifier.new
+    results = verifier.verify_years(years)
+    puts(JSON.pretty_generate(results.map(&:as_json)))
+
+    failed = results.reject(&:ok)
+    raise("Import verification failed for years: #{failed.map(&:year).join(", ")}") if failed.any?
+  end
 end

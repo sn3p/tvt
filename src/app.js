@@ -806,6 +806,8 @@ export function initApp() {
   let activePointDetailsSourceLabel = "backend";
   let pointTilesBackendUnavailable = false;
   let pointDetailsBackendUnavailable = false;
+  let pointTilesFallbackDeclined = false;
+  let pointTilesFallbackAccepted = false;
   let pointSourceStatusMessage = "";
 
   function pointSourceSummaryText() {
@@ -843,6 +845,8 @@ export function initApp() {
     const parts = [];
     if (activePointTilesSourceLabel !== "backend") {
       parts.push("backend punten niet beschikbaar; statische tiles gebruikt");
+    } else if (pointTilesFallbackDeclined) {
+      parts.push("backend punten niet beschikbaar; fallback geweigerd");
     } else if (pointTilesBackendUnavailable) {
       parts.push("backend punten niet beschikbaar; fallback uitgeschakeld");
     }
@@ -855,19 +859,34 @@ export function initApp() {
     updatePointSourceBadge();
   }
 
+  function confirmPointTilesFallback() {
+    if (!ALLOW_STATIC_DATA_FALLBACK) return false;
+    if (pointTilesFallbackAccepted) return true;
+    if (pointTilesFallbackDeclined) return false;
+
+    const accepted = window.confirm(
+      "Backend puntendata is niet beschikbaar.\n\nWil je doorgaan met lokale fallback-data?"
+    );
+
+    pointTilesFallbackAccepted = accepted;
+    pointTilesFallbackDeclined = !accepted;
+    return accepted;
+  }
+
   async function getPointManifest() {
     try {
       const manifest = await pointTilesSource.getManifest();
       if (pointTilesSource === pointTilesPrimarySource) {
         activePointTilesSourceLabel = "backend";
         pointTilesBackendUnavailable = false;
+        pointTilesFallbackDeclined = false;
         refreshPointSourceStatus();
       }
       return manifest;
     } catch (err) {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
       pointTilesBackendUnavailable = true;
-      if (!ALLOW_STATIC_DATA_FALLBACK) {
+      if (!confirmPointTilesFallback()) {
         refreshPointSourceStatus();
         throw err;
       }
@@ -885,13 +904,14 @@ export function initApp() {
       if (pointTilesSource === pointTilesPrimarySource) {
         activePointTilesSourceLabel = "backend";
         pointTilesBackendUnavailable = false;
+        pointTilesFallbackDeclined = false;
         refreshPointSourceStatus();
       }
       return tile;
     } catch (err) {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
       pointTilesBackendUnavailable = true;
-      if (!ALLOW_STATIC_DATA_FALLBACK) {
+      if (!confirmPointTilesFallback()) {
         refreshPointSourceStatus();
         throw err;
       }

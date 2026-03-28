@@ -42,6 +42,7 @@ Inspecteer backend status:
 ```bash
 cd backend
 bin/rails tvt:status
+YEARS=2025,2026 bin/rails tvt:verify_imports
 curl http://localhost:3000/api/v1/status
 ```
 
