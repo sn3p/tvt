@@ -141,6 +141,73 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert_equal [], body["points"]
   end
 
+  test "species manifest returns Groningen summary for a year" do
+    private_entry = Entry.create!(
+      year: 2026,
+      external_id: 2001,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+    isorg_entry = Entry.create!(
+      year: 2026,
+      external_id: 2002,
+      pc4: "9711",
+      lat: 53.2180,
+      lng: 6.5700,
+      is_org: true,
+    )
+    outside_entry = Entry.create!(
+      year: 2026,
+      external_id: 2003,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: false,
+    )
+
+    bird_a = Bird.create!(external_id: 9, name: "Ekster")
+    bird_b = Bird.create!(external_id: 50, name: "Merel")
+    bird_c = Bird.create!(external_id: 79, name: "Zwarte kraai")
+
+    EntryBirdCount.create!(entry: private_entry, bird: bird_a, rank: 1, count: 3, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: isorg_entry, bird: bird_a, rank: 1, count: 1, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: isorg_entry, bird: bird_b, rank: 2, count: 2, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: outside_entry, bird: bird_c, rank: 1, count: 4, bird_name_cache: "Zwarte kraai")
+
+    get "/api/v1/areas/groningen/species_manifest", params: { year: 2026 }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "groningen", body.dig("area", "slug")
+    assert_equal "Groningen", body.dig("area", "name")
+    assert_equal "GM0014", body.dig("area", "code")
+    assert_equal 2026, body["year"]
+    assert_equal 50, body["pc4_count"]
+    assert_equal 2, body["entry_count"]
+    assert_equal 1, body["private_entries_count"]
+    assert_equal 1, body["isorg_entries_count"]
+    assert_equal 2, body["species_count"]
+    assert body["latest_update_utc"].present?
+  end
+
+  test "species manifest rejects invalid parameters" do
+    get "/api/v1/areas/groningen/species_manifest", params: { year: "not-a-year" }
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid species manifest parameters", body["error"]
+  end
+
+  test "species manifest returns not found for an unknown area" do
+    get "/api/v1/areas/unknown/species_manifest", params: { year: 2026 }
+
+    assert_response :not_found
+    body = JSON.parse(response.body)
+    assert_equal "area not found", body["error"]
+  end
+
   test "top birds returns not found for an unknown entry" do
     get "/api/v1/years/2025/entries/999999/top_birds"
 
