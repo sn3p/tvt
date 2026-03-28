@@ -1,5 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
-import { ALLOW_STATIC_DATA_FALLBACK, ALLOW_UPSTREAM_DETAILS_FALLBACK, BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
+import { ALLOW_STATIC_DATA_FALLBACK, ALLOW_UPSTREAM_DETAILS_FALLBACK, ENABLE_DIAGNOSTICS, BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
@@ -3281,7 +3281,9 @@ export function initApp() {
   });
 
   // Initial load (defaults to the year input value).
-  probeBackendStatus();
-  probePointTilesSource();
+  if (ENABLE_DIAGNOSTICS) {
+    probeBackendStatus();
+    probePointTilesSource();
+  }
   loadForYear(Number(yearInput.value || 0) || 0);
 }

@@ -6,6 +6,7 @@ export const BACKEND_API_BASE_URL = String(RUNTIME_CONFIG.backendApiBaseUrl || "
 export const ENTRY_TOP_BIRDS_API_BASE = String(RUNTIME_CONFIG.entryTopBirdsApiBase || "https://vbn-tvt.northsea.cloud/v1/report");
 export const ALLOW_STATIC_DATA_FALLBACK = RUNTIME_CONFIG.allowStaticDataFallback !== false;
 export const ALLOW_UPSTREAM_DETAILS_FALLBACK = RUNTIME_CONFIG.allowUpstreamDetailsFallback !== false;
+export const ENABLE_DIAGNOSTICS = RUNTIME_CONFIG.enableDiagnostics !== false;
 
 export class DataSource {
   async getManifest() {

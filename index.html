@@ -36,7 +36,8 @@
       staticDataBaseUrl: "/public/data/tvt",
       staticDataBaseUrlFallback: "/data/tvt",
       allowStaticDataFallback: __tvtIsLocalDev,
-      allowUpstreamDetailsFallback: __tvtIsLocalDev
+      allowUpstreamDetailsFallback: __tvtIsLocalDev,
+      enableDiagnostics: __tvtIsLocalDev
     }, window.__TVT_CONFIG__ || {});
   </script>
   <script defer type="module" src="./main.js"></script>

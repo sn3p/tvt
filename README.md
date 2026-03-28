@@ -76,7 +76,8 @@ Frontend runtime config staat expliciet in `index.html` via:
     staticDataBaseUrl: "/public/data/tvt",
     staticDataBaseUrlFallback: "/data/tvt",
     allowStaticDataFallback: isLocalDev,
-    allowUpstreamDetailsFallback: isLocalDev
+    allowUpstreamDetailsFallback: isLocalDev,
+    enableDiagnostics: isLocalDev
   };
 </script>
 ```
@@ -88,6 +89,7 @@ Belangrijk:
 - `entryTopBirdsApiBase` bepaalt het upstream detail-endpoint voor expliciete fallback
 - `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
 - `allowStaticDataFallback` en `allowUpstreamDetailsFallback` staan lokaal standaard aan, maar in niet-lokale omgevingen standaard uit
+- `enableDiagnostics` zet startup probes naar `window.__tvtBackendStatusProbe` en `window.__tvtPointTilesProbe` aan of uit
 - voor cross-origin frontend/backend deployments moet de backend `TVT_ALLOWED_ORIGINS` expliciet toestaan
 - zie `backend/docs/deployment.md` voor same-origin vs cross-origin deployment
 - je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
