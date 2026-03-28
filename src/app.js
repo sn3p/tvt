@@ -1,5 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
-import { StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
+import { BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
@@ -185,7 +185,6 @@ export function initApp() {
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
-  const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
   const WORKER_CLUSTER_FALLBACK_HINT = "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
   const THEME_DARK = "dark";
@@ -785,6 +784,7 @@ export function initApp() {
   let sidebarTab = "species"; // "species" | "view"
   let isComputing = false;
   const pointTilesSource = new StaticTilesSource();
+  const pointDetailsSource = new BackendApiSource();
   let pointTileFetchSeq = 0;
   let pointTileFetchTimer = 0;
   let pointTileAbortController = null;
@@ -2168,36 +2168,18 @@ export function initApp() {
     return `${Number(year) || 0}:${Number(id) || 0}`;
   }
 
-  function pointDetailsUrl({ id, year, limit = 9999 }) {
-    const params = new URLSearchParams();
-    if (Number(year) > 0) params.set("year", String(Number(year)));
-    params.set("id", String(id));
-    params.set("limit", String(limit));
-    return `${ENTRY_TOP_BIRDS_API_BASE}/entry-top-birds?${params.toString()}`;
-  }
-
-  function normalizeBirdRows(json) {
-    const data = Array.isArray(json?.data) ? json.data : [];
-    return data
-      .map((b) => ({
-        name: String(b?.name ?? b?.vogelnaam ?? "").trim(),
-        count: Number(b?.number ?? b?.count ?? 0) || 0,
-      }))
-      .filter((b) => b.name)
-      .sort((a, b) => b.count - a.count);
-  }
-
   async function getPointEntryDetails({ year, id }) {
     const key = pointDetailsKey({ year, id });
     if (pointEntryDetailsByKey.has(key)) return pointEntryDetailsByKey.get(key);
     if (pointEntryDetailsPromiseByKey.has(key)) return pointEntryDetailsPromiseByKey.get(key);
 
     const req = (async () => {
-      const url = pointDetailsUrl({ year, id, limit: 9999 });
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const json = await r.json();
-      const birds = normalizeBirdRows(json);
+      let birds;
+      try {
+        birds = await pointDetailsSource.getEntryTopBirds({ year, id });
+      } catch (_backendErr) {
+        birds = await pointTilesSource.getEntryTopBirds({ year, id, limit: 9999 });
+      }
       pointEntryDetailsByKey.set(key, birds);
       return birds;
     })()

@@ -1,5 +1,8 @@
 export const DATA_BASE_URL = "/public/data/tvt";
 export const DATA_BASE_URL_FALLBACK = "/data/tvt";
+export const BACKEND_API_BASE_URL = "/api/v1";
+export const BACKEND_API_BASE_URL_FALLBACK = "http://localhost:3000/api/v1";
+export const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
 
 export class DataSource {
   async getManifest() {
@@ -8,6 +11,10 @@ export class DataSource {
 
   async getPointTile(_params) {
     throw new Error("DataSource.getPointTile() not implemented");
+  }
+
+  async getEntryTopBirds(_params) {
+    throw new Error("DataSource.getEntryTopBirds() not implemented");
   }
 }
 
@@ -48,6 +55,27 @@ function toAbortError() {
 
 export function isAbortError(err) {
   return Boolean(err && typeof err === "object" && err.name === "AbortError");
+}
+
+function normalizeBirdRows(json) {
+  if (Array.isArray(json?.birds)) {
+    return json.birds
+      .map((b) => ({
+        name: String(b?.name ?? "").trim(),
+        count: Number(b?.count ?? 0) || 0,
+      }))
+      .filter((b) => b.name)
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const data = Array.isArray(json?.data) ? json.data : [];
+  return data
+    .map((b) => ({
+      name: String(b?.name ?? b?.vogelnaam ?? "").trim(),
+      count: Number(b?.number ?? b?.count ?? 0) || 0,
+    }))
+    .filter((b) => b.name)
+    .sort((a, b) => b.count - a.count);
 }
 
 export function lngLatToTileXY({ lng, lat, z }) {
@@ -216,5 +244,120 @@ export class StaticTilesSource extends DataSource {
 
     if (!signal) this.tilePromiseByUrl.set(url, p);
     return p;
+  }
+
+  async getEntryTopBirds({ year, id, limit = 9999, signal } = {}) {
+    const params = new URLSearchParams();
+    if (Number(year) > 0) params.set("year", String(Number(year)));
+    params.set("id", String(Number(id)));
+    params.set("limit", String(Number(limit) || 9999));
+
+    const url = `${ENTRY_TOP_BIRDS_API_BASE}/entry-top-birds?${params.toString()}`;
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading point details (${url})`);
+    return normalizeBirdRows(await r.json());
+  }
+}
+
+export class BackendApiSource extends DataSource {
+  constructor({
+    baseUrl = BACKEND_API_BASE_URL,
+    fetchImpl = globalThis.fetch?.bind(globalThis),
+  } = {}) {
+    super();
+    if (typeof fetchImpl !== "function") {
+      throw new Error("fetch is not available in this environment");
+    }
+    this.baseUrl = String(baseUrl || BACKEND_API_BASE_URL).replace(/\/+$/, "");
+    this.fetchImpl = fetchImpl;
+    this.manifestPromise = null;
+    this.tilePromiseByUrl = new Map();
+    this.tileDataByUrl = new Map();
+    this.baseUrlCandidates = [this.baseUrl];
+    if (this.baseUrl === BACKEND_API_BASE_URL && BACKEND_API_BASE_URL_FALLBACK !== BACKEND_API_BASE_URL) {
+      this.baseUrlCandidates.push(BACKEND_API_BASE_URL_FALLBACK);
+    }
+  }
+
+  async getManifest() {
+    if (this.manifestPromise) return this.manifestPromise;
+
+    this.manifestPromise = (async () => {
+      let lastErr = null;
+
+      for (const candidateBaseUrl of this.baseUrlCandidates) {
+        const url = joinUrl(candidateBaseUrl, "point_tiles/manifest");
+        const r = await this.fetchImpl(url);
+        if (r.ok) {
+          this.baseUrl = candidateBaseUrl;
+          return r.json();
+        }
+        lastErr = new Error(`HTTP ${r.status} while loading backend manifest (${url})`);
+        if (r.status !== 404) throw lastErr;
+      }
+
+      throw lastErr || new Error("backend manifest load failed");
+    })().catch((err) => {
+      this.manifestPromise = null;
+      throw err;
+    });
+
+    return this.manifestPromise;
+  }
+
+  async getPointTile({ year, mode, z, x, y, signal } = {}) {
+    await this.getManifest();
+    const vars = {
+      year: toSafeInt(year, "year"),
+      mode: String(mode || "").trim() || "private",
+      z: toSafeInt(z, "z"),
+      x: toSafeInt(x, "x"),
+      y: toSafeInt(y, "y"),
+    };
+    const url = joinUrl(this.baseUrl, `years/${vars.year}/point_tiles/${encodeURIComponent(vars.mode)}/${vars.z}/${vars.x}/${vars.y}`);
+
+    if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
+    if (signal?.aborted) throw toAbortError();
+    if (!signal && this.tilePromiseByUrl.has(url)) return this.tilePromiseByUrl.get(url);
+
+    const p = this.fetchImpl(url, signal ? { signal } : undefined)
+      .then((r) => {
+        if (r.status === 404) {
+          return {
+            contract_version: 1,
+            year: vars.year,
+            mode: vars.mode,
+            z: vars.z,
+            x: vars.x,
+            y: vars.y,
+            tileSize: 256,
+            points: [],
+          };
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point tile (${url})`);
+        return r.json();
+      })
+      .then((json) => {
+        this.tileDataByUrl.set(url, json);
+        return json;
+      })
+      .catch((err) => {
+        if (!signal) this.tilePromiseByUrl.delete(url);
+        if (isAbortError(err)) throw err;
+        throw err;
+      });
+
+    if (!signal) this.tilePromiseByUrl.set(url, p);
+    return p;
+  }
+
+  async getEntryTopBirds({ year, id, signal } = {}) {
+    await this.getManifest();
+    const safeYear = toSafeInt(year, "year");
+    const safeId = toSafeInt(id, "id");
+    const url = joinUrl(this.baseUrl, `years/${safeYear}/entries/${safeId}/top_birds`);
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point details (${url})`);
+    return normalizeBirdRows(await r.json());
   }
 }
