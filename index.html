@@ -23,6 +23,13 @@
       }
     }
   </script>
+  <script>
+    window.__TVT_CONFIG__ = Object.assign({
+      backendApiBaseUrl: "http://localhost:3000/api/v1",
+      staticDataBaseUrl: "/public/data/tvt",
+      staticDataBaseUrlFallback: "/data/tvt"
+    }, window.__TVT_CONFIG__ || {});
+  </script>
   <script defer type="module" src="./main.js"></script>
 </head>
 

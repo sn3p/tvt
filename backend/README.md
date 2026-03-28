@@ -1,24 +1,62 @@
-# README
+# TVT Backend
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+Rails API backend for TVT point-mode data.
 
-Things you may want to cover:
+Current phase-1 scope:
 
-* Ruby version
+- point tiles manifest
+- point tiles for `private` and `isorg`
+- entry top-birds detail endpoint
+- import from harvested data in sibling repo `../tvt-harvest`
 
-* System dependencies
+## Requirements
 
-* Configuration
+- Ruby `3.3.4`
+- PostgreSQL
+- harvested data available in `../tvt-harvest/data/raw/...`
 
-* Database creation
+## Setup
 
-* Database initialization
+```bash
+bundle install
+bin/rails db:prepare
+```
 
-* How to run the test suite
+## Import harvested data
 
-* Services (job queues, cache servers, search engines, etc.)
+Import one year:
 
-* Deployment instructions
+```bash
+bin/rails 'tvt:import_year[2025]'
+bin/rails 'tvt:import_year[2026]'
+```
 
-* ...
+Rebuild tile memberships only:
+
+```bash
+bin/rails 'tvt:rebuild_tiles[2025]'
+```
+
+If `tvt-harvest` is not in the expected sibling location, set:
+
+```bash
+TVT_HARVEST_ROOT=/absolute/path/to/tvt-harvest
+```
+
+## Run the server
+
+```bash
+bin/rails server
+```
+
+Default dev API base URL:
+
+- `http://localhost:3000/api/v1`
+
+## Test
+
+Run the backend integration tests:
+
+```bash
+bin/rails test test/integration/api_v1_backend_test.rb
+```

@@ -18,6 +18,53 @@ Zie DRAFT.md
   - Nieuwe app: `index.html`
   - Oude app: `old/index.html`
 
+### Backend + Frontend (huidige dev setup)
+
+De app gebruikt nu een kleine Rails backend voor:
+
+- point tiles manifest
+- point tiles
+- point detail popovers (`top_birds`)
+
+Start de backend:
+
+```bash
+cd backend
+bundle install
+bin/rails db:prepare
+bin/rails server
+```
+
+Importeer harvested data uit `../tvt-harvest`:
+
+```bash
+cd backend
+bin/rails 'tvt:import_year[2025]'
+bin/rails 'tvt:import_year[2026]'
+```
+
+Start daarna de frontend via een simpele lokale webserver vanuit repo root.
+
+### Frontend runtime config
+
+Frontend runtime config staat expliciet in `index.html` via:
+
+```html
+<script>
+  window.__TVT_CONFIG__ = {
+    backendApiBaseUrl: "http://localhost:3000/api/v1",
+    staticDataBaseUrl: "/public/data/tvt",
+    staticDataBaseUrlFallback: "/data/tvt"
+  };
+</script>
+```
+
+Belangrijk:
+
+- `backendApiBaseUrl` bepaalt waar de frontend de Rails API zoekt
+- `staticDataBaseUrl` en `staticDataBaseUrlFallback` blijven bestaan als fallback pad
+- voor lokale development is `http://localhost:3000/api/v1` de bedoelde default
+
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
 
 De Vogelbescherming resultatenpagina ondersteunt links met een `uuid` parameter, bijv.:

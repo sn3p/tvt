@@ -1,7 +1,8 @@
-export const DATA_BASE_URL = "/public/data/tvt";
-export const DATA_BASE_URL_FALLBACK = "/data/tvt";
-export const BACKEND_API_BASE_URL = "/api/v1";
-export const BACKEND_API_BASE_URL_FALLBACK = "http://localhost:3000/api/v1";
+const RUNTIME_CONFIG = globalThis.window?.__TVT_CONFIG__ || {};
+
+export const DATA_BASE_URL = String(RUNTIME_CONFIG.staticDataBaseUrl || "/public/data/tvt");
+export const DATA_BASE_URL_FALLBACK = String(RUNTIME_CONFIG.staticDataBaseUrlFallback || "/data/tvt");
+export const BACKEND_API_BASE_URL = String(RUNTIME_CONFIG.backendApiBaseUrl || "http://localhost:3000/api/v1");
 export const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
 
 export class DataSource {
@@ -274,9 +275,6 @@ export class BackendApiSource extends DataSource {
     this.tilePromiseByUrl = new Map();
     this.tileDataByUrl = new Map();
     this.baseUrlCandidates = [this.baseUrl];
-    if (this.baseUrl === BACKEND_API_BASE_URL && BACKEND_API_BASE_URL_FALLBACK !== BACKEND_API_BASE_URL) {
-      this.baseUrlCandidates.push(BACKEND_API_BASE_URL_FALLBACK);
-    }
   }
 
   async getManifest() {
