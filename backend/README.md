@@ -24,6 +24,12 @@ bin/rails db:prepare
 
 ## Import harvested data
 
+Import all harvested years visible in `../tvt-harvest/data/raw`:
+
+```bash
+bin/rails tvt:import_all
+```
+
 Import one year:
 
 ```bash

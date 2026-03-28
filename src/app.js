@@ -1,5 +1,5 @@
 import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
-import { BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
+import { ALLOW_STATIC_DATA_FALLBACK, ALLOW_UPSTREAM_DETAILS_FALLBACK, BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
@@ -804,6 +804,8 @@ export function initApp() {
   let legendIsorgTextEl = null;
   let activePointTilesSourceLabel = "backend";
   let activePointDetailsSourceLabel = "backend";
+  let pointTilesBackendUnavailable = false;
+  let pointDetailsBackendUnavailable = false;
   let pointSourceStatusMessage = "";
 
   function pointSourceSummaryText() {
@@ -824,24 +826,30 @@ export function initApp() {
     const usesFallbackTiles = activePointTilesSourceLabel !== "backend";
     const usesFallbackDetails = activePointDetailsSourceLabel !== "backend";
     const summary = pointSourceSummaryText();
+    const hasIssue = usesFallbackTiles || usesFallbackDetails || Boolean(pointSourceStatusMessage);
     let label = "Bron: backend API";
     if (usesFallbackTiles && usesFallbackDetails) label = "Bron: statische tiles + upstream details";
     else if (usesFallbackTiles) label = "Bron: statische tiles";
     else if (usesFallbackDetails) label = "Bron: backend + upstream details";
+    else if (hasIssue) label = "Bron: backend API (fout)";
 
     pointSourceBadge.hidden = false;
     pointSourceBadge.textContent = label;
     pointSourceBadge.title = summary;
-    pointSourceBadge.className = `source-badge ${usesFallbackTiles || usesFallbackDetails ? "is-fallback" : "is-backend"}`;
+    pointSourceBadge.className = `source-badge ${hasIssue ? "is-fallback" : "is-backend"}`;
   }
 
   function refreshPointSourceStatus() {
     const parts = [];
     if (activePointTilesSourceLabel !== "backend") {
       parts.push("backend punten niet beschikbaar; statische tiles gebruikt");
+    } else if (pointTilesBackendUnavailable) {
+      parts.push("backend punten niet beschikbaar; fallback uitgeschakeld");
     }
     if (activePointDetailsSourceLabel !== "backend") {
       parts.push("backend details niet beschikbaar; upstream endpoint gebruikt");
+    } else if (pointDetailsBackendUnavailable) {
+      parts.push("backend details niet beschikbaar; fallback uitgeschakeld");
     }
     pointSourceStatusMessage = parts.join(" • ");
     updatePointSourceBadge();
@@ -849,9 +857,20 @@ export function initApp() {
 
   async function getPointManifest() {
     try {
-      return await pointTilesSource.getManifest();
+      const manifest = await pointTilesSource.getManifest();
+      if (pointTilesSource === pointTilesPrimarySource) {
+        activePointTilesSourceLabel = "backend";
+        pointTilesBackendUnavailable = false;
+        refreshPointSourceStatus();
+      }
+      return manifest;
     } catch (err) {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
+      pointTilesBackendUnavailable = true;
+      if (!ALLOW_STATIC_DATA_FALLBACK) {
+        refreshPointSourceStatus();
+        throw err;
+      }
       console.warn("Backend point manifest load failed, falling back to static tiles:", err);
       pointTilesSource = pointTilesFallbackSource;
       activePointTilesSourceLabel = "fallback";
@@ -862,9 +881,20 @@ export function initApp() {
 
   async function getPointTile(params) {
     try {
-      return await pointTilesSource.getPointTile(params);
+      const tile = await pointTilesSource.getPointTile(params);
+      if (pointTilesSource === pointTilesPrimarySource) {
+        activePointTilesSourceLabel = "backend";
+        pointTilesBackendUnavailable = false;
+        refreshPointSourceStatus();
+      }
+      return tile;
     } catch (err) {
       if (pointTilesSource !== pointTilesPrimarySource) throw err;
+      pointTilesBackendUnavailable = true;
+      if (!ALLOW_STATIC_DATA_FALLBACK) {
+        refreshPointSourceStatus();
+        throw err;
+      }
       console.warn("Backend point tile load failed, falling back to static tiles:", err);
       pointTilesSource = pointTilesFallbackSource;
       activePointTilesSourceLabel = "fallback";
@@ -2253,8 +2283,14 @@ export function initApp() {
       try {
         birds = await pointDetailsSource.getEntryTopBirds({ year, id });
         activePointDetailsSourceLabel = "backend";
+        pointDetailsBackendUnavailable = false;
         refreshPointSourceStatus();
       } catch (_backendErr) {
+        pointDetailsBackendUnavailable = true;
+        if (!ALLOW_UPSTREAM_DETAILS_FALLBACK) {
+          refreshPointSourceStatus();
+          throw _backendErr;
+        }
         birds = await pointTilesFallbackSource.getEntryTopBirds({ year, id, limit: 9999 });
         activePointDetailsSourceLabel = "upstream";
         refreshPointSourceStatus();

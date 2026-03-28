@@ -22,6 +22,17 @@ module Imports
       files_for(root.join("data/raw", year.to_s, "entry_top_birds"), pattern: "*.ndjson")
     end
 
+    def available_years
+      years_root = root.join("data/raw")
+      return [] unless years_root.directory?
+
+      years_root.children
+        .select(&:directory?)
+        .map { |path| Integer(path.basename.to_s, exception: false) }
+        .compact
+        .sort
+    end
+
     private
 
     def files_for(dir, pattern:)

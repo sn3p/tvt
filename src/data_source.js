@@ -3,7 +3,9 @@ const RUNTIME_CONFIG = globalThis.window?.__TVT_CONFIG__ || {};
 export const DATA_BASE_URL = String(RUNTIME_CONFIG.staticDataBaseUrl || "/public/data/tvt");
 export const DATA_BASE_URL_FALLBACK = String(RUNTIME_CONFIG.staticDataBaseUrlFallback || "/data/tvt");
 export const BACKEND_API_BASE_URL = String(RUNTIME_CONFIG.backendApiBaseUrl || "http://localhost:3000/api/v1");
-export const ENTRY_TOP_BIRDS_API_BASE = "https://vbn-tvt.northsea.cloud/v1/report";
+export const ENTRY_TOP_BIRDS_API_BASE = String(RUNTIME_CONFIG.entryTopBirdsApiBase || "https://vbn-tvt.northsea.cloud/v1/report");
+export const ALLOW_STATIC_DATA_FALLBACK = RUNTIME_CONFIG.allowStaticDataFallback !== false;
+export const ALLOW_UPSTREAM_DETAILS_FALLBACK = RUNTIME_CONFIG.allowUpstreamDetailsFallback !== false;
 
 export class DataSource {
   async getManifest() {

@@ -26,8 +26,11 @@
   <script>
     window.__TVT_CONFIG__ = Object.assign({
       backendApiBaseUrl: "http://localhost:3000/api/v1",
+      entryTopBirdsApiBase: "https://vbn-tvt.northsea.cloud/v1/report",
       staticDataBaseUrl: "/public/data/tvt",
-      staticDataBaseUrlFallback: "/data/tvt"
+      staticDataBaseUrlFallback: "/data/tvt",
+      allowStaticDataFallback: true,
+      allowUpstreamDetailsFallback: true
     }, window.__TVT_CONFIG__ || {});
   </script>
   <script defer type="module" src="./main.js"></script>

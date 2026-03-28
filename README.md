@@ -39,6 +39,13 @@ Importeer harvested data uit `../tvt-harvest`:
 
 ```bash
 cd backend
+bin/rails tvt:import_all
+```
+
+Of importeer een specifiek jaar:
+
+```bash
+cd backend
 bin/rails 'tvt:import_year[2025]'
 bin/rails 'tvt:import_year[2026]'
 ```
@@ -53,8 +60,11 @@ Frontend runtime config staat expliciet in `index.html` via:
 <script>
   window.__TVT_CONFIG__ = {
     backendApiBaseUrl: "http://localhost:3000/api/v1",
+    entryTopBirdsApiBase: "https://vbn-tvt.northsea.cloud/v1/report",
     staticDataBaseUrl: "/public/data/tvt",
-    staticDataBaseUrlFallback: "/data/tvt"
+    staticDataBaseUrlFallback: "/data/tvt",
+    allowStaticDataFallback: true,
+    allowUpstreamDetailsFallback: true
   };
 </script>
 ```
@@ -62,7 +72,10 @@ Frontend runtime config staat expliciet in `index.html` via:
 Belangrijk:
 
 - `backendApiBaseUrl` bepaalt waar de frontend de Rails API zoekt
-- `staticDataBaseUrl` en `staticDataBaseUrlFallback` blijven bestaan als fallback pad
+- `entryTopBirdsApiBase` bepaalt het upstream detail-endpoint voor expliciete fallback
+- `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
+- `allowStaticDataFallback` schakelt fallback naar statische tiles aan of uit
+- `allowUpstreamDetailsFallback` schakelt fallback naar het upstream details-endpoint aan of uit
 - voor lokale development is `http://localhost:3000/api/v1` de bedoelde default
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
