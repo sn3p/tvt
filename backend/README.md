@@ -14,6 +14,7 @@ Current phase-1 scope:
 - Ruby `3.3.4`
 - PostgreSQL
 - harvested data available in `../tvt-harvest/data/raw/...`
+- optional env file based on `.env.example`
 
 ## Setup
 
@@ -88,6 +89,7 @@ Useful endpoints:
 - CORS is only needed when frontend and backend are on different origins
 - set `TVT_ALLOWED_ORIGINS` to a comma-separated allowlist when you do need cross-origin access
 - keep `TVT_ALLOWED_ORIGINS` empty for same-origin deployments
+- see `backend/docs/deployment.md` for the recommended deployment shapes
 
 Example:
 

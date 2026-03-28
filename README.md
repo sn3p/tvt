@@ -30,6 +30,7 @@ Start de backend:
 
 ```bash
 cd backend
+cp .env.example .env  # optioneel, vooral handig buiten lokale defaults
 bundle install
 bin/rails db:prepare
 bin/rails tvt:import_all
@@ -88,6 +89,7 @@ Belangrijk:
 - `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
 - `allowStaticDataFallback` en `allowUpstreamDetailsFallback` staan lokaal standaard aan, maar in niet-lokale omgevingen standaard uit
 - voor cross-origin frontend/backend deployments moet de backend `TVT_ALLOWED_ORIGINS` expliciet toestaan
+- zie `backend/docs/deployment.md` voor same-origin vs cross-origin deployment
 - je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
