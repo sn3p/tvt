@@ -59,6 +59,12 @@ Default dev API base URL:
 
 - `http://localhost:3000/api/v1`
 
+Useful endpoints:
+
+- `GET /up`
+- `GET /api/v1/status`
+- `GET /api/v1/point_tiles/manifest`
+
 ## Test
 
 Run the backend integration tests:

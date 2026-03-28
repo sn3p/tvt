@@ -58,25 +58,27 @@ Frontend runtime config staat expliciet in `index.html` via:
 
 ```html
 <script>
+  const isLocalDev = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
   window.__TVT_CONFIG__ = {
-    backendApiBaseUrl: "http://localhost:3000/api/v1",
+    backendApiBaseUrl: isLocalDev ? "http://localhost:3000/api/v1" : `${window.location.origin}/api/v1`,
     entryTopBirdsApiBase: "https://vbn-tvt.northsea.cloud/v1/report",
     staticDataBaseUrl: "/public/data/tvt",
     staticDataBaseUrlFallback: "/data/tvt",
-    allowStaticDataFallback: true,
-    allowUpstreamDetailsFallback: true
+    allowStaticDataFallback: isLocalDev,
+    allowUpstreamDetailsFallback: isLocalDev
   };
 </script>
 ```
 
 Belangrijk:
 
-- `backendApiBaseUrl` bepaalt waar de frontend de Rails API zoekt
+- lokaal (`localhost` / `127.0.0.1`) gebruikt de app standaard `http://localhost:3000/api/v1`
+- buiten lokaal gebruikt de app standaard hetzelfde origin op `/api/v1`
 - `entryTopBirdsApiBase` bepaalt het upstream detail-endpoint voor expliciete fallback
 - `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
-- `allowStaticDataFallback` schakelt fallback naar statische tiles aan of uit
-- `allowUpstreamDetailsFallback` schakelt fallback naar het upstream details-endpoint aan of uit
-- voor lokale development is `http://localhost:3000/api/v1` de bedoelde default
+- `allowStaticDataFallback` en `allowUpstreamDetailsFallback` staan lokaal standaard aan, maar in niet-lokale omgevingen standaard uit
+- je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
 

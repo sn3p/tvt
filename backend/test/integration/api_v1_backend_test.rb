@@ -8,6 +8,53 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     Entry.delete_all
   end
 
+  test "status reports database connectivity and per-year counts" do
+    entry_2025 = Entry.create!(
+      year: 2025,
+      external_id: 1001,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+    entry_2026 = Entry.create!(
+      year: 2026,
+      external_id: 1002,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: true,
+    )
+    bird = Bird.create!(external_id: 9, name: "Ekster")
+    EntryBirdCount.create!(entry: entry_2026, bird: bird, rank: 1, count: 3, bird_name_cache: "Ekster")
+    EntryTileMembership.create!(entry: entry_2025, year: 2025, mode: "private", z: 6, x: 32, y: 21)
+    EntryTileMembership.create!(entry: entry_2026, year: 2026, mode: "isorg", z: 6, x: 32, y: 21)
+
+    get "/api/v1/status"
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal true, body.dig("database", "connected")
+    assert body["latest_update_utc"].present?
+
+    year_2025 = body.fetch("years").find { |row| row["year"] == 2025 }
+    year_2026 = body.fetch("years").find { |row| row["year"] == 2026 }
+
+    assert_equal 1, year_2025["entries_count"]
+    assert_equal 1, year_2025["private_entries_count"]
+    assert_equal 0, year_2025["isorg_entries_count"]
+    assert_equal 0, year_2025["top_bird_rows_count"]
+    assert_equal 1, year_2025.dig("tile_memberships", "private")
+    assert_equal 0, year_2025.dig("tile_memberships", "isorg")
+
+    assert_equal 1, year_2026["entries_count"]
+    assert_equal 0, year_2026["private_entries_count"]
+    assert_equal 1, year_2026["isorg_entries_count"]
+    assert_equal 1, year_2026["top_bird_rows_count"]
+    assert_equal 0, year_2026.dig("tile_memberships", "private")
+    assert_equal 1, year_2026.dig("tile_memberships", "isorg")
+  end
+
   test "manifest exposes years and published modes" do
     Entry.create!(
       year: 2025,
