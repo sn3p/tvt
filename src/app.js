@@ -783,7 +783,9 @@ export function initApp() {
   let sidebarToggleControl = null;
   let sidebarTab = "species"; // "species" | "view"
   let isComputing = false;
-  const pointTilesSource = new StaticTilesSource();
+  const pointTilesPrimarySource = new BackendApiSource();
+  const pointTilesFallbackSource = new StaticTilesSource();
+  let pointTilesSource = pointTilesPrimarySource;
   const pointDetailsSource = new BackendApiSource();
   let pointTileFetchSeq = 0;
   let pointTileFetchTimer = 0;
@@ -798,6 +800,28 @@ export function initApp() {
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
+
+  async function getPointManifest() {
+    try {
+      return await pointTilesSource.getManifest();
+    } catch (err) {
+      if (pointTilesSource !== pointTilesPrimarySource) throw err;
+      console.warn("Backend point manifest load failed, falling back to static tiles:", err);
+      pointTilesSource = pointTilesFallbackSource;
+      return pointTilesSource.getManifest();
+    }
+  }
+
+  async function getPointTile(params) {
+    try {
+      return await pointTilesSource.getPointTile(params);
+    } catch (err) {
+      if (pointTilesSource !== pointTilesPrimarySource) throw err;
+      console.warn("Backend point tile load failed, falling back to static tiles:", err);
+      pointTilesSource = pointTilesFallbackSource;
+      return pointTilesSource.getPointTile(params);
+    }
+  }
 
   function isWorkerClusterAvailable() {
     return Boolean(workerClusterSource) && !workerClusterFailed;
@@ -2178,7 +2202,7 @@ export function initApp() {
       try {
         birds = await pointDetailsSource.getEntryTopBirds({ year, id });
       } catch (_backendErr) {
-        birds = await pointTilesSource.getEntryTopBirds({ year, id, limit: 9999 });
+        birds = await pointTilesFallbackSource.getEntryTopBirds({ year, id, limit: 9999 });
       }
       pointEntryDetailsByKey.set(key, birds);
       return birds;
@@ -2739,7 +2763,7 @@ export function initApp() {
         return;
       }
 
-      const manifest = await pointTilesSource.getManifest();
+      const manifest = await getPointManifest();
       if (seq !== pointTileFetchSeq || mode !== "points") return;
 
       const yearsAvailable = Array.isArray(manifest?.years_available)
@@ -2808,7 +2832,7 @@ export function initApp() {
       }
 
       const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
-        const json = await pointTilesSource.getPointTile({
+        const json = await getPointTile({
           year: targetYear,
           mode: req.mode,
           z: req.z,
@@ -3053,9 +3077,9 @@ export function initApp() {
     }
   }
 
-  async function probeStaticTilesSource() {
+  async function probePointTilesSource() {
     try {
-      const manifest = await pointTilesSource.getManifest();
+      const manifest = await getPointManifest();
       const defaultYear = Number(manifest?.defaults?.year ?? 0) || Number(manifest?.years_available?.[0] ?? 0);
       const year = defaultYear || (Number(yearInput.value || 0) || 0);
       const modesAvailable = new Set(
@@ -3072,15 +3096,15 @@ export function initApp() {
 
       // Probe one deterministic NL tile near the country's geographic center.
       const { x, y } = lngLatToTileXY({ lng: 5.2913, lat: 52.1326, z });
-      const sampleTile = await pointTilesSource.getPointTile({ year, mode, z, x, y });
+      const sampleTile = await getPointTile({ year, mode, z, x, y });
 
-      globalThis.__tvtStaticTilesProbe = {
+      globalThis.__tvtPointTilesProbe = {
         manifest,
         sampleTile,
         request: { year, mode, z, x, y },
       };
     } catch (err) {
-      console.warn("StaticTilesSource probe failed:", err);
+      console.warn("Point tiles source probe failed:", err);
     }
   }
 
@@ -3143,6 +3167,6 @@ export function initApp() {
   });
 
   // Initial load (defaults to the year input value).
-  probeStaticTilesSource();
+  probePointTilesSource();
   loadForYear(Number(yearInput.value || 0) || 0);
 }
