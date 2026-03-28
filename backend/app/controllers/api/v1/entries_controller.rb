@@ -4,6 +4,8 @@ module Api
       def top_birds
         year = Integer(params[:year])
         external_id = Integer(params[:id])
+        raise ArgumentError, "invalid entry parameters" unless year.positive? && external_id.positive?
+
         entry = Entry.find_by!(year:, external_id:)
 
         birds = entry.entry_bird_counts.includes(:bird).ordered.map do |row|

@@ -70,12 +70,44 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert_equal "1011", body["points"][0]["pc4"]
   end
 
+  test "point tile rejects unsupported modes" do
+    get "/api/v1/years/2025/point_tiles/type1/6/32/21"
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_match(/unsupported mode/, body["error"])
+  end
+
+  test "point tile rejects out of range coordinates" do
+    get "/api/v1/years/2025/point_tiles/private/15/32/21"
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid tile parameters", body["error"]
+  end
+
   test "point tile returns an empty points array for a tile with no memberships" do
-    get "/api/v1/years/2025/point_tiles/isorg/9/999/999"
+    get "/api/v1/years/2025/point_tiles/isorg/9/0/0"
 
     assert_response :success
     body = JSON.parse(response.body)
     assert_equal [], body["points"]
+  end
+
+  test "top birds returns not found for an unknown entry" do
+    get "/api/v1/years/2025/entries/999999/top_birds"
+
+    assert_response :not_found
+    body = JSON.parse(response.body)
+    assert_equal "entry not found", body["error"]
+  end
+
+  test "top birds rejects invalid parameters" do
+    get "/api/v1/years/not-a-year/entries/abc/top_birds"
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid entry parameters", body["error"]
   end
 
   test "top birds returns normalized ordered birds for an entry" do

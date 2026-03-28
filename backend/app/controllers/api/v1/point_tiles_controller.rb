@@ -35,6 +35,7 @@ module Api
         z = Integer(params[:z])
         x = Integer(params[:x])
         y = Integer(params[:y])
+        validate_tile_coordinates!(z:, x:, y:)
 
         memberships = EntryTileMembership
           .for_tile(year:, mode:, z:, x:, y:)
@@ -67,6 +68,14 @@ module Api
 
       def render_invalid_mode(mode)
         render json: { error: "unsupported mode: #{mode}" }, status: :unprocessable_entity
+      end
+
+      def validate_tile_coordinates!(z:, x:, y:)
+        raise ArgumentError, "zoom out of range" unless z.between?(ZOOM_MIN, ZOOM_MAX)
+
+        max_index = (1 << z) - 1
+        raise ArgumentError, "tile x out of range" unless x.between?(0, max_index)
+        raise ArgumentError, "tile y out of range" unless y.between?(0, max_index)
       end
     end
   end
