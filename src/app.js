@@ -1,17 +1,23 @@
-import { loadBirdguide, loadMunicipalityDataset } from "./data.js";
-import { ALLOW_STATIC_DATA_FALLBACK, ALLOW_UPSTREAM_DETAILS_FALLBACK, ENABLE_DIAGNOSTICS, BackendApiSource, StaticTilesSource, isAbortError, lngLatToTileXY, tilesForBounds } from "./data_source.js";
+import {
+  ENABLE_DIAGNOSTICS,
+  BackendApiSource,
+  isAbortError,
+  lngLatToTileXY,
+  tilesForBounds,
+} from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
   const statsEl = document.querySelector("#statsBar");
-  const pointSourceBadge = document.querySelector("#pointSourceBadge");
   const modePointsBtn = document.querySelector("#modePointsBtn");
   const modeSpeciesBtn = document.querySelector("#modeSpeciesBtn");
   const yearInput = document.querySelector("#yearInput");
   const pc4Input = document.querySelector("#pc4Input");
-  const pointsModePrivateInput = document.querySelector("#pointsModePrivateInput");
+  const pointsModePrivateInput = document.querySelector(
+    "#pointsModePrivateInput",
+  );
   const pointsModeIsorgInput = document.querySelector("#pointsModeIsorgInput");
   const filtersForm = document.querySelector("#filtersForm");
   const sidebarSpeciesEl = document.querySelector("#sidebarSpecies");
@@ -22,8 +28,12 @@ export function initApp() {
   const sidebarPanelView = document.querySelector("#sidebarPanelView");
   const speciesSearchInput = document.querySelector("#speciesSearchInput");
   const speciesListEl = document.querySelector("#speciesList");
-  const sidebarSpeciesCloseBtn = document.querySelector("#sidebarSpeciesCloseBtn");
-  const sidebarPointsCloseBtn = document.querySelector("#sidebarPointsCloseBtn");
+  const sidebarSpeciesCloseBtn = document.querySelector(
+    "#sidebarSpeciesCloseBtn",
+  );
+  const sidebarPointsCloseBtn = document.querySelector(
+    "#sidebarPointsCloseBtn",
+  );
   const speciesScopeViewport = document.querySelector("#speciesScopeViewport");
   const speciesScopeAll = document.querySelector("#speciesScopeAll");
   const speciesSortMost = document.querySelector("#speciesSortMost");
@@ -38,22 +48,46 @@ export function initApp() {
   const minNValue = document.querySelector("#minNValue");
   const pointsDisplayAuto = document.querySelector("#pointsDisplayAuto");
   const pointsDisplayPoints = document.querySelector("#pointsDisplayPoints");
-  const pointsDisplayClusters = document.querySelector("#pointsDisplayClusters");
-  const pointsClusterStyleRow = document.querySelector("#pointsClusterStyleRow");
-  const pointsClusterStyleBlended = document.querySelector("#pointsClusterStyleBlended");
-  const pointsClusterStyleMixed = document.querySelector("#pointsClusterStyleMixed");
+  const pointsDisplayClusters = document.querySelector(
+    "#pointsDisplayClusters",
+  );
+  const pointsClusterStyleRow = document.querySelector(
+    "#pointsClusterStyleRow",
+  );
+  const pointsClusterStyleBlended = document.querySelector(
+    "#pointsClusterStyleBlended",
+  );
+  const pointsClusterStyleMixed = document.querySelector(
+    "#pointsClusterStyleMixed",
+  );
   const pointsMaxPointsInput = document.querySelector("#pointsMaxPointsInput");
   const pointsTileBuffer0 = document.querySelector("#pointsTileBuffer0");
   const pointsTileBuffer1 = document.querySelector("#pointsTileBuffer1");
   const pointsTileBuffer2 = document.querySelector("#pointsTileBuffer2");
-  const pointsAutoClusterThresholdRow = document.querySelector("#pointsAutoClusterThresholdRow");
-  const pointsAutoClusterThresholdInput = document.querySelector("#pointsAutoClusterThresholdInput");
-  const pointsDisableClusteringAtZoomRow = document.querySelector("#pointsDisableClusteringAtZoomRow");
-  const pointsDisableClusteringAtZoomInput = document.querySelector("#pointsDisableClusteringAtZoomInput");
-  const pointsClusterEngineRow = document.querySelector("#pointsClusterEngineRow");
-  const pointsClusterEngineDefault = document.querySelector("#pointsClusterEngineDefault");
-  const pointsClusterEngineWorker = document.querySelector("#pointsClusterEngineWorker");
-  const pointsUpdateOnMoveInput = document.querySelector("#pointsUpdateOnMoveInput");
+  const pointsAutoClusterThresholdRow = document.querySelector(
+    "#pointsAutoClusterThresholdRow",
+  );
+  const pointsAutoClusterThresholdInput = document.querySelector(
+    "#pointsAutoClusterThresholdInput",
+  );
+  const pointsDisableClusteringAtZoomRow = document.querySelector(
+    "#pointsDisableClusteringAtZoomRow",
+  );
+  const pointsDisableClusteringAtZoomInput = document.querySelector(
+    "#pointsDisableClusteringAtZoomInput",
+  );
+  const pointsClusterEngineRow = document.querySelector(
+    "#pointsClusterEngineRow",
+  );
+  const pointsClusterEngineDefault = document.querySelector(
+    "#pointsClusterEngineDefault",
+  );
+  const pointsClusterEngineWorker = document.querySelector(
+    "#pointsClusterEngineWorker",
+  );
+  const pointsUpdateOnMoveInput = document.querySelector(
+    "#pointsUpdateOnMoveInput",
+  );
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
   const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
   const pointsResetBtn = document.querySelector("#pointsResetBtn");
@@ -72,7 +106,6 @@ export function initApp() {
   if (
     !mapEl ||
     !statsEl ||
-    !pointSourceBadge ||
     !yearInput ||
     !pc4Input ||
     !pointsModePrivateInput ||
@@ -187,13 +220,18 @@ export function initApp() {
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
-  const WORKER_CLUSTER_FALLBACK_HINT = "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
+  const WORKER_CLUSTER_FALLBACK_HINT =
+    "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
   const THEME_DARK = "dark";
   const THEME_LIGHT = "light";
 
   function normalizeTheme(value) {
-    return String(value || "").trim().toLowerCase() === THEME_LIGHT ? THEME_LIGHT : THEME_DARK;
+    return String(value || "")
+      .trim()
+      .toLowerCase() === THEME_LIGHT
+      ? THEME_LIGHT
+      : THEME_DARK;
   }
 
   function readThemeFromStorage() {
@@ -216,7 +254,9 @@ export function initApp() {
     if (!themeToggleBtn) return;
     const isLight = theme === THEME_LIGHT;
     themeToggleBtn.setAttribute("aria-pressed", isLight ? "true" : "false");
-    const label = isLight ? "Schakel naar donker thema" : "Schakel naar licht thema";
+    const label = isLight
+      ? "Schakel naar donker thema"
+      : "Schakel naar licht thema";
     themeToggleBtn.setAttribute("aria-label", label);
     themeToggleBtn.setAttribute("title", label);
   }
@@ -233,7 +273,9 @@ export function initApp() {
 
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {
-      activeTheme = applyTheme(activeTheme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
+      activeTheme = applyTheme(
+        activeTheme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT,
+      );
     });
   }
 
@@ -263,8 +305,9 @@ export function initApp() {
       "textarea:not([disabled])",
       "[tabindex]:not([tabindex='-1'])",
     ];
-    return Array.from(dialogEl.querySelectorAll(selectors.join(",")))
-      .filter((el) => !el.hasAttribute("hidden") && el.offsetParent !== null);
+    return Array.from(dialogEl.querySelectorAll(selectors.join(","))).filter(
+      (el) => !el.hasAttribute("hidden") && el.offsetParent !== null,
+    );
   }
 
   function closeInfoDialog() {
@@ -373,13 +416,32 @@ export function initApp() {
   const POINTS_SETTINGS_DEFAULTS = {
     displayMode: pointsDisplayClusters.checked
       ? "clusters"
-      : (pointsDisplayPoints.checked ? "points" : "auto"),
+      : pointsDisplayPoints.checked
+        ? "points"
+        : "auto",
     clusterEngine: "worker",
     clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
-    maxPointsInView: normalizeOptionalMaxPointsInView(pointsMaxPointsInput.value, null),
-    tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
-    autoClusterThreshold: toIntInRange(pointsAutoClusterThresholdInput.value, 10, 0, 22),
-    disableClusteringAtZoom: toIntInRange(pointsDisableClusteringAtZoomInput.value, 12, 0, 22),
+    maxPointsInView: normalizeOptionalMaxPointsInView(
+      pointsMaxPointsInput.value,
+      null,
+    ),
+    tileBuffer: pointsTileBuffer2.checked
+      ? 2
+      : pointsTileBuffer0.checked
+        ? 0
+        : 1,
+    autoClusterThreshold: toIntInRange(
+      pointsAutoClusterThresholdInput.value,
+      10,
+      0,
+      22,
+    ),
+    disableClusteringAtZoom: toIntInRange(
+      pointsDisableClusteringAtZoomInput.value,
+      12,
+      0,
+      22,
+    ),
     updateOnMove: Boolean(pointsUpdateOnMoveInput.checked),
   };
 
@@ -390,7 +452,9 @@ export function initApp() {
   }
 
   function normalizePointsSettings(raw) {
-    const displayMode = ["auto", "points", "clusters"].includes(raw?.displayMode)
+    const displayMode = ["auto", "points", "clusters"].includes(
+      raw?.displayMode,
+    )
       ? raw.displayMode
       : POINTS_SETTINGS_DEFAULTS.displayMode;
     const clusterEngine = ["default", "worker"].includes(raw?.clusterEngine)
@@ -403,10 +467,28 @@ export function initApp() {
       displayMode,
       clusterEngine,
       clusterStyle,
-      maxPointsInView: normalizeOptionalMaxPointsInView(raw?.maxPointsInView, POINTS_SETTINGS_DEFAULTS.maxPointsInView),
-      tileBuffer: toIntInRange(raw?.tileBuffer, POINTS_SETTINGS_DEFAULTS.tileBuffer, 0, 2),
-      autoClusterThreshold: toIntInRange(raw?.autoClusterThreshold, POINTS_SETTINGS_DEFAULTS.autoClusterThreshold, 0, 22),
-      disableClusteringAtZoom: toIntInRange(raw?.disableClusteringAtZoom, POINTS_SETTINGS_DEFAULTS.disableClusteringAtZoom, 0, 22),
+      maxPointsInView: normalizeOptionalMaxPointsInView(
+        raw?.maxPointsInView,
+        POINTS_SETTINGS_DEFAULTS.maxPointsInView,
+      ),
+      tileBuffer: toIntInRange(
+        raw?.tileBuffer,
+        POINTS_SETTINGS_DEFAULTS.tileBuffer,
+        0,
+        2,
+      ),
+      autoClusterThreshold: toIntInRange(
+        raw?.autoClusterThreshold,
+        POINTS_SETTINGS_DEFAULTS.autoClusterThreshold,
+        0,
+        22,
+      ),
+      disableClusteringAtZoom: toIntInRange(
+        raw?.disableClusteringAtZoom,
+        POINTS_SETTINGS_DEFAULTS.disableClusteringAtZoom,
+        0,
+        22,
+      ),
       updateOnMove: Boolean(raw?.updateOnMove),
     };
   }
@@ -450,7 +532,10 @@ export function initApp() {
         private: Boolean(pointsModePrivateInput.checked),
         isorg: Boolean(pointsModeIsorgInput.checked),
       };
-      window.localStorage.setItem(POINT_MODE_FILTERS_LS_KEY, JSON.stringify(payload));
+      window.localStorage.setItem(
+        POINT_MODE_FILTERS_LS_KEY,
+        JSON.stringify(payload),
+      );
     } catch {
       // ignore storage failures
     }
@@ -466,7 +551,10 @@ export function initApp() {
 
   function persistPointsSettingsToStorage() {
     try {
-      window.localStorage.setItem(POINTS_SETTINGS_STORAGE_KEY, JSON.stringify(pointsSettings));
+      window.localStorage.setItem(
+        POINTS_SETTINGS_STORAGE_KEY,
+        JSON.stringify(pointsSettings),
+      );
     } catch {
       // ignore storage failures
     }
@@ -475,7 +563,8 @@ export function initApp() {
   function updatePointsControlsVisibility() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
     const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
-    const disableClusteringAtZoomEnabled = pointsSettings.displayMode !== "points";
+    const disableClusteringAtZoomEnabled =
+      pointsSettings.displayMode !== "points";
     const clusterEngineEnabled = pointsSettings.displayMode !== "points";
     const workerAvailable = isWorkerClusterAvailable();
 
@@ -485,39 +574,58 @@ export function initApp() {
       input.disabled = !clusterStyleEnabled;
     }
 
-    pointsAutoClusterThresholdRow.classList.toggle("is-disabled", !autoClusterThresholdEnabled);
+    pointsAutoClusterThresholdRow.classList.toggle(
+      "is-disabled",
+      !autoClusterThresholdEnabled,
+    );
     pointsAutoClusterThresholdInput.disabled = !autoClusterThresholdEnabled;
 
-    pointsDisableClusteringAtZoomRow.classList.toggle("is-disabled", !disableClusteringAtZoomEnabled);
-    pointsDisableClusteringAtZoomInput.disabled = !disableClusteringAtZoomEnabled;
+    pointsDisableClusteringAtZoomRow.classList.toggle(
+      "is-disabled",
+      !disableClusteringAtZoomEnabled,
+    );
+    pointsDisableClusteringAtZoomInput.disabled =
+      !disableClusteringAtZoomEnabled;
 
     pointsClusterEngineRow.hidden = false;
-    pointsClusterEngineRow.classList.toggle("is-disabled", !clusterEngineEnabled);
+    pointsClusterEngineRow.classList.toggle(
+      "is-disabled",
+      !clusterEngineEnabled,
+    );
     for (const input of pointsClusterEngineRow.querySelectorAll("input")) {
       input.disabled = !clusterEngineEnabled;
     }
-    pointsClusterEngineWorker.disabled = !workerAvailable || !clusterEngineEnabled;
+    pointsClusterEngineWorker.disabled =
+      !workerAvailable || !clusterEngineEnabled;
   }
 
   function applyPointsSettingsToUI() {
     pointsDisplayAuto.checked = pointsSettings.displayMode === "auto";
     pointsDisplayPoints.checked = pointsSettings.displayMode === "points";
     pointsDisplayClusters.checked = pointsSettings.displayMode === "clusters";
-    pointsClusterEngineDefault.checked = pointsSettings.clusterEngine === "default";
-    pointsClusterEngineWorker.checked = pointsSettings.clusterEngine === "worker";
+    pointsClusterEngineDefault.checked =
+      pointsSettings.clusterEngine === "default";
+    pointsClusterEngineWorker.checked =
+      pointsSettings.clusterEngine === "worker";
 
-    pointsClusterStyleBlended.checked = pointsSettings.clusterStyle === "blended";
+    pointsClusterStyleBlended.checked =
+      pointsSettings.clusterStyle === "blended";
     pointsClusterStyleMixed.checked = pointsSettings.clusterStyle === "split";
 
-    pointsMaxPointsInput.value = pointsSettings.maxPointsInView == null
-      ? ""
-      : String(pointsSettings.maxPointsInView);
+    pointsMaxPointsInput.value =
+      pointsSettings.maxPointsInView == null
+        ? ""
+        : String(pointsSettings.maxPointsInView);
 
     pointsTileBuffer0.checked = pointsSettings.tileBuffer === 0;
     pointsTileBuffer1.checked = pointsSettings.tileBuffer === 1;
     pointsTileBuffer2.checked = pointsSettings.tileBuffer === 2;
-    pointsAutoClusterThresholdInput.value = String(pointsSettings.autoClusterThreshold);
-    pointsDisableClusteringAtZoomInput.value = String(pointsSettings.disableClusteringAtZoom);
+    pointsAutoClusterThresholdInput.value = String(
+      pointsSettings.autoClusterThreshold,
+    );
+    pointsDisableClusteringAtZoomInput.value = String(
+      pointsSettings.disableClusteringAtZoom,
+    );
 
     pointsUpdateOnMoveInput.checked = pointsSettings.updateOnMove;
     updatePointsControlsVisibility();
@@ -550,7 +658,8 @@ export function initApp() {
     ]);
 
     if (pointsClusterLayer?.options) {
-      pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
+      pointsClusterLayer.options.disableClusteringAtZoom =
+        pointsSettings.disableClusteringAtZoom;
     }
 
     if (mode === "points") schedulePointTileFetch({ immediate: true });
@@ -560,11 +669,17 @@ export function initApp() {
     const next = normalizePointsSettings({
       displayMode: pointsDisplayClusters.checked
         ? "clusters"
-        : (pointsDisplayPoints.checked ? "points" : "auto"),
+        : pointsDisplayPoints.checked
+          ? "points"
+          : "auto",
       clusterEngine: pointsClusterEngineWorker.checked ? "worker" : "default",
       clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
       maxPointsInView: pointsMaxPointsInput.value,
-      tileBuffer: pointsTileBuffer2.checked ? 2 : (pointsTileBuffer0.checked ? 0 : 1),
+      tileBuffer: pointsTileBuffer2.checked
+        ? 2
+        : pointsTileBuffer0.checked
+          ? 0
+          : 1,
       autoClusterThreshold: pointsAutoClusterThresholdInput.value,
       disableClusteringAtZoom: pointsDisableClusteringAtZoomInput.value,
       updateOnMove: pointsUpdateOnMoveInput.checked,
@@ -603,10 +718,14 @@ export function initApp() {
     gridCellSlider.max = String(Math.max(...GRID_CELL_M_PRESETS));
     gridCellSlider.step = "1"; // snapping happens in JS
 
-    const sliderVal = gridCellAutoEnabled ? effectiveM : snapGridCellM(gridCellMManual);
+    const sliderVal = gridCellAutoEnabled
+      ? effectiveM
+      : snapGridCellM(gridCellMManual);
     gridCellSlider.value = String(sliderVal);
 
-    gridCellValue.textContent = gridCellAutoEnabled ? `${effectiveM} m (Auto)` : `${effectiveM} m`;
+    gridCellValue.textContent = gridCellAutoEnabled
+      ? `${effectiveM} m (Auto)`
+      : `${effectiveM} m`;
 
     if (gridCellAuto && "checked" in gridCellAuto) {
       gridCellAuto.checked = gridCellAutoEnabled;
@@ -616,7 +735,9 @@ export function initApp() {
   // Called once we have a Leaflet map instance.
   function initGridCellControls(map) {
     // Compute initial effective size (auto uses current zoom).
-    gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+    gridCellM = gridCellAutoEnabled
+      ? autoGridCellMForZoom(map.getZoom())
+      : snapGridCellM(gridCellMManual);
     updateGridCellUI(gridCellM);
 
     // Slider (manual override)
@@ -659,8 +780,13 @@ export function initApp() {
 
       gridCellAuto.addEventListener("change", () => {
         gridCellAutoEnabled = Boolean(gridCellAuto.checked);
-        localStorage.setItem(GRID_CELL_AUTO_LS_KEY, gridCellAutoEnabled ? "1" : "0");
-        gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+        localStorage.setItem(
+          GRID_CELL_AUTO_LS_KEY,
+          gridCellAutoEnabled ? "1" : "0",
+        );
+        gridCellM = gridCellAutoEnabled
+          ? autoGridCellMForZoom(map.getZoom())
+          : snapGridCellM(gridCellMManual);
         updateGridCellUI(gridCellM);
         schedulePresenceGridCompute();
       });
@@ -689,7 +815,7 @@ export function initApp() {
     // minZoom: 8,
   });
 
-  globalThis.L.control.zoom({ position: 'topright' }).addTo(map);
+  globalThis.L.control.zoom({ position: "topright" }).addTo(map);
 
   // Grid cell size controls (auto/manual) depend on the map instance.
   initGridCellControls(map);
@@ -699,13 +825,16 @@ export function initApp() {
 
   globalThis.L.tileLayer(tileUrl, {
     maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
   function clusterToneForCounts({ privateCount, isorgCount }) {
     if (isorgCount === 0) return "private";
     if (privateCount === 0) return "isorg";
-    return pointsSettings.clusterStyle === "split" ? "mixed-indicator" : "mixed";
+    return pointsSettings.clusterStyle === "split"
+      ? "mixed-indicator"
+      : "mixed";
   }
 
   function createPointsClusterLayer() {
@@ -738,9 +867,10 @@ export function initApp() {
     return globalThis.L.layerGroup();
   }
 
-  const pointCanvasRenderer = typeof globalThis.L?.canvas === "function"
-    ? globalThis.L.canvas({ padding: 0.25 })
-    : null;
+  const pointCanvasRenderer =
+    typeof globalThis.L?.canvas === "function"
+      ? globalThis.L.canvas({ padding: 0.25 })
+      : null;
   const pointsClusterLayer = createPointsClusterLayer();
   const pointsWorkerClusterLayer = globalThis.L.layerGroup();
   const pointsCanvasLayer = globalThis.L.layerGroup();
@@ -750,16 +880,10 @@ export function initApp() {
 
   const gridLayer = globalThis.L.layerGroup();
 
-  let dataset = null;
-  let datasetYear = 0;
-  let didFitOnce = false;
-  let lastPc4 = "";
   let rendered = [];
   let totals = { entries: 0, birds: 0 };
   let loadSeq = 0;
   let mode = "points"; // "points" | "species"
-  let preparedEntries = [];
-  let speciesIndex = [];
   let selectedSpecies = null; // { id?: number|null, name: string }
   const SELECTED_SPECIES_LS_KEY = "tvt:selectedSpecies";
   let computeTimer = 0;
@@ -772,11 +896,26 @@ export function initApp() {
   let minN = Number(minNSlider?.value || 3);
   minNValue.textContent = String(minN);
   const SPECIES_VIEW_DEFAULTS = {
-    metric: metricSum.defaultChecked ? "sum" : (metricAvg.defaultChecked ? "avg" : "presence"),
-    style: styleHeatmap.defaultChecked ? "heatmap" : (styleGrid.defaultChecked ? "grid" : "auto"),
-    minN: Math.max(1, Number(minNSlider?.defaultValue || minNSlider?.value || 1)),
-    gridCellMManual: snapGridCellM(Number(gridCellSlider?.defaultValue || GRID_CELL_M_DEFAULT)),
-    gridCellAutoEnabled: gridCellAuto ? Boolean(gridCellAuto.defaultChecked) : true,
+    metric: metricSum.defaultChecked
+      ? "sum"
+      : metricAvg.defaultChecked
+        ? "avg"
+        : "presence",
+    style: styleHeatmap.defaultChecked
+      ? "heatmap"
+      : styleGrid.defaultChecked
+        ? "grid"
+        : "auto",
+    minN: Math.max(
+      1,
+      Number(minNSlider?.defaultValue || minNSlider?.value || 1),
+    ),
+    gridCellMManual: snapGridCellM(
+      Number(gridCellSlider?.defaultValue || GRID_CELL_M_DEFAULT),
+    ),
+    gridCellAutoEnabled: gridCellAuto
+      ? Boolean(gridCellAuto.defaultChecked)
+      : true,
   };
 
   let sidebarOpen = true;
@@ -786,8 +925,6 @@ export function initApp() {
   let sidebarTab = "species"; // "species" | "view"
   let isComputing = false;
   const pointTilesPrimarySource = new BackendApiSource();
-  const pointTilesFallbackSource = new StaticTilesSource();
-  let pointTilesSource = pointTilesPrimarySource;
   const pointDetailsSource = new BackendApiSource();
   let pointTileFetchSeq = 0;
   let pointTileFetchTimer = 0;
@@ -802,153 +939,22 @@ export function initApp() {
 
   let legendPrivateTextEl = null;
   let legendIsorgTextEl = null;
-  let activePointTilesSourceLabel = "backend";
-  let activePointDetailsSourceLabel = "backend";
-  let pointTilesBackendUnavailable = false;
-  let pointDetailsBackendUnavailable = false;
-  let pointTilesFallbackDeclined = false;
-  let pointTilesFallbackAccepted = false;
-  let pointSourceStatusMessage = "";
   const speciesSource = new BackendApiSource();
-  let speciesManifest = null;
   let speciesCatalogRows = [];
   let speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
   let speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-  let speciesUseStaticFallback = false;
-  let speciesFallbackAccepted = false;
-  let speciesFallbackDeclined = false;
-  let speciesBackendUnavailable = false;
   let speciesCatalogFetchTimer = 0;
   let speciesCatalogAbortController = null;
   let speciesGridAbortController = null;
   let speciesCatalogSeq = 0;
   let speciesGridSeq = 0;
 
-  function pointSourceSummaryText() {
-    const parts = [`punten: ${activePointTilesSourceLabel}`, `details: ${activePointDetailsSourceLabel}`];
-    if (pointSourceStatusMessage) parts.push(pointSourceStatusMessage);
-    return parts.join(" • ");
-  }
-
-  function updatePointSourceBadge() {
-    if (mode !== "points") {
-      pointSourceBadge.hidden = true;
-      pointSourceBadge.textContent = "";
-      pointSourceBadge.removeAttribute("title");
-      pointSourceBadge.className = "source-badge";
-      return;
-    }
-
-    const usesFallbackTiles = activePointTilesSourceLabel !== "backend";
-    const usesFallbackDetails = activePointDetailsSourceLabel !== "backend";
-    const summary = pointSourceSummaryText();
-    const hasIssue = usesFallbackTiles || usesFallbackDetails || Boolean(pointSourceStatusMessage);
-    let label = "Bron: backend API";
-    if (usesFallbackTiles && usesFallbackDetails) label = "Bron: statische tiles + upstream details";
-    else if (usesFallbackTiles) label = "Bron: statische tiles";
-    else if (usesFallbackDetails) label = "Bron: backend + upstream details";
-    else if (hasIssue) label = "Bron: backend API (fout)";
-
-    pointSourceBadge.hidden = false;
-    pointSourceBadge.textContent = label;
-    pointSourceBadge.title = summary;
-    pointSourceBadge.className = `source-badge ${hasIssue ? "is-fallback" : "is-backend"}`;
-  }
-
-  function refreshPointSourceStatus() {
-    const parts = [];
-    if (activePointTilesSourceLabel !== "backend") {
-      parts.push("backend punten niet beschikbaar; statische tiles gebruikt");
-    } else if (pointTilesFallbackDeclined) {
-      parts.push("backend punten niet beschikbaar; fallback geweigerd");
-    } else if (pointTilesBackendUnavailable) {
-      parts.push("backend punten niet beschikbaar; fallback uitgeschakeld");
-    }
-    if (activePointDetailsSourceLabel !== "backend") {
-      parts.push("backend details niet beschikbaar; upstream endpoint gebruikt");
-    } else if (pointDetailsBackendUnavailable) {
-      parts.push("backend details niet beschikbaar; fallback uitgeschakeld");
-    }
-    pointSourceStatusMessage = parts.join(" • ");
-    updatePointSourceBadge();
-  }
-
-  function confirmPointTilesFallback() {
-    if (!ALLOW_STATIC_DATA_FALLBACK) return false;
-    if (pointTilesFallbackAccepted) return true;
-    if (pointTilesFallbackDeclined) return false;
-
-    const accepted = window.confirm(
-      "Backend puntendata is niet beschikbaar.\n\nWil je doorgaan met lokale fallback-data?"
-    );
-
-    pointTilesFallbackAccepted = accepted;
-    pointTilesFallbackDeclined = !accepted;
-    return accepted;
-  }
-
   async function getPointManifest() {
-    try {
-      const manifest = await pointTilesSource.getManifest();
-      if (pointTilesSource === pointTilesPrimarySource) {
-        activePointTilesSourceLabel = "backend";
-        pointTilesBackendUnavailable = false;
-        pointTilesFallbackDeclined = false;
-        refreshPointSourceStatus();
-      }
-      return manifest;
-    } catch (err) {
-      if (pointTilesSource !== pointTilesPrimarySource) throw err;
-      pointTilesBackendUnavailable = true;
-      if (!confirmPointTilesFallback()) {
-        refreshPointSourceStatus();
-        throw err;
-      }
-      console.warn("Backend point manifest load failed, falling back to static tiles:", err);
-      pointTilesSource = pointTilesFallbackSource;
-      activePointTilesSourceLabel = "fallback";
-      refreshPointSourceStatus();
-      return pointTilesSource.getManifest();
-    }
+    return pointTilesPrimarySource.getManifest();
   }
 
   async function getPointTile(params) {
-    try {
-      const tile = await pointTilesSource.getPointTile(params);
-      if (pointTilesSource === pointTilesPrimarySource) {
-        activePointTilesSourceLabel = "backend";
-        pointTilesBackendUnavailable = false;
-        pointTilesFallbackDeclined = false;
-        refreshPointSourceStatus();
-      }
-      return tile;
-    } catch (err) {
-      if (pointTilesSource !== pointTilesPrimarySource) throw err;
-      pointTilesBackendUnavailable = true;
-      if (!confirmPointTilesFallback()) {
-        refreshPointSourceStatus();
-        throw err;
-      }
-      console.warn("Backend point tile load failed, falling back to static tiles:", err);
-      pointTilesSource = pointTilesFallbackSource;
-      activePointTilesSourceLabel = "fallback";
-      refreshPointSourceStatus();
-      return pointTilesSource.getPointTile(params);
-    }
-  }
-
-  function confirmSpeciesFallback() {
-    if (!ALLOW_STATIC_DATA_FALLBACK) return false;
-    if (speciesFallbackAccepted) return true;
-    if (speciesFallbackDeclined) return false;
-
-    const accepted = window.confirm(
-      "Backend soortendata is niet beschikbaar.\n\nWil je doorgaan met lokale fallback-data?"
-    );
-
-    speciesFallbackAccepted = accepted;
-    speciesFallbackDeclined = !accepted;
-    return accepted;
+    return pointTilesPrimarySource.getPointTile(params);
   }
 
   function currentSpeciesBounds() {
@@ -959,46 +965,9 @@ export function initApp() {
     }
   }
 
-  async function loadStaticSpeciesDataset(year, seq) {
-    const json = await loadMunicipalityDataset({ year, area: "groningen" });
-    if (seq !== loadSeq) return;
-
-    dataset = json;
-    datasetYear = year;
-    didFitOnce = false;
-
-    prepareDataset(json);
-    speciesManifest = null;
-    speciesCatalogRows = [];
-    speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
-    speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-
-    if (!speciesIndex || speciesIndex.length === 0) {
-      try {
-        const guide = await loadBirdguide();
-        if (seq !== loadSeq) return;
-        speciesIndex = (Array.isArray(guide) ? guide : [])
-          .map((name) => ({ id: null, name: String(name || "").trim() }))
-          .filter((s) => s.name)
-          .sort((a, b) => a.name.localeCompare(b.name, "nl"));
-      } catch {
-        // ignore fallback failure
-      }
-    }
-
-    if (selectedSpecies) {
-      const ok = speciesIndex.some((s) => s.id === selectedSpecies.id && s.name === selectedSpecies.name);
-      if (!ok) setSelectedSpecies(null);
-    }
-
-    setComputing(false);
-    renderSpeciesList({ query: speciesSearchInput.value });
-    render();
-  }
-
   function scheduleSpeciesCatalogFetch({ immediate = false } = {}) {
     if (speciesCatalogFetchTimer) window.clearTimeout(speciesCatalogFetchTimer);
-    if (mode !== "species" || speciesUseStaticFallback) return;
+    if (mode !== "species") return;
 
     const run = () => {
       speciesCatalogFetchTimer = 0;
@@ -1014,7 +983,7 @@ export function initApp() {
   }
 
   async function refreshSpeciesCatalog() {
-    if (mode !== "species" || speciesUseStaticFallback) return;
+    if (mode !== "species") return;
 
     const year = Number(yearInput.value || 0) || 0;
     if (!year) return;
@@ -1025,29 +994,31 @@ export function initApp() {
     speciesCatalogAbortController = controller;
 
     try {
-      const bounds = speciesScope === "viewport" ? currentSpeciesBounds() : null;
+      const bounds =
+        speciesScope === "viewport" ? currentSpeciesBounds() : null;
+      const { includePrivate, includeIsorg } = getFilters();
       const json = await speciesSource.getSpeciesCatalog({
         year,
         area: "groningen",
         pc4: normalizePc4(pc4Input.value),
-        includePrivate: true,
-        includeIsorg: true,
+        includePrivate,
+        includeIsorg,
         scope: speciesScope,
         bbox: bounds,
         signal: controller.signal,
       });
-      if (seq !== speciesCatalogSeq || mode !== "species" || speciesUseStaticFallback) return;
+      if (seq !== speciesCatalogSeq || mode !== "species") return;
 
-      speciesBackendUnavailable = false;
       speciesCatalogRows = Array.isArray(json?.species)
-        ? json.species.map((row) => ({
-          id: Number(row?.bird_id ?? NaN),
-          name: String(row?.name ?? "").trim(),
-          withCount: Number(row?.with_count ?? 0) || 0,
-          sumCount: Number(row?.sum_count ?? 0) || 0,
-        })).filter((row) => Number.isFinite(row.id) && row.name)
+        ? json.species
+            .map((row) => ({
+              id: Number(row?.bird_id ?? NaN),
+              name: String(row?.name ?? "").trim(),
+              withCount: Number(row?.with_count ?? 0) || 0,
+              sumCount: Number(row?.sum_count ?? 0) || 0,
+            }))
+            .filter((row) => Number.isFinite(row.id) && row.name)
         : [];
-      speciesIndex = speciesCatalogRows.map((row) => ({ id: row.id, name: row.name }));
       speciesCatalogStats = {
         entryCount: Number(json?.entry_count ?? 0) || 0,
         privateCount: Number(json?.private_entries_count ?? 0) || 0,
@@ -1055,7 +1026,10 @@ export function initApp() {
       };
 
       if (selectedSpecies) {
-        const ok = speciesCatalogRows.some((row) => row.id === selectedSpecies.id && row.name === selectedSpecies.name);
+        const ok = speciesCatalogRows.some(
+          (row) =>
+            row.id === selectedSpecies.id && row.name === selectedSpecies.name,
+        );
         if (!ok) setSelectedSpecies(null);
       }
 
@@ -1063,17 +1037,12 @@ export function initApp() {
       updateViewportStats();
     } catch (err) {
       if (isAbortError(err)) return;
-      speciesBackendUnavailable = true;
-      if (confirmSpeciesFallback()) {
-        speciesUseStaticFallback = true;
-        await loadForYear(year);
-        return;
-      }
       if (mode === "species") {
         statsEl.textContent = `Soortencatalogus laden mislukt: ${err?.message || String(err)}`;
       }
     } finally {
-      if (speciesCatalogAbortController === controller) speciesCatalogAbortController = null;
+      if (speciesCatalogAbortController === controller)
+        speciesCatalogAbortController = null;
     }
   }
 
@@ -1089,13 +1058,19 @@ export function initApp() {
   function renderBackendSpeciesGrid(json) {
     const cells = Array.isArray(json?.cells) ? json.cells : [];
     if (!cells.length) {
-      updateGridLegend({ metric, maxMetric: 0, effectiveStyle: style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style });
+      updateGridLegend({
+        metric,
+        maxMetric: 0,
+        effectiveStyle:
+          style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style,
+      });
       setComputing(false);
       updateHud();
       return;
     }
 
-    const effectiveStyle = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const effectiveStyle =
+      style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
     const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
     let maxMetric = 0;
     for (const cell of cells) {
@@ -1115,7 +1090,9 @@ export function initApp() {
       const vNorm =
         metric === "presence"
           ? clamp01(value)
-          : (maxMetric ? clamp01(value / maxMetric) : 0);
+          : maxMetric
+            ? clamp01(value / maxMetric)
+            : 0;
       if (!vNorm) continue;
 
       const nScale = Math.min(1, Math.sqrt(total) / 3);
@@ -1136,12 +1113,16 @@ export function initApp() {
       let tooltip = `<b>${selectedSpecies?.name || "Soort"}</b> — `;
       switch (metric) {
         case "presence": {
-          const pct = formatNumber((total ? (withN / total) * 100 : 0), { maxDecimals: 1 });
+          const pct = formatNumber(total ? (withN / total) * 100 : 0, {
+            maxDecimals: 1,
+          });
           tooltip += `aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen (${pct}%)`;
           break;
         }
         case "avg": {
-          const avgFmt = formatNumber((total ? sum / total : 0), { maxDecimals: 2 });
+          const avgFmt = formatNumber(total ? sum / total : 0, {
+            maxDecimals: 2,
+          });
           tooltip += `gemiddeld ${avgFmt} per inzending in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
           break;
         }
@@ -1205,6 +1186,7 @@ export function initApp() {
     setComputing(true);
 
     try {
+      const { includePrivate, includeIsorg } = getFilters();
       const json = await speciesSource.getSpeciesGrid({
         year,
         area: "groningen",
@@ -1213,30 +1195,24 @@ export function initApp() {
         cellSizeM: gridCellM,
         minN,
         pc4: normalizePc4(pc4Input.value),
-        includePrivate: true,
-        includeIsorg: true,
+        includePrivate,
+        includeIsorg,
         bbox: bounds,
         signal: controller.signal,
       });
-      if (seq !== speciesGridSeq || mode !== "species" || speciesUseStaticFallback) return;
+      if (seq !== speciesGridSeq || mode !== "species") return;
 
-      speciesBackendUnavailable = false;
       speciesGridSummary = speciesSummaryFromGridResponse(json);
       renderBackendSpeciesGrid(json);
     } catch (err) {
       if (isAbortError(err)) return;
-      speciesBackendUnavailable = true;
-      if (confirmSpeciesFallback()) {
-        speciesUseStaticFallback = true;
-        await loadForYear(year);
-        return;
-      }
       gridLayer.clearLayers();
       setComputing(false);
       statsEl.textContent = `Soortenraster laden mislukt: ${err?.message || String(err)}`;
       updateHud();
     } finally {
-      if (speciesGridAbortController === controller) speciesGridAbortController = null;
+      if (speciesGridAbortController === controller)
+        speciesGridAbortController = null;
     }
   }
 
@@ -1268,7 +1244,10 @@ export function initApp() {
       workerClusterSource.destroy();
       workerClusterSource = null;
     }
-    console.warn("Worker clustering failed; falling back to default clustering.", err);
+    console.warn(
+      "Worker clustering failed; falling back to default clustering.",
+      err,
+    );
     if (pointsSettings.clusterEngine === "worker") {
       pointsSettings.clusterEngine = "default";
       applyPointsSettingsToUI();
@@ -1311,7 +1290,9 @@ export function initApp() {
       const id =
         idRaw == null
           ? null
-          : (Number.isFinite(Number(idRaw)) ? Number(idRaw) : null);
+          : Number.isFinite(Number(idRaw))
+            ? Number(idRaw)
+            : null;
       return { id, name };
     } catch {
       return null;
@@ -1332,7 +1313,10 @@ export function initApp() {
         window.localStorage.removeItem(SELECTED_SPECIES_LS_KEY);
         return;
       }
-      window.localStorage.setItem(SELECTED_SPECIES_LS_KEY, JSON.stringify(payload));
+      window.localStorage.setItem(
+        SELECTED_SPECIES_LS_KEY,
+        JSON.stringify(payload),
+      );
     } catch {
       // ignore storage failures (private mode, quota, etc.)
     }
@@ -1386,7 +1370,10 @@ export function initApp() {
   // especially when `selectedSpecies` is restored from localStorage. So this must be defined
   // before the first `setMode(...)` call to avoid TDZ issues.
   const nfInt = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
-  const nfAvg1 = new Intl.NumberFormat("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nfAvg1 = new Intl.NumberFormat("nl-NL", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 
   function fmtInt(n) {
     return nfInt.format(Number(n || 0) || 0);
@@ -1399,61 +1386,6 @@ export function initApp() {
 
   function entryHasMode(entry, mode) {
     return Array.isArray(entry?.modes) && entry.modes.includes(mode);
-  }
-
-  function prepareDataset(json) {
-    const entries = Array.isArray(json?.entries) ? json.entries : [];
-
-    // Build a species index from the compiled dataset (preferred over birdguide).
-    const byId = new Map();
-    for (const e of entries) {
-      const birds = Array.isArray(e?.birds) ? e.birds : [];
-      for (const b of birds) {
-        const id = Number(b?.bird_id ?? NaN);
-        const name = String(b?.name ?? "").trim();
-        if (!Number.isFinite(id) || !name) continue;
-        if (!byId.has(id)) byId.set(id, name);
-      }
-    }
-    speciesIndex = Array.from(byId.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, "nl"));
-
-    preparedEntries = entries
-      .map((e) => {
-        const lat = Number(e?.lat);
-        const lng = Number(e?.lng);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-        const isOrg = entryHasMode(e, "isorg");
-        const rawIsType1 = entryHasMode(e, "type1");
-        // IMPORTANT: `type1` can contain `isorg` entries too (see `entryIncludedByModes`).
-        const isPrivate = rawIsType1 && !isOrg;
-
-        const birds = Array.isArray(e?.birds) ? e.birds : [];
-        const birdsTotal = sumBirds(birds);
-
-        const birdIds = new Set();
-        const birdNames = new Set();
-        for (const b of birds) {
-          const id = Number(b?.bird_id ?? NaN);
-          if (Number.isFinite(id)) birdIds.add(id);
-          const n = normalizeSpeciesName(b?.name);
-          if (n) birdNames.add(n);
-        }
-
-        return {
-          entry: e,
-          latlng: globalThis.L.latLng(lat, lng),
-          pc4: String(e?.pc4 ?? ""),
-          isPrivate,
-          isOrg,
-          birdsTotal,
-          birdIds,
-          birdNames,
-        };
-      })
-      .filter(Boolean);
   }
 
   function labelForEntry(entry) {
@@ -1470,23 +1402,26 @@ export function initApp() {
       b = null;
     }
 
-    if (mode === "species" && !speciesUseStaticFallback) {
+    if (mode === "species") {
       const inScopeEntries = Number(speciesCatalogStats.entryCount) || 0;
       hudStats = { entries: inScopeEntries, birds: 0 };
 
       const main = document.createElement("span");
       main.className = "stats-main";
-      main.textContent = speciesScope === "viewport"
-        ? `${fmtInt(inScopeEntries)} inzendingen in beeld`
-        : `${fmtInt(inScopeEntries)} inzendingen in selectie`;
+      main.textContent =
+        speciesScope === "viewport"
+          ? `${fmtInt(inScopeEntries)} inzendingen in beeld`
+          : `${fmtInt(inScopeEntries)} inzendingen in selectie`;
 
       const provisional = document.createElement("span");
       provisional.className = "stats-provisional";
       provisional.textContent = `${fmtInt(speciesCatalogStats.privateCount)} particulier • ${fmtInt(speciesCatalogStats.isorgCount)} school`;
 
       statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
-      if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${fmtInt(speciesCatalogStats.privateCount)})`;
-      if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${fmtInt(speciesCatalogStats.isorgCount)})`;
+      if (legendPrivateTextEl)
+        legendPrivateTextEl.textContent = `Particulier (${fmtInt(speciesCatalogStats.privateCount)})`;
+      if (legendIsorgTextEl)
+        legendIsorgTextEl.textContent = `School (${fmtInt(speciesCatalogStats.isorgCount)})`;
       updateHud();
       return;
     }
@@ -1507,8 +1442,10 @@ export function initApp() {
       provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
 
       statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
-      if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
-      if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
+      if (legendPrivateTextEl)
+        legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
+      if (legendIsorgTextEl)
+        legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
       updateHud();
       return;
     }
@@ -1537,8 +1474,10 @@ export function initApp() {
 
     statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
 
-    if (legendPrivateTextEl) legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
-    if (legendIsorgTextEl) legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
+    if (legendPrivateTextEl)
+      legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
+    if (legendIsorgTextEl)
+      legendIsorgTextEl.textContent = `School (${inViewIsorg})`;
     updateHud();
   }
 
@@ -1568,7 +1507,7 @@ export function initApp() {
         getTextEl: (el) => {
           legendPrivateTextEl = el;
         },
-      })
+      }),
     );
     div.appendChild(
       row({
@@ -1577,7 +1516,7 @@ export function initApp() {
         getTextEl: (el) => {
           legendIsorgTextEl = el;
         },
-      })
+      }),
     );
 
     // Don't let the legend eat map scroll/drag.
@@ -1605,12 +1544,15 @@ export function initApp() {
 
   function setPointRenderKind(nextKind, { force = false } = {}) {
     const resolved = nextKind === "clusters" ? "clusters" : "points";
-    const nextLayer = resolved === "clusters" ? resolveClusterLayer() : pointsCanvasLayer;
-    if (!force && resolved === pointRenderKind && pointsLayer === nextLayer) return;
+    const nextLayer =
+      resolved === "clusters" ? resolveClusterLayer() : pointsCanvasLayer;
+    if (!force && resolved === pointRenderKind && pointsLayer === nextLayer)
+      return;
     const previousLayer = pointsLayer;
     const wasVisible = map.hasLayer(previousLayer);
     if (wasVisible) map.removeLayer(previousLayer);
-    if (typeof previousLayer.clearLayers === "function") previousLayer.clearLayers();
+    if (typeof previousLayer.clearLayers === "function")
+      previousLayer.clearLayers();
     pointRenderKind = resolved;
     controlsRenderKind = pointRenderKind;
     pointsLayer = nextLayer;
@@ -1680,7 +1622,10 @@ export function initApp() {
 
   const gridLegend = globalThis.L.control({ position: "bottomright" });
   gridLegend.onAdd = () => {
-    const div = globalThis.L.DomUtil.create("div", "pill tvt-legend tvt-grid-legend");
+    const div = globalThis.L.DomUtil.create(
+      "div",
+      "pill tvt-legend tvt-grid-legend",
+    );
 
     const title = document.createElement("div");
     title.className = "tvt-grid-legend-title";
@@ -1715,7 +1660,11 @@ export function initApp() {
     globalThis.L.DomEvent.disableScrollPropagation(div);
 
     // Populate with a sensible default so it never renders "empty".
-    updateGridLegend({ metric: "presence", maxMetric: 1, effectiveStyle: "grid" });
+    updateGridLegend({
+      metric: "presence",
+      maxMetric: 1,
+      effectiveStyle: "grid",
+    });
     return div;
   };
   gridLegend.addTo(map);
@@ -1731,7 +1680,13 @@ export function initApp() {
   setGridLegendVisible(false);
 
   function updateGridLegend({ metric, maxMetric, effectiveStyle }) {
-    if (!gridLegendTitleEl || !gridLegendScaleEl || !gridLegendLabelsEl || !gridLegendNoteEl) return;
+    if (
+      !gridLegendTitleEl ||
+      !gridLegendScaleEl ||
+      !gridLegendLabelsEl ||
+      !gridLegendNoteEl
+    )
+      return;
 
     const stops = [0, 0.25, 0.5, 0.75, 1];
     const m = ["sum", "avg", "presence"].includes(metric) ? metric : "presence";
@@ -1762,14 +1717,17 @@ export function initApp() {
       avg: {
         formatLabel: (s, maxOk) => (maxOk ? fmtAvg(s * maxOk) : "0"),
         colorLine: "<b>Kleur:</b> hoger gemiddeld per inzending = donkerder",
-        scaleLine: (maxOk) => (maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtAvg(maxOk)})` : ""),
+        scaleLine: (maxOk) =>
+          maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtAvg(maxOk)})` : "",
       },
       sum: {
         formatLabel: (s, maxOk) => (maxOk ? fmtInt(s * maxOk) : "0"),
         colorLine: "<b>Kleur:</b> meer geteld = donkerder",
-        scaleLine: (maxOk) => (maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtInt(maxOk)})` : ""),
+        scaleLine: (maxOk) =>
+          maxOk ? `<b>Schaal:</b> in beeld (max: ${fmtInt(maxOk)})` : "",
       },
-      transparencyLine: "<b>Transparantie:</b> meer inzendingen in vak = minder transparant",
+      transparencyLine:
+        "<b>Transparantie:</b> meer inzendingen in vak = minder transparant",
     };
 
     const legend = LEGEND_COPY[m] || LEGEND_COPY.presence;
@@ -1777,16 +1735,26 @@ export function initApp() {
 
     for (const s of stops) {
       const el = document.createElement("span");
-      el.textContent = legend.formatLabel.length >= 2 ? legend.formatLabel(s, maxOk) : legend.formatLabel(s);
+      el.textContent =
+        legend.formatLabel.length >= 2
+          ? legend.formatLabel(s, maxOk)
+          : legend.formatLabel(s);
       gridLegendLabelsEl.appendChild(el);
     }
 
     // Tooltip (kort, menselijk)
-    const tooltipText = [legend.scaleLine?.(maxOk), legend.colorLine, legend.transparencyLine].filter(Boolean).join(" • ");
+    const tooltipText = [
+      legend.scaleLine?.(maxOk),
+      legend.colorLine,
+      legend.transparencyLine,
+    ]
+      .filter(Boolean)
+      .join(" • ");
     gridLegendTooltipEl.setAttribute("data-tooltip-content-value", tooltipText);
 
     // Min-N only when it actually filters something.
-    gridLegendNoteEl.innerHTML = minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
+    gridLegendNoteEl.innerHTML =
+      minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
   }
 
   function setMode(nextMode) {
@@ -1794,8 +1762,14 @@ export function initApp() {
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
 
-    modePointsBtn.setAttribute("aria-pressed", mode === "points" ? "true" : "false");
-    modeSpeciesBtn.setAttribute("aria-pressed", mode === "species" ? "true" : "false");
+    modePointsBtn.setAttribute(
+      "aria-pressed",
+      mode === "points" ? "true" : "false",
+    );
+    modeSpeciesBtn.setAttribute(
+      "aria-pressed",
+      mode === "species" ? "true" : "false",
+    );
 
     // Allow mode-based styling without touching JS again.
     document.body.dataset.mode = mode;
@@ -1807,7 +1781,6 @@ export function initApp() {
     }
 
     updateSidebarToggleControl();
-    updatePointSourceBadge();
 
     if (mode === "species") {
       clearPointTileFetchTimer();
@@ -1888,7 +1861,9 @@ export function initApp() {
 
   function getSavedSidebarOpen(targetMode) {
     try {
-      const v = window.localStorage.getItem(sidebarStorageKeyForMode(targetMode));
+      const v = window.localStorage.getItem(
+        sidebarStorageKeyForMode(targetMode),
+      );
       if (v == null) return null;
       return v === "1" || v === "true" || v === "open";
     } catch {
@@ -1898,7 +1873,10 @@ export function initApp() {
 
   function saveSidebarOpenForMode(targetMode, open) {
     try {
-      window.localStorage.setItem(sidebarStorageKeyForMode(targetMode), open ? "open" : "closed");
+      window.localStorage.setItem(
+        sidebarStorageKeyForMode(targetMode),
+        open ? "open" : "closed",
+      );
     } catch {
       // ignore
     }
@@ -1947,7 +1925,11 @@ export function initApp() {
     const saved = getSavedSidebarOpen("species");
     if (saved == null) {
       // First time: open sidebar (friendly), except on mobile with species selected.
-      if (isMobile() && selectedSpecies) setSidebarOpen(false, { persist: false, reason: "mobile-default-closed" });
+      if (isMobile() && selectedSpecies)
+        setSidebarOpen(false, {
+          persist: false,
+          reason: "mobile-default-closed",
+        });
       else setSidebarOpen(true, { persist: false, reason: "first-time-open" });
       return;
     }
@@ -1958,7 +1940,10 @@ export function initApp() {
     const saved = getSavedSidebarOpen("points");
     if (saved == null) {
       // Points sidebar starts collapsed by default on desktop and mobile.
-      setSidebarOpen(false, { persist: false, reason: "points-default-collapsed" });
+      setSidebarOpen(false, {
+        persist: false,
+        reason: "points-default-collapsed",
+      });
       return;
     }
     setSidebarOpen(saved, { persist: false, reason: "restore" });
@@ -1977,7 +1962,11 @@ export function initApp() {
   function updateSidebarToggleControl() {
     if (mode !== "species" && mode !== "points") {
       if (sidebarToggleControl) {
-        try { sidebarToggleControl.remove(); } catch { /* ignore */ }
+        try {
+          sidebarToggleControl.remove();
+        } catch {
+          /* ignore */
+        }
       }
       sidebarToggleControl = null;
       return;
@@ -1990,7 +1979,9 @@ export function initApp() {
         btn.type = "button";
         btn.className = "tvt-sidebar-toggle-btn";
         btn.dataset.controller = "icon";
-        btn.addEventListener("click", () => setSidebarOpen(!sidebarOpen, { persist: true, reason: "map-toggle" }));
+        btn.addEventListener("click", () =>
+          setSidebarOpen(!sidebarOpen, { persist: true, reason: "map-toggle" }),
+        );
         globalThis.L.DomEvent.disableClickPropagation(btn);
         globalThis.L.DomEvent.disableScrollPropagation(btn);
         return btn;
@@ -2000,9 +1991,13 @@ export function initApp() {
 
     const el = sidebarToggleControl.getContainer();
     if (el) {
-      el.dataset.iconSrcValue = sidebarOpen ? "img/icons/sidebar-close.svg" : "img/icons/sidebar-open.svg";
+      el.dataset.iconSrcValue = sidebarOpen
+        ? "img/icons/sidebar-close.svg"
+        : "img/icons/sidebar-open.svg";
       const sidebarName = mode === "species" ? "Soorten" : "Tellingen";
-      el.ariaLabel = sidebarOpen ? `${sidebarName}-zijbalk sluiten` : `${sidebarName}-zijbalk openen`;
+      el.ariaLabel = sidebarOpen
+        ? `${sidebarName}-zijbalk sluiten`
+        : `${sidebarName}-zijbalk openen`;
     }
   }
 
@@ -2035,7 +2030,8 @@ export function initApp() {
       return;
     }
 
-    const effectiveStyleRaw = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const effectiveStyleRaw =
+      style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
     const styleNl = effectiveStyleRaw === "heatmap" ? "heatmap" : "raster";
     const suffixMinN = minN > 1 ? ` · min‑N ${minN}` : "";
 
@@ -2062,7 +2058,9 @@ export function initApp() {
         hudMetric = `In beeld · Gemiddeld ${fmtAvg(summary.avg)} per inzending`;
       } else {
         // presence
-        const pct = summary.total ? Math.round((summary.with / summary.total) * 100) : 0;
+        const pct = summary.total
+          ? Math.round((summary.with / summary.total) * 100)
+          : 0;
         hudMetric = `Aanwezig in ${fmtInt(summary.with)}/${fmtInt(summary.total)} inzendingen (${pct}%)`;
       }
     }
@@ -2091,7 +2089,8 @@ export function initApp() {
         metricEl.className = "tvt-hud-metric";
         div.appendChild(metricEl);
 
-        const open = () => setSidebarOpen(true, { persist: true, reason: "hud" });
+        const open = () =>
+          setSidebarOpen(true, { persist: true, reason: "hud" });
         div.addEventListener("click", open);
         div.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") open();
@@ -2117,44 +2116,8 @@ export function initApp() {
   }
 
   function computeSelectedSpeciesViewportSummary() {
-    const out = { total: 0, with: 0, sum: 0, avg: 0 };
-    if (!selectedSpecies) return out;
-
-    if (!speciesUseStaticFallback) {
-      return { ...speciesGridSummary };
-    }
-
-    let bounds = null;
-    try {
-      bounds = map.getBounds();
-    } catch {
-      bounds = null;
-    }
-    if (!bounds) return out;
-
-    const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
-    const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
-
-    for (const e of rendered) {
-      if (!bounds.contains(e.latlng)) continue;
-      out.total += 1;
-
-      let cnt = 0;
-      const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
-      for (const b of birds) {
-        const id = Number(b?.bird_id ?? NaN);
-        const nm = normalizeSpeciesName(b?.name);
-        if (selId != null ? Number.isFinite(id) && id === selId : nm === selName) {
-          cnt = Number(b?.count ?? 0) || 0;
-          break;
-        }
-      }
-      if (cnt > 0) out.with += 1;
-      out.sum += cnt;
-    }
-
-    out.avg = out.total ? out.sum / out.total : 0;
-    return out;
+    if (!selectedSpecies) return { total: 0, with: 0, sum: 0, avg: 0 };
+    return { ...speciesGridSummary };
   }
 
   function setComputing(next) {
@@ -2164,8 +2127,14 @@ export function initApp() {
 
   function setSidebarTab(next) {
     sidebarTab = next === "view" ? "view" : "species";
-    sidebarTabSpecies.setAttribute("aria-pressed", sidebarTab === "species" ? "true" : "false");
-    sidebarTabView.setAttribute("aria-pressed", sidebarTab === "view" ? "true" : "false");
+    sidebarTabSpecies.setAttribute(
+      "aria-pressed",
+      sidebarTab === "species" ? "true" : "false",
+    );
+    sidebarTabView.setAttribute(
+      "aria-pressed",
+      sidebarTab === "view" ? "true" : "false",
+    );
     sidebarPanelSpecies.hidden = sidebarTab !== "species";
     sidebarPanelView.hidden = sidebarTab !== "view";
   }
@@ -2176,66 +2145,27 @@ export function initApp() {
   // Default tab on open.
   setSidebarTab("species");
 
-  function filteredPreparedEntries() {
-    const { pc4, includePrivate, includeIsorg } = getFilters();
-    return preparedEntries.filter((p) => {
-      if (pc4 && p.pc4 !== pc4) return false;
-      return (includePrivate && p.isPrivate) || (includeIsorg && p.isOrg);
-    });
-  }
-
   function renderSpeciesList({ query = "" } = {}) {
     const q = normalizeSpeciesName(query);
 
-    const listBase = speciesUseStaticFallback
-      ? (() => {
-        const baseAll = filteredPreparedEntries();
-        const bounds = currentSpeciesBounds();
-        const base =
-          speciesScope === "all" || !bounds
-            ? baseAll
-            : baseAll.filter((p) => bounds.contains(p.latlng));
-
-        const statsByKey = new Map();
-        for (const e of base) {
-          const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
-          for (const b of birds) {
-            const id = Number(b?.bird_id ?? NaN);
-            const name = String(b?.name ?? "").trim();
-            const key = Number.isFinite(id) ? `id:${id}` : `name:${normalizeSpeciesName(name)}`;
-            if (!key) continue;
-            const count = Number(b?.count ?? 0) || 0;
-            if (!statsByKey.has(key)) statsByKey.set(key, { with: 0, sum: 0 });
-            const st = statsByKey.get(key);
-            if (count > 0) st.with += 1;
-            st.sum += count;
-          }
-        }
-
-        return speciesIndex
-          .filter((s) => {
-            const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
-            return statsByKey.has(key);
-          })
-          .map((s) => {
-            const key = s.id != null ? `id:${s.id}` : `name:${normalizeSpeciesName(s.name)}`;
-            const st = statsByKey.get(key) || { with: 0, sum: 0 };
-            return { ...s, withCount: st.with, sumCount: st.sum };
-          });
-      })()
-      : speciesCatalogRows.slice();
+    const listBase = speciesCatalogRows.slice();
 
     const listFiltered = q
       ? listBase.filter((s) => normalizeSpeciesName(s.name).includes(q))
       : listBase;
 
-    const list = speciesSort === "az"
-      ? listFiltered.slice().sort((a, b) => a.name.localeCompare(b.name, "nl"))
-      : listFiltered.slice().sort((a, b) => {
-        if ((b.withCount || 0) !== (a.withCount || 0)) return (b.withCount || 0) - (a.withCount || 0);
-        if ((b.sumCount || 0) !== (a.sumCount || 0)) return (b.sumCount || 0) - (a.sumCount || 0);
-        return a.name.localeCompare(b.name, "nl");
-      });
+    const list =
+      speciesSort === "az"
+        ? listFiltered
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name, "nl"))
+        : listFiltered.slice().sort((a, b) => {
+            if ((b.withCount || 0) !== (a.withCount || 0))
+              return (b.withCount || 0) - (a.withCount || 0);
+            if ((b.sumCount || 0) !== (a.sumCount || 0))
+              return (b.sumCount || 0) - (a.sumCount || 0);
+            return a.name.localeCompare(b.name, "nl");
+          });
 
     if (
       shouldAutoSelectInitialSpecies &&
@@ -2243,7 +2173,10 @@ export function initApp() {
       !selectedSpecies &&
       list.length > 0
     ) {
-      setSelectedSpecies({ id: list[0].id, name: list[0].name }, { persist: false });
+      setSelectedSpecies(
+        { id: list[0].id, name: list[0].name },
+        { persist: false },
+      );
       didAutoSelectInitialSpecies = true;
     }
 
@@ -2254,7 +2187,12 @@ export function initApp() {
       btn.type = "button";
       btn.className = "species-item";
       btn.setAttribute("role", "option");
-      btn.setAttribute("aria-selected", selectedSpecies?.id === s.id && selectedSpecies?.name === s.name ? "true" : "false");
+      btn.setAttribute(
+        "aria-selected",
+        selectedSpecies?.id === s.id && selectedSpecies?.name === s.name
+          ? "true"
+          : "false",
+      );
       btn.dataset.name = s.name;
       if (s.id != null) btn.dataset.id = String(s.id);
 
@@ -2268,19 +2206,28 @@ export function initApp() {
       btn.appendChild(title);
 
       const meta = document.createElement("small");
-      meta.textContent = speciesSort === "most"
-        ? `${Number(s.withCount || 0)}×`
-        : (s.id != null ? `id ${s.id}` : "");
+      meta.textContent =
+        speciesSort === "most"
+          ? `${Number(s.withCount || 0)}×`
+          : s.id != null
+            ? `id ${s.id}`
+            : "";
       btn.appendChild(meta);
 
       btn.addEventListener("click", () => {
-        const isSame = selectedSpecies && selectedSpecies.id === s.id && selectedSpecies.name === s.name;
+        const isSame =
+          selectedSpecies &&
+          selectedSpecies.id === s.id &&
+          selectedSpecies.name === s.name;
         setSelectedSpecies(isSame ? null : { id: s.id, name: s.name });
         renderSpeciesList({ query: speciesSearchInput.value });
         schedulePresenceGridCompute();
         updateHud();
         if (mode === "species" && isMobile() && selectedSpecies) {
-          setSidebarOpen(false, { persist: false, reason: "mobile-autoclose-on-select" });
+          setSidebarOpen(false, {
+            persist: false,
+            reason: "mobile-autoclose-on-select",
+          });
         }
       });
 
@@ -2295,8 +2242,12 @@ export function initApp() {
   function readControls() {
     speciesScope = speciesScopeAll.checked ? "all" : "viewport";
     speciesSort = speciesSortAZ.checked ? "az" : "most";
-    metric = metricAvg.checked ? "avg" : (metricSum.checked ? "sum" : "presence");
-    style = styleHeatmap.checked ? "heatmap" : (styleGrid.checked ? "grid" : "auto");
+    metric = metricAvg.checked ? "avg" : metricSum.checked ? "sum" : "presence";
+    style = styleHeatmap.checked
+      ? "heatmap"
+      : styleGrid.checked
+        ? "grid"
+        : "auto";
     minN = Number(minNSlider.value || 0) || 0;
     minNValue.textContent = String(minN);
   }
@@ -2313,7 +2264,9 @@ export function initApp() {
     minNSlider.value = String(SPECIES_VIEW_DEFAULTS.minN);
     gridCellMManual = SPECIES_VIEW_DEFAULTS.gridCellMManual;
     gridCellAutoEnabled = SPECIES_VIEW_DEFAULTS.gridCellAutoEnabled;
-    gridCellM = gridCellAutoEnabled ? autoGridCellMForZoom(map.getZoom()) : snapGridCellM(gridCellMManual);
+    gridCellM = gridCellAutoEnabled
+      ? autoGridCellMForZoom(map.getZoom())
+      : snapGridCellM(gridCellMManual);
     updateGridCellUI(gridCellM);
 
     removeStorageKeys([GRID_CELL_M_LS_KEY, GRID_CELL_AUTO_LS_KEY]);
@@ -2322,7 +2275,7 @@ export function initApp() {
 
   function onSpeciesControlsChanged() {
     readControls();
-    if (!speciesUseStaticFallback) scheduleSpeciesCatalogFetch({ immediate: true });
+    scheduleSpeciesCatalogFetch({ immediate: true });
     renderSpeciesList({ query: speciesSearchInput.value });
     schedulePresenceGridCompute();
   }
@@ -2345,7 +2298,8 @@ export function initApp() {
     readPointsSettingsFromUI();
     const engineChanged = prevEngine !== pointsSettings.clusterEngine;
     if (pointsClusterLayer?.options) {
-      pointsClusterLayer.options.disableClusteringAtZoom = pointsSettings.disableClusteringAtZoom;
+      pointsClusterLayer.options.disableClusteringAtZoom =
+        pointsSettings.disableClusteringAtZoom;
     }
     if (engineChanged && pointRenderKind === "clusters") {
       setPointRenderKind("clusters", { force: true });
@@ -2357,19 +2311,39 @@ export function initApp() {
   }
 
   pointsDisplayAuto.addEventListener("change", () => onPointsControlsChanged());
-  pointsDisplayPoints.addEventListener("change", () => onPointsControlsChanged());
-  pointsDisplayClusters.addEventListener("change", () => onPointsControlsChanged());
-  pointsClusterStyleBlended.addEventListener("change", () => onPointsControlsChanged());
-  pointsClusterStyleMixed.addEventListener("change", () => onPointsControlsChanged());
-  pointsClusterEngineDefault.addEventListener("change", () => onPointsControlsChanged());
-  pointsClusterEngineWorker.addEventListener("change", () => onPointsControlsChanged());
-  pointsMaxPointsInput.addEventListener("change", () => onPointsControlsChanged());
+  pointsDisplayPoints.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsDisplayClusters.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsClusterStyleBlended.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsClusterStyleMixed.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsClusterEngineDefault.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsClusterEngineWorker.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsMaxPointsInput.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
   pointsTileBuffer0.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer1.addEventListener("change", () => onPointsControlsChanged());
   pointsTileBuffer2.addEventListener("change", () => onPointsControlsChanged());
-  pointsAutoClusterThresholdInput.addEventListener("change", () => onPointsControlsChanged());
-  pointsDisableClusteringAtZoomInput.addEventListener("change", () => onPointsControlsChanged());
-  pointsUpdateOnMoveInput.addEventListener("change", () => onPointsControlsChanged({ immediate: false }));
+  pointsAutoClusterThresholdInput.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsDisableClusteringAtZoomInput.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsUpdateOnMoveInput.addEventListener("change", () =>
+    onPointsControlsChanged({ immediate: false }),
+  );
   pointsResetBtn.addEventListener("click", resetPointsSettings);
 
   function schedulePresenceGridCompute() {
@@ -2383,169 +2357,21 @@ export function initApp() {
 
   function computePresenceGrid() {
     if (mode !== "species") return;
-    if (!speciesUseStaticFallback) {
-      computeBackendSpeciesGrid();
-      return;
-    }
-
-    gridLayer.clearLayers();
-
-    if (!selectedSpecies) {
-      setComputing(false);
-      return;
-    }
-
-    const entries = rendered;
-    if (!entries || entries.length === 0) {
-      setComputing(false);
-      return;
-    }
-
-    setComputing(true);
-
-    const selId = selectedSpecies.id != null ? Number(selectedSpecies.id) : null;
-    const selName = selId == null ? normalizeSpeciesName(selectedSpecies.name) : "";
-
-    const crs = map.options.crs;
-    const bounds = map.getBounds();
-    const cells = new Map();
-
-    for (const e of entries) {
-      if (!bounds.contains(e.latlng)) continue;
-
-      const p = crs.project(e.latlng);
-      const ix = Math.floor(p.x / gridCellM);
-      const iy = Math.floor(p.y / gridCellM);
-      const key = `${ix},${iy}`;
-
-      let cell = cells.get(key);
-      if (!cell) {
-        cell = { ix, iy, total: 0, withN: 0, sum: 0 };
-        cells.set(key, cell);
-      }
-
-      cell.total += 1;
-
-      const has =
-        selId != null
-          ? Boolean(e.birdIds && e.birdIds.has(selId))
-          : Boolean(e.birdNames && e.birdNames.has(selName));
-
-      if (has) {
-        cell.withN += 1;
-
-        let cnt = 0;
-        const birds = Array.isArray(e.entry?.birds) ? e.entry.birds : [];
-        for (const b of birds) {
-          const id = Number(b?.bird_id ?? NaN);
-          const nm = normalizeSpeciesName(b?.name);
-          if (selId != null ? Number.isFinite(id) && id === selId : nm === selName) {
-            cnt = Number(b?.count ?? 0) || 0;
-            break;
-          }
-        }
-        cell.sum += cnt;
-      }
-    }
-
-    if (cells.size === 0) {
-      setComputing(false);
-      return;
-    }
-
-    let maxMetric = 0;
-    for (const cell of cells.values()) {
-      const total = cell.total;
-      if (!total || total < minN) continue;
-      const v =
-        metric === "sum"
-          ? cell.sum
-          : metric === "avg"
-            ? cell.sum / total
-            : (cell.withN / total);
-      cell.v = v;
-      if (v > maxMetric) maxMetric = v;
-    }
-
-    const effectiveStyle = style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
-    updateGridLegend({ metric, maxMetric, effectiveStyle });
-
-    for (const cell of cells.values()) {
-      const total = cell.total;
-      const withN = cell.withN;
-      const sum = cell.sum;
-      const v = cell.v || 0;
-      if (total < minN) continue;
-
-      const vNorm = metric === "presence" ? clamp01(v) : (maxMetric ? clamp01(v / maxMetric) : 0);
-      if (!vNorm) continue;
-
-      const nScale = Math.min(1, Math.sqrt(total) / 3);
-      const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
-      const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
-      const fillColor = colorFromBluesRamp(applyHighEndGamma(vNorm));
-      const x0m = cell.ix * gridCellM;
-      const y0m = cell.iy * gridCellM;
-      const x1m = x0m + gridCellM;
-      const y1m = y0m + gridCellM;
-      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
-      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
-      const bb = globalThis.L.latLngBounds(sw, ne);
-
-      let tooltip = `<b>${selectedSpecies.name}</b> — `;
-      switch (metric) {
-        case "presence": {
-          const pct = formatNumber((total ? (withN / total) * 100 : 0), { maxDecimals: 1 });
-          tooltip += `aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen (${pct}%)`;
-          break;
-        }
-        case "avg": {
-          const avgFmt = formatNumber((total ? sum / total : 0), { maxDecimals: 2 });
-          tooltip += `gemiddeld ${avgFmt} per inzending in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
-          break;
-        }
-        default: {
-          const sumFmt = formatNumber(sum, { maxDecimals: 0 });
-          tooltip += `totaal ${sumFmt} geteld in ${formatNumber(total, { maxDecimals: 0 })} inzendingen`;
-          break;
-        }
-      }
-
-      if (effectiveStyle === "heatmap") {
-        const cxm = x0m + gridCellM / 2;
-        const cym = y0m + gridCellM / 2;
-        const center = crs.unproject(globalThis.L.point(cxm, cym));
-        const circle = globalThis.L.circle(center, {
-          radius: Math.max(30, gridCellM * 0.6),
-          stroke: false,
-          fillColor,
-          fillOpacity,
-        });
-        circle.bindTooltip(tooltip, { sticky: false });
-        circle.addTo(gridLayer);
-      } else {
-        const rect = globalThis.L.rectangle(bb, {
-          color: "rgba(255,255,255,0.18)",
-          weight: 1,
-          fillColor,
-          fillOpacity,
-        });
-        rect.bindTooltip(tooltip, { sticky: false });
-        rect.addTo(gridLayer);
-      }
-    }
-
-    setComputing(false);
+    computeBackendSpeciesGrid();
   }
 
   function popupHtml(entry, birdsOverride = null) {
     const birds = Array.isArray(birdsOverride)
       ? birdsOverride
-      : (Array.isArray(entry?.birds) ? entry.birds : []);
+      : Array.isArray(entry?.birds)
+        ? entry.birds
+        : [];
     const total = sumBirds(birds);
     const rows = birds
       .slice()
-      .sort((a, b) => (Number(b?.count ?? 0) || 0) - (Number(a?.count ?? 0) || 0))
+      .sort(
+        (a, b) => (Number(b?.count ?? 0) || 0) - (Number(a?.count ?? 0) || 0),
+      )
       .map((b) => {
         const name = String(b?.name ?? "Onbekend");
         const count = Number(b?.count ?? 0) || 0;
@@ -2597,28 +2423,15 @@ export function initApp() {
   async function getPointEntryDetails({ year, id }) {
     const key = pointDetailsKey({ year, id });
     if (pointEntryDetailsByKey.has(key)) return pointEntryDetailsByKey.get(key);
-    if (pointEntryDetailsPromiseByKey.has(key)) return pointEntryDetailsPromiseByKey.get(key);
+    if (pointEntryDetailsPromiseByKey.has(key))
+      return pointEntryDetailsPromiseByKey.get(key);
 
-    const req = (async () => {
-      let birds;
-      try {
-        birds = await pointDetailsSource.getEntryTopBirds({ year, id });
-        activePointDetailsSourceLabel = "backend";
-        pointDetailsBackendUnavailable = false;
-        refreshPointSourceStatus();
-      } catch (_backendErr) {
-        pointDetailsBackendUnavailable = true;
-        if (!ALLOW_UPSTREAM_DETAILS_FALLBACK) {
-          refreshPointSourceStatus();
-          throw _backendErr;
-        }
-        birds = await pointTilesFallbackSource.getEntryTopBirds({ year, id, limit: 9999 });
-        activePointDetailsSourceLabel = "upstream";
-        refreshPointSourceStatus();
-      }
-      pointEntryDetailsByKey.set(key, birds);
-      return birds;
-    })()
+    const req = pointDetailsSource
+      .getEntryTopBirds({ year, id })
+      .then((birds) => {
+        pointEntryDetailsByKey.set(key, birds);
+        return birds;
+      })
       .finally(() => {
         pointEntryDetailsPromiseByKey.delete(key);
       });
@@ -2645,7 +2458,12 @@ export function initApp() {
         latestState.entry = { ...latestState.entry, birds };
         marker.setPopupContent(popupHtml(latestState.entry, birds));
       } catch (err) {
-        marker.setPopupContent(popupErrorHtml(entry, `Details laden mislukt (${err?.message || "onbekend"}).`));
+        marker.setPopupContent(
+          popupErrorHtml(
+            entry,
+            `Details laden mislukt (${err?.message || "onbekend"}).`,
+          ),
+        );
       }
     });
   }
@@ -2680,7 +2498,7 @@ export function initApp() {
     img.onerror = null;
     img.classList.add("no-bird-image");
     img.src = birdImageUrl(birdFallbackFilename());
-  }
+  };
 
   function birdImageUrl(filename) {
     return `https://cdn-cf.newstory.nl/vbn/tvt/media/img/resultaten/${filename}`;
@@ -2714,8 +2532,8 @@ export function initApp() {
   function getFilters() {
     const year = Number(yearInput.value || 0) || 0;
     const pc4 = normalizePc4(pc4Input.value);
-    const includePrivate = mode === "species" ? true : pointsModePrivateInput.checked;
-    const includeIsorg = mode === "species" ? true : pointsModeIsorgInput.checked;
+    const includePrivate = pointsModePrivateInput.checked;
+    const includeIsorg = pointsModeIsorgInput.checked;
     const enabledPointModes = [];
     if (pointsModePrivateInput.checked) enabledPointModes.push("private");
     if (pointsModeIsorgInput.checked) enabledPointModes.push("isorg");
@@ -2735,8 +2553,10 @@ export function initApp() {
   }
 
   function clearPointMarkers() {
-    if (typeof pointsCanvasLayer.clearLayers === "function") pointsCanvasLayer.clearLayers();
-    if (typeof pointsClusterLayer.clearLayers === "function") pointsClusterLayer.clearLayers();
+    if (typeof pointsCanvasLayer.clearLayers === "function")
+      pointsCanvasLayer.clearLayers();
+    if (typeof pointsClusterLayer.clearLayers === "function")
+      pointsClusterLayer.clearLayers();
     clearWorkerClusterLayer();
     workerClusterPointSignature = "";
     pointMarkerStateById.clear();
@@ -2748,7 +2568,10 @@ export function initApp() {
   async function mapWithConcurrency(items, limit, worker) {
     const out = new Array(items.length);
     let cursor = 0;
-    const workers = Math.max(1, Math.min(Number(limit) || 1, items.length || 1));
+    const workers = Math.max(
+      1,
+      Math.min(Number(limit) || 1, items.length || 1),
+    );
 
     async function run() {
       while (true) {
@@ -2827,14 +2650,22 @@ export function initApp() {
   }
 
   function hasMaxPointsInViewCap() {
-    return Number.isFinite(pointsSettings.maxPointsInView) && pointsSettings.maxPointsInView > 0;
+    return (
+      Number.isFinite(pointsSettings.maxPointsInView) &&
+      pointsSettings.maxPointsInView > 0
+    );
   }
 
   function resolvePointRenderKind({ zoom, totalCount }) {
-    const requested = pointsSettings.displayMode === "auto"
-      ? resolveAutoPointRenderKind({ zoom })
-      : pointsSettings.displayMode;
-    if (pointsSettings.displayMode === "auto" && hasMaxPointsInViewCap() && totalCount > pointsSettings.maxPointsInView) {
+    const requested =
+      pointsSettings.displayMode === "auto"
+        ? resolveAutoPointRenderKind({ zoom })
+        : pointsSettings.displayMode;
+    if (
+      pointsSettings.displayMode === "auto" &&
+      hasMaxPointsInViewCap() &&
+      totalCount > pointsSettings.maxPointsInView
+    ) {
       return "clusters";
     }
     return requested === "clusters" ? "clusters" : "points";
@@ -2843,7 +2674,7 @@ export function initApp() {
   function maybeMessageForPointCap() {
     if (!isPointCapExceeded || !hasMaxPointsInViewCap()) return;
     setPointsSidebarMessage(
-      `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`
+      `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`,
     );
   }
 
@@ -2869,7 +2700,12 @@ export function initApp() {
       const id = Number(entry?.id);
       const lat = Number(entry?.lat);
       const lng = Number(entry?.lng);
-      if (!Number.isFinite(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (
+        !Number.isFinite(id) ||
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng)
+      )
+        continue;
       nextById.set(pointMarkerIdKey(entry), entry);
     }
 
@@ -2888,7 +2724,10 @@ export function initApp() {
       const latlng = globalThis.L.latLng(Number(entry.lat), Number(entry.lng));
       const existing = pointMarkerStateById.get(markerId);
       const isorg = pointEntryIsorg(entry);
-      const detailKey = pointDetailsKey({ year: pointTileYear || Number(yearInput.value || 0) || 0, id });
+      const detailKey = pointDetailsKey({
+        year: pointTileYear || Number(yearInput.value || 0) || 0,
+        id,
+      });
       const cachedBirds = pointEntryDetailsByKey.get(detailKey) || [];
 
       if (existing) {
@@ -2901,23 +2740,28 @@ export function initApp() {
           setPointMarkerVisual(existing.marker, isorg);
         }
         existing.marker.setPopupContent(
-          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry)
+          cachedBirds.length > 0
+            ? popupHtml(entry, cachedBirds)
+            : popupLoadingHtml(entry),
         );
         ensurePointPopupToggle(existing.marker);
         existing.latlng = latlng;
-        existing.entry = cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
+        existing.entry =
+          cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
         existing.isIsorg = isorg;
         continue;
       }
 
       const marker = createPointMarker(latlng, isorg)
         .bindPopup(
-          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry),
+          cachedBirds.length > 0
+            ? popupHtml(entry, cachedBirds)
+            : popupLoadingHtml(entry),
           {
             maxWidth: 340,
             closeOnClick: false,
             autoClose: true,
-          }
+          },
         )
         .addTo(pointsLayer);
       bindPointMarkerPopup(marker, markerId);
@@ -2926,12 +2770,16 @@ export function initApp() {
       pointMarkerStateById.set(markerId, {
         marker,
         latlng,
-        entry: cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
+        entry:
+          cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
         isIsorg: isorg,
       });
     }
 
-    if (pointRenderKind === "clusters" && typeof pointsLayer.refreshClusters === "function") {
+    if (
+      pointRenderKind === "clusters" &&
+      typeof pointsLayer.refreshClusters === "function"
+    ) {
       pointsLayer.refreshClusters();
     }
   }
@@ -2999,7 +2847,8 @@ export function initApp() {
     const currentZoom = map.getZoom();
 
     try {
-      const expansion = await workerClusterSource.getClusterExpansionZoom(clusterId);
+      const expansion =
+        await workerClusterSource.getClusterExpansionZoom(clusterId);
       if (Number.isFinite(expansion) && expansion > currentZoom) {
         map.flyTo(latlng, Math.min(expansion, map.getMaxZoom()));
         return;
@@ -3010,7 +2859,11 @@ export function initApp() {
     }
 
     try {
-      const leaves = await workerClusterSource.getLeaves({ clusterId, limit: 200, offset: 0 });
+      const leaves = await workerClusterSource.getLeaves({
+        clusterId,
+        limit: 200,
+        offset: 0,
+      });
       const points = leaves
         .map((feature) => {
           const coords = feature?.geometry?.coordinates;
@@ -3090,29 +2943,32 @@ export function initApp() {
       if (!Number.isFinite(id)) continue;
 
       const markerId = `${isorg ? "isorg" : "private"}:${id}`;
-      const entry =
-        pointEntryByKeyForCurrentRender.get(markerId) ||
-        {
-          id,
-          key: markerId,
-          lat,
-          lng,
-          pc4: "",
-          isorg,
-          modes: [isorg ? "isorg" : "private"],
-          birds: [],
-        };
-      const detailKey = pointDetailsKey({ year: pointTileYear || Number(yearInput.value || 0) || 0, id });
+      const entry = pointEntryByKeyForCurrentRender.get(markerId) || {
+        id,
+        key: markerId,
+        lat,
+        lng,
+        pc4: "",
+        isorg,
+        modes: [isorg ? "isorg" : "private"],
+        birds: [],
+      };
+      const detailKey = pointDetailsKey({
+        year: pointTileYear || Number(yearInput.value || 0) || 0,
+        id,
+      });
       const cachedBirds = pointEntryDetailsByKey.get(detailKey) || [];
 
       const marker = createPointMarker(latlng, isorg)
         .bindPopup(
-          cachedBirds.length > 0 ? popupHtml(entry, cachedBirds) : popupLoadingHtml(entry),
+          cachedBirds.length > 0
+            ? popupHtml(entry, cachedBirds)
+            : popupLoadingHtml(entry),
           {
             maxWidth: 340,
             closeOnClick: false,
             autoClose: true,
-          }
+          },
         )
         .addTo(pointsWorkerClusterLayer);
       bindPointMarkerPopup(marker, markerId);
@@ -3121,7 +2977,8 @@ export function initApp() {
       pointMarkerStateById.set(markerId, {
         marker,
         latlng,
-        entry: cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
+        entry:
+          cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry,
         isIsorg: isorg,
       });
       inViewEntries += 1;
@@ -3179,9 +3036,12 @@ export function initApp() {
       if (seq !== pointTileFetchSeq || mode !== "points") return;
 
       const yearsAvailable = Array.isArray(manifest?.years_available)
-        ? manifest.years_available.map((v) => Number(v)).filter((v) => Number.isFinite(v))
+        ? manifest.years_available
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
         : [];
-      const defaultYear = Number(manifest?.defaults?.year ?? yearsAvailable[0] ?? 0) || 0;
+      const defaultYear =
+        Number(manifest?.defaults?.year ?? yearsAvailable[0] ?? 0) || 0;
       const targetYear = Number(year || 0) || defaultYear;
 
       if (!targetYear) {
@@ -3203,7 +3063,11 @@ export function initApp() {
       const zoomMin = Number(manifest?.defaults?.zoom_min ?? 6) || 6;
       const zoomMax = Number(manifest?.defaults?.zoom_max ?? 13) || 13;
       const z = Math.max(zoomMin, Math.min(zoomMax, Math.floor(map.getZoom())));
-      const tiles = tilesForBounds(map.getBounds(), z, pointsSettings.tileBuffer);
+      const tiles = tilesForBounds(
+        map.getBounds(),
+        z,
+        pointsSettings.tileBuffer,
+      );
 
       if (tiles.length === 0) {
         latestPointEntryCount = 0;
@@ -3216,14 +3080,18 @@ export function initApp() {
       }
 
       const modesAvailable = new Set(
-        (Array.isArray(manifest?.modes_available) ? manifest.modes_available : [])
+        (Array.isArray(manifest?.modes_available)
+          ? manifest.modes_available
+          : []
+        )
           .map((m) => String(m || "").trim())
-          .filter(Boolean)
+          .filter(Boolean),
       );
 
-      const fetchModes = enabledPointModes.filter((pointMode) => (
-        modesAvailable.size === 0 || modesAvailable.has(pointMode)
-      ));
+      const fetchModes = enabledPointModes.filter(
+        (pointMode) =>
+          modesAvailable.size === 0 || modesAvailable.has(pointMode),
+      );
 
       if (fetchModes.length === 0) {
         latestPointEntryCount = 0;
@@ -3231,8 +3099,11 @@ export function initApp() {
         controlsIsCapExceeded = false;
         updatePointsControlsVisibility();
         clearPointMarkers();
-        setPointsSidebarMessage("Geen puntendataset beschikbaar voor de geselecteerde filters.");
-        statsEl.textContent = "Geen puntendataset beschikbaar voor de geselecteerde filters.";
+        setPointsSidebarMessage(
+          "Geen puntendataset beschikbaar voor de geselecteerde filters.",
+        );
+        statsEl.textContent =
+          "Geen puntendataset beschikbaar voor de geselecteerde filters.";
         return;
       }
 
@@ -3267,7 +3138,12 @@ export function initApp() {
           const id = Number(p?.id);
           const lat = Number(p?.lat);
           const lng = Number(p?.lng);
-          if (!Number.isFinite(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+          if (
+            !Number.isFinite(id) ||
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+          )
+            continue;
           const pc4Value = String(p?.pc4 ?? "");
           if (pc4 && pc4Value !== pc4) continue;
 
@@ -3288,24 +3164,33 @@ export function initApp() {
       }
 
       latestPointEntryCount = nextEntriesById.size;
-      isPointCapExceeded = hasMaxPointsInViewCap() && latestPointEntryCount > pointsSettings.maxPointsInView;
+      isPointCapExceeded =
+        hasMaxPointsInViewCap() &&
+        latestPointEntryCount > pointsSettings.maxPointsInView;
       controlsIsCapExceeded = isPointCapExceeded;
       pointZoomForControls = map.getZoom();
       updatePointsControlsVisibility();
 
-      setPointRenderKind(resolvePointRenderKind({
-        zoom: map.getZoom(),
-        totalCount: latestPointEntryCount,
-      }));
+      setPointRenderKind(
+        resolvePointRenderKind({
+          zoom: map.getZoom(),
+          totalCount: latestPointEntryCount,
+        }),
+      );
 
       let entriesForRender = Array.from(nextEntriesById.values());
       if (isPointCapExceeded && hasMaxPointsInViewCap()) {
-        entriesForRender = entriesForRender.slice(0, pointsSettings.maxPointsInView);
+        entriesForRender = entriesForRender.slice(
+          0,
+          pointsSettings.maxPointsInView,
+        );
         setPointsSidebarMessage(
-          `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`
+          `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`,
         );
       } else {
-        if (!(workerClusterFailed && pointsSettings.clusterEngine === "worker")) {
+        if (
+          !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
+        ) {
           setPointsSidebarMessage("");
         }
       }
@@ -3322,9 +3207,14 @@ export function initApp() {
 
       if (wantsWorkerClusters) {
         try {
-          const features = entriesForRender.map((entry) => buildPointWorkerFeature(entry));
+          const features = entriesForRender.map((entry) =>
+            buildPointWorkerFeature(entry),
+          );
           const workerClusterOptions = buildWorkerClusterOptions();
-          const signature = buildPointWorkerSignature(entriesForRender, workerClusterOptions);
+          const signature = buildPointWorkerSignature(
+            entriesForRender,
+            workerClusterOptions,
+          );
           if (signature !== workerClusterPointSignature) {
             await workerClusterSource.setPoints(features, {
               signature,
@@ -3335,7 +3225,12 @@ export function initApp() {
           if (seq !== pointTileFetchSeq || mode !== "points") return;
 
           const bounds = map.getBounds();
-          const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+          const bbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth(),
+          ];
           const workerQueryZoom = Math.floor(map.getZoom());
           const clusters = await workerClusterSource.getClusters({
             bbox,
@@ -3358,7 +3253,8 @@ export function initApp() {
       console.warn("Viewport tile fetch failed:", err);
       statsEl.textContent = `Laden van puntentiles mislukt: ${err?.message || String(err)}`;
     } finally {
-      if (pointTileAbortController === controller) pointTileAbortController = null;
+      if (pointTileAbortController === controller)
+        pointTileAbortController = null;
     }
   }
 
@@ -3368,64 +3264,9 @@ export function initApp() {
       return;
     }
 
-    if (!speciesUseStaticFallback) {
-      rendered = [];
-      totals = { entries: Number(speciesCatalogStats.entryCount || 0), birds: 0 };
-      scheduleSpeciesCatalogFetch({ immediate: true });
-      updateViewportStats();
-      schedulePresenceGridCompute();
-      return;
-    }
-
-    if (!dataset) return;
-
-    const { year, pc4, includePrivate, includeIsorg } = getFilters();
-    const dataYear = Number(dataset?.meta?.year ?? 0) || 0;
-
-    if (year && dataYear && year !== dataYear) {
-      gridLayer.clearLayers();
-      statsEl.textContent = `Geen dataset voor ${year} (alleen ${dataYear} beschikbaar).`;
-      return;
-    }
-
-    const filtered = preparedEntries.filter((p) => {
-      if (pc4 && p.pc4 !== pc4) return false;
-      return (includePrivate && p.isPrivate) || (includeIsorg && p.isOrg);
-    });
-
-    rendered = filtered.map((p) => ({
-      latlng: p.latlng,
-      birdsTotal: p.birdsTotal,
-      isPrivate: p.isPrivate,
-      isIsorg: p.isOrg,
-      birdIds: p.birdIds,
-      birdNames: p.birdNames,
-      entry: p.entry,
-    }));
-
-    const bounds = filtered.map((p) => p.latlng);
-
-    totals = {
-      entries: filtered.length,
-      birds: rendered.reduce((acc, r) => acc + r.birdsTotal, 0),
-    };
-
-    if (!didFitOnce || pc4 !== lastPc4) {
-      if (bounds.length) {
-        const bb = globalThis.L.latLngBounds(bounds);
-        try {
-          map.invalidateSize({ animate: false });
-        } catch {
-          // ignore
-        }
-        map.fitBounds(bb, { padding: [20, 20] });
-        didFitOnce = true;
-      } else {
-        map.setView([53.22, 6.57], 11);
-      }
-    }
-
-    lastPc4 = pc4;
+    rendered = [];
+    totals = { entries: Number(speciesCatalogStats.entryCount || 0), birds: 0 };
+    scheduleSpeciesCatalogFetch({ immediate: true });
     updateViewportStats();
     schedulePresenceGridCompute();
   }
@@ -3445,58 +3286,27 @@ export function initApp() {
 
     statsEl.textContent = `Dataset ${y} laden…`;
 
-    if (!speciesUseStaticFallback) {
-      try {
-        const manifest = await speciesSource.getSpeciesManifest({ year: y, area: "groningen" });
-        if (seq !== loadSeq) return;
-        speciesManifest = manifest;
-        speciesBackendUnavailable = false;
-        dataset = null;
-        datasetYear = y;
-        preparedEntries = [];
-        speciesIndex = [];
-        speciesCatalogRows = [];
-        speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
-        speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-        didFitOnce = false;
-        setComputing(false);
-        render();
-        return;
-      } catch (err) {
-        if (seq !== loadSeq) return;
-        speciesBackendUnavailable = true;
-        if (!confirmSpeciesFallback()) {
-          dataset = null;
-          datasetYear = 0;
-          preparedEntries = [];
-          speciesIndex = [];
-          speciesCatalogRows = [];
-          setSelectedSpecies(null);
-          if (mode === "species") {
-            clearPointMarkers();
-            gridLayer.clearLayers();
-            statsEl.textContent = `Soortendata laden mislukt: ${err?.message || String(err)}`;
-          }
-          return;
-        }
-        speciesUseStaticFallback = true;
-      }
-    }
-
     try {
-      await loadStaticSpeciesDataset(y, seq);
+      const manifest = await speciesSource.getSpeciesManifest({
+        year: y,
+        area: "groningen",
+      });
+      if (seq !== loadSeq) return;
+      speciesCatalogRows = [];
+      speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+      speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+      setComputing(false);
+      render();
     } catch (err) {
       if (seq !== loadSeq) return;
-      dataset = null;
-      datasetYear = 0;
-      preparedEntries = [];
-      speciesIndex = [];
       speciesCatalogRows = [];
+      speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+      speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
       setSelectedSpecies(null);
       if (mode === "species") {
         clearPointMarkers();
         gridLayer.clearLayers();
-        statsEl.textContent = `Dataset laden mislukt: ${err?.message || String(err)}`;
+        statsEl.textContent = `Soortendata laden mislukt: ${err?.message || String(err)}`;
       }
     }
   }
@@ -3504,18 +3314,27 @@ export function initApp() {
   async function probePointTilesSource() {
     try {
       const manifest = await getPointManifest();
-      const defaultYear = Number(manifest?.defaults?.year ?? 0) || Number(manifest?.years_available?.[0] ?? 0);
-      const year = defaultYear || (Number(yearInput.value || 0) || 0);
+      const defaultYear =
+        Number(manifest?.defaults?.year ?? 0) ||
+        Number(manifest?.years_available?.[0] ?? 0);
+      const year = defaultYear || Number(yearInput.value || 0) || 0;
       const modesAvailable = new Set(
-        (Array.isArray(manifest?.modes_available) ? manifest.modes_available : [])
+        (Array.isArray(manifest?.modes_available)
+          ? manifest.modes_available
+          : []
+        )
           .map((m) => String(m || "").trim())
-          .filter(Boolean)
+          .filter(Boolean),
       );
       const mode = modesAvailable.has("private")
         ? "private"
-        : (modesAvailable.has("isorg")
+        : modesAvailable.has("isorg")
           ? "isorg"
-          : (String(manifest?.defaults?.mode || manifest?.modes_available?.[0] || "private").trim() || "private"));
+          : String(
+              manifest?.defaults?.mode ||
+                manifest?.modes_available?.[0] ||
+                "private",
+            ).trim() || "private";
       const z = Number(manifest?.defaults?.zoom_min ?? 9) || 9;
 
       // Probe one deterministic NL tile near the country's geographic center.
@@ -3581,10 +3400,8 @@ export function initApp() {
     }
     updateViewportStats();
     if (mode === "species") {
-      if (speciesScope === "viewport") {
-        if (speciesUseStaticFallback) renderSpeciesList({ query: speciesSearchInput.value });
-        else scheduleSpeciesCatalogFetch({ immediate: true });
-      }
+      if (speciesScope === "viewport")
+        scheduleSpeciesCatalogFetch({ immediate: true });
       schedulePresenceGridCompute();
     }
   };

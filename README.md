@@ -4,8 +4,8 @@ Lightweight viewer voor resultaten van de Nationale Tuinvogeltelling (Vogelbesch
 
 ## Repo structuur (2026)
 
-- **Nieuwe doorstart (dataset-based)**: root `index.html` + `main.js` + `src/app.js`
-  - Dataset staat in `public/data/2026/municipality_groningen.json` (en `.gz`).
+- **Nieuwe doorstart (backend-first)**: root `index.html` + `main.js` + `src/app.js`
+  - Runtime data komt uit de Rails API in `backend/`.
 - **Oude app (live endpoints)**: `old/` (oude `index.html`, `styles.css`, `main.js`, `src/`), bedoeld om werkend te blijven.
 
 ## Features Draft
@@ -20,11 +20,14 @@ Zie DRAFT.md
 
 ### Backend + Frontend (huidige dev setup)
 
-De app gebruikt nu een kleine Rails backend voor:
+De app gebruikt nu een kleine Rails backend voor alle runtime data:
 
 - point tiles manifest
 - point tiles
 - point detail popovers (`top_birds`)
+- soortenmanifest (Groningen)
+- soortencatalogus (geaggregeerd)
+- soortenraster (geaggregeerd)
 
 Start de backend:
 
@@ -73,11 +76,6 @@ Frontend runtime config staat expliciet in `index.html` via:
 
   window.__TVT_CONFIG__ = {
     backendApiBaseUrl: isLocalDev ? "http://localhost:3000/api/v1" : `${window.location.origin}/api/v1`,
-    entryTopBirdsApiBase: "https://vbn-tvt.northsea.cloud/v1/report",
-    staticDataBaseUrl: "/public/data/tvt",
-    staticDataBaseUrlFallback: "/data/tvt",
-    allowStaticDataFallback: isLocalDev,
-    allowUpstreamDetailsFallback: isLocalDev,
     enableDiagnostics: isLocalDev
   };
 </script>
@@ -87,9 +85,7 @@ Belangrijk:
 
 - lokaal (`localhost` / `127.0.0.1`) gebruikt de app standaard `http://localhost:3000/api/v1`
 - buiten lokaal gebruikt de app standaard hetzelfde origin op `/api/v1`
-- `entryTopBirdsApiBase` bepaalt het upstream detail-endpoint voor expliciete fallback
-- `staticDataBaseUrl` en `staticDataBaseUrlFallback` bepalen het statische tile fallback pad
-- `allowStaticDataFallback` en `allowUpstreamDetailsFallback` staan lokaal standaard aan, maar in niet-lokale omgevingen standaard uit
+- de frontend gebruikt alleen de backend API; er is geen lokale JSON fallback meer
 - `enableDiagnostics` zet startup probes naar `window.__tvtBackendStatusProbe` en `window.__tvtPointTilesProbe` aan of uit
 - voor cross-origin frontend/backend deployments moet de backend `TVT_ALLOWED_ORIGINS` expliciet toestaan
 - zie `backend/docs/deployment.md` voor same-origin vs cross-origin deployment

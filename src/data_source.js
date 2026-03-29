@@ -1,11 +1,6 @@
 const RUNTIME_CONFIG = globalThis.window?.__TVT_CONFIG__ || {};
 
-export const DATA_BASE_URL = String(RUNTIME_CONFIG.staticDataBaseUrl || "/public/data/tvt");
-export const DATA_BASE_URL_FALLBACK = String(RUNTIME_CONFIG.staticDataBaseUrlFallback || "/data/tvt");
 export const BACKEND_API_BASE_URL = String(RUNTIME_CONFIG.backendApiBaseUrl || "http://localhost:3000/api/v1");
-export const ENTRY_TOP_BIRDS_API_BASE = String(RUNTIME_CONFIG.entryTopBirdsApiBase || "https://vbn-tvt.northsea.cloud/v1/report");
-export const ALLOW_STATIC_DATA_FALLBACK = RUNTIME_CONFIG.allowStaticDataFallback !== false;
-export const ALLOW_UPSTREAM_DETAILS_FALLBACK = RUNTIME_CONFIG.allowUpstreamDetailsFallback !== false;
 export const ENABLE_DIAGNOSTICS = RUNTIME_CONFIG.enableDiagnostics !== false;
 
 export class DataSource {
@@ -179,120 +174,6 @@ export function tilesForBounds(bounds, z, bufferTiles = 1) {
     }
   }
   return out;
-}
-
-export class StaticTilesSource extends DataSource {
-  constructor({ baseUrl = DATA_BASE_URL, fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
-    super();
-    if (typeof fetchImpl !== "function") {
-      throw new Error("fetch is not available in this environment");
-    }
-    this.baseUrl = String(baseUrl || DATA_BASE_URL).replace(/\/+$/, "");
-    this.fetchImpl = fetchImpl;
-    this.manifestPromise = null;
-    this.tilePromiseByUrl = new Map();
-    this.tileDataByUrl = new Map();
-    this.baseUrlCandidates = [this.baseUrl];
-    if (this.baseUrl === DATA_BASE_URL && DATA_BASE_URL_FALLBACK !== DATA_BASE_URL) {
-      this.baseUrlCandidates.push(DATA_BASE_URL_FALLBACK);
-    }
-  }
-
-  async getManifest() {
-    if (this.manifestPromise) return this.manifestPromise;
-
-    this.manifestPromise = (async () => {
-      let lastErr = null;
-
-      for (const candidateBaseUrl of this.baseUrlCandidates) {
-        const url = joinUrl(candidateBaseUrl, "manifest.json");
-        const r = await this.fetchImpl(url);
-        if (r.ok) {
-          // Lock to the base URL that actually works (for subsequent tile fetches).
-          this.baseUrl = candidateBaseUrl;
-          return r.json();
-        }
-        lastErr = new Error(`HTTP ${r.status} while loading manifest (${url})`);
-        // Fallback is only intended for "not found"; other errors should fail fast.
-        if (r.status !== 404) throw lastErr;
-      }
-
-      throw lastErr || new Error("manifest load failed");
-    })().catch((err) => {
-      this.manifestPromise = null;
-      throw err;
-    });
-
-    return this.manifestPromise;
-  }
-
-  async getPointTile({ year, mode, z, x, y, signal } = {}) {
-    const manifest = await this.getManifest();
-    const template = String(manifest?.paths?.points_root || "").trim();
-    if (!template) {
-      throw new Error("manifest.paths.points_root is missing");
-    }
-
-    const vars = {
-      year: toSafeInt(year, "year"),
-      mode: String(mode || "").trim() || "private",
-      z: toSafeInt(z, "z"),
-      x: toSafeInt(x, "x"),
-      y: toSafeInt(y, "y"),
-    };
-    const path = applyTemplate(template, vars);
-    const url = joinUrl(this.baseUrl, path);
-
-    if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
-
-    if (signal?.aborted) throw toAbortError();
-
-    // Only share in-flight promises if no abort signal is provided.
-    if (!signal && this.tilePromiseByUrl.has(url)) return this.tilePromiseByUrl.get(url);
-
-    const p = this.fetchImpl(url, signal ? { signal } : undefined)
-      .then((r) => {
-        // Sparse exports may omit empty tiles on disk. Treat 404 as an empty tile.
-        if (r.status === 404) {
-          return {
-            contract_version: Number(manifest?.contract_version ?? 1) || 1,
-            year: vars.year,
-            mode: vars.mode,
-            z: vars.z,
-            x: vars.x,
-            y: vars.y,
-            tileSize: 256,
-            points: [],
-          };
-        }
-        if (!r.ok) throw new Error(`HTTP ${r.status} while loading point tile (${url})`);
-        return r.json();
-      })
-      .then((json) => {
-        this.tileDataByUrl.set(url, json);
-        return json;
-      })
-      .catch((err) => {
-        if (!signal) this.tilePromiseByUrl.delete(url);
-        if (isAbortError(err)) throw err;
-        throw err;
-      });
-
-    if (!signal) this.tilePromiseByUrl.set(url, p);
-    return p;
-  }
-
-  async getEntryTopBirds({ year, id, limit = 9999, signal } = {}) {
-    const params = new URLSearchParams();
-    if (Number(year) > 0) params.set("year", String(Number(year)));
-    params.set("id", String(Number(id)));
-    params.set("limit", String(Number(limit) || 9999));
-
-    const url = `${ENTRY_TOP_BIRDS_API_BASE}/entry-top-birds?${params.toString()}`;
-    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
-    if (!r.ok) throw new Error(`HTTP ${r.status} while loading point details (${url})`);
-    return normalizeBirdRows(await r.json());
-  }
 }
 
 export class BackendApiSource extends DataSource {

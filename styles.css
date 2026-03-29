@@ -364,45 +364,6 @@ body[data-theme="light"] #pointsModeIsorgInput {
   text-decoration-thickness: 1px;
 }
 
-.source-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.source-badge::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--ok);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent);
-}
-
-.source-badge.is-backend {
-  color: var(--text-soft);
-}
-
-.source-badge.is-fallback {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
-  background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated));
-}
-
-.source-badge.is-fallback::before {
-  background: var(--warn);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 20%, transparent);
-}
-
 /* Main map */
 .main {
   flex: 1 1 auto;

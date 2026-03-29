@@ -32,11 +32,6 @@
 
     window.__TVT_CONFIG__ = Object.assign({
       backendApiBaseUrl: __tvtDefaultBackendApiBaseUrl,
-      entryTopBirdsApiBase: "https://vbn-tvt.northsea.cloud/v1/report",
-      staticDataBaseUrl: "/public/data/tvt",
-      staticDataBaseUrlFallback: "/data/tvt",
-      allowStaticDataFallback: __tvtIsLocalDev,
-      allowUpstreamDetailsFallback: __tvtIsLocalDev,
       enableDiagnostics: __tvtIsLocalDev
     }, window.__TVT_CONFIG__ || {});
   </script>
@@ -81,7 +76,6 @@
       </form>
 
       <div id="statsBar" class="stats muted" aria-live="polite"></div>
-      <div id="pointSourceBadge" class="source-badge" aria-live="polite" hidden></div>
     </div>
   </header>
 
