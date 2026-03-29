@@ -1757,7 +1757,7 @@ export function initApp() {
       minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
   }
 
-  function setMode(nextMode) {
+  function setMode(nextMode, { skipRender = false } = {}) {
     const prevMode = mode;
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
@@ -1813,8 +1813,8 @@ export function initApp() {
       }
     }, 0);
 
-    // Re-render for the new mode.
-    render();
+    // Re-render for the new mode unless startup is still wiring the map.
+    if (!skipRender) render();
   }
 
   modePointsBtn.addEventListener("click", () => setMode("points"));
@@ -1842,7 +1842,7 @@ export function initApp() {
   }
 
   // Initial mode: URL is source of truth.
-  setMode(modeFromUrl());
+  setMode(modeFromUrl(), { skipRender: true });
 
   // React to back/forward navigation if mode changes in URL.
   window.addEventListener("popstate", () => {
@@ -3438,5 +3438,9 @@ export function initApp() {
     probeBackendStatus();
     probePointTilesSource();
   }
-  loadForYear(Number(yearInput.value || 0) || 0);
+  if (mode === "species") {
+    loadForYear(Number(yearInput.value || 0) || 0);
+  } else {
+    render();
+  }
 }
