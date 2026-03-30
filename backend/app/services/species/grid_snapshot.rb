@@ -46,13 +46,24 @@ module Species
 
     attr_reader :area, :bird_id, :cell_size_m, :entry_scope, :metric, :min_n, :year
 
-    def entries
-      @entries ||= entry_scope.relation.includes(entry_bird_counts: :bird).to_a
+    def filtered_entries_relation
+      @filtered_entries_relation ||= entry_scope.relation
+    end
+
+    def filtered_entries
+      @filtered_entries ||= filtered_entries_relation.select(:id, :lat, :lng)
     end
 
     def cells
       @cells ||= begin
-        grouped.values.filter_map do |cell|
+        grouped_rows.filter_map do |row|
+          cell = {
+            ix: row.ix.to_i,
+            iy: row.iy.to_i,
+            entry_count: row.entry_count.to_i,
+            with_count: row.with_count.to_i,
+            sum_count: row.sum_count.to_i,
+          }
           next if cell[:entry_count] < min_n
 
           value = metric_value(cell)
@@ -63,31 +74,38 @@ module Species
       end
     end
 
-    def grouped
-      @grouped ||= begin
-        grouped = Hash.new { |hash, key| hash[key] = { ix: key[0], iy: key[1], entry_count: 0, with_count: 0, sum_count: 0 } }
+    def grouped_rows
+      @grouped_rows ||= begin
+        entry_alias = "filtered_entries"
+        count_alias = "selected_counts"
+        selected_bird_id = selected_bird_db_id
+        ix_sql = projected_cell_sql("#{entry_alias}.lng")
+        iy_sql = projected_cell_sql("#{entry_alias}.lat", latitude: true)
 
-        entries.each do |entry|
-          ix, iy = project_to_cell(entry)
-          cell = grouped[[ix, iy]]
-          cell[:entry_count] += 1
-
-          count = count_for_entry(entry)
-          next unless count.positive?
-
-          cell[:with_count] += 1
-          cell[:sum_count] += count
-        end
-
-        grouped
+        Entry
+          .unscoped
+          .from("(#{filtered_entries.to_sql}) #{entry_alias}")
+          .joins(
+            "LEFT JOIN entry_bird_counts #{count_alias} " \
+            "ON #{count_alias}.entry_id = #{entry_alias}.id " \
+            "AND #{count_alias}.bird_id = #{selected_bird_id}",
+          )
+          .group(ix_sql, iy_sql)
+          .select(
+            "#{ix_sql} AS ix",
+            "#{iy_sql} AS iy",
+            "COUNT(*) AS entry_count",
+            "SUM(CASE WHEN COALESCE(#{count_alias}.count, 0) > 0 THEN 1 ELSE 0 END) AS with_count",
+            "SUM(COALESCE(#{count_alias}.count, 0)) AS sum_count",
+          )
       end
     end
 
     def summary
       @summary ||= begin
-        entry_count = entries.length
-        with_count = grouped.values.sum { |cell| cell[:with_count].to_i }
-        sum_count = grouped.values.sum { |cell| cell[:sum_count].to_i }
+        entry_count = filtered_entries_relation.count
+        with_count = grouped_rows.sum { |row| row.with_count.to_i }
+        sum_count = grouped_rows.sum { |row| row.sum_count.to_i }
         {
           entry_count: entry_count,
           with_count: with_count,
@@ -97,9 +115,8 @@ module Species
       end
     end
 
-    def count_for_entry(entry)
-      row = entry.entry_bird_counts.find { |count_row| count_row.bird.external_id == bird_id }
-      row ? row.count.to_i : 0
+    def selected_bird_db_id
+      @selected_bird_db_id ||= Bird.where(external_id: bird_id).pick(:id).to_i
     end
 
     def metric_value(cell)
@@ -116,18 +133,16 @@ module Species
       end
     end
 
-    def project_to_cell(entry)
-      x, y = project_lng_lat(entry.lng.to_f, entry.lat.to_f)
-      [(x / cell_size_m).floor, (y / cell_size_m).floor]
-    end
+    def projected_cell_sql(column_sql, latitude: false)
+      if latitude
+        mercator_sql =
+          "#{EARTH_RADIUS_M} * LN(TAN(PI()/4.0 + " \
+          "RADIANS(LEAST(GREATEST(#{column_sql}, -#{MAX_LATITUDE}), #{MAX_LATITUDE})) / 2.0))"
+      else
+        mercator_sql = "#{EARTH_RADIUS_M} * RADIANS(#{column_sql})"
+      end
 
-    def project_lng_lat(lng, lat)
-      lat_clamped = [[lat, -MAX_LATITUDE].max, MAX_LATITUDE].min
-      lat_rad = lat_clamped * Math::PI / 180.0
-      lng_rad = lng * Math::PI / 180.0
-      x = EARTH_RADIUS_M * lng_rad
-      y = EARTH_RADIUS_M * Math.log(Math.tan(Math::PI / 4.0 + lat_rad / 2.0))
-      [x, y]
+      "FLOOR((#{mercator_sql}) / #{cell_size_m.to_f})"
     end
 
     def normalize_metric(value)
