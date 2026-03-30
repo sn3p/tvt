@@ -2,12 +2,14 @@ module Points
   class StatsSnapshot
     TRUE_VALUES = %w[1 true yes on].freeze
     FALSE_VALUES = %w[0 false no off].freeze
+    VALID_SCOPES = %w[both viewport totals].freeze
 
-    def initialize(year:, pc4: nil, include_private: nil, include_isorg: nil, bbox:)
+    def initialize(year:, pc4: nil, include_private: nil, include_isorg: nil, bbox:, scope: nil)
       @year = Integer(year)
       @pc4 = normalize_pc4(pc4)
       @include_private = parse_boolean(include_private, default: true)
       @include_isorg = parse_boolean(include_isorg, default: true)
+      @scope = normalize_scope(scope)
       @bbox = parse_bbox(bbox)
       validate!
     end
@@ -19,16 +21,17 @@ module Points
           pc4: pc4,
           include_private: include_private,
           include_isorg: include_isorg,
+          scope: scope,
           bbox: serialized_bbox,
         },
-        viewport: summarize(viewport_entries),
-        filtered_total: summarize(filtered_entries),
+        viewport: include_viewport? ? summarize(viewport_entries) : nil,
+        filtered_total: include_totals? ? summarize(filtered_entries) : nil,
       }
     end
 
     private
 
-    attr_reader :bbox, :include_isorg, :include_private, :pc4, :year
+    attr_reader :bbox, :include_isorg, :include_private, :pc4, :scope, :year
 
     def filtered_entries
       @filtered_entries ||= begin
@@ -73,6 +76,9 @@ module Points
     end
 
     def parse_bbox(value)
+      return nil if value.nil?
+      return nil if value.respond_to?(:empty?) && value.empty?
+
       parts = value.is_a?(Array) ? value : value.to_s.split(",")
       raise ArgumentError, "invalid bbox" unless parts.size == 4
 
@@ -84,9 +90,18 @@ module Points
       raise ArgumentError, "invalid bbox"
     end
 
+    def normalize_scope(value)
+      normalized = value.to_s.strip
+      return "both" if normalized.empty?
+      return normalized if VALID_SCOPES.include?(normalized)
+
+      raise ArgumentError, "invalid scope"
+    end
+
     def validate!
       raise ArgumentError, "year must be positive" unless year.positive?
       raise ArgumentError, "at least one mode must be included" unless include_private || include_isorg
+      raise ArgumentError, "bbox required for viewport scope" if include_viewport? && bbox.nil?
     end
 
     def apply_mode_filter(scoped)
@@ -100,7 +115,17 @@ module Points
     end
 
     def serialized_bbox
+      return nil unless include_viewport? && bbox
+
       [bbox[:west], bbox[:south], bbox[:east], bbox[:north]]
+    end
+
+    def include_viewport?
+      scope == "both" || scope == "viewport"
+    end
+
+    def include_totals?
+      scope == "both" || scope == "totals"
     end
   end
 end

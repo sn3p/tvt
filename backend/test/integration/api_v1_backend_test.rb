@@ -217,6 +217,59 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert_equal "invalid point stats parameters", body["error"]
   end
 
+  test "point stats can return totals without a viewport bbox" do
+    entry = Entry.create!(
+      year: 2026,
+      external_id: 1551,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: false,
+    )
+    bird = Bird.create!(external_id: 9, name: "Ekster")
+    EntryBirdCount.create!(entry: entry, bird: bird, rank: 1, count: 3, bird_name_cache: "Ekster")
+
+    get "/api/v1/years/2026/point_stats", params: {
+      include_private: 1,
+      include_isorg: 0,
+      scope: "totals",
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "totals", body.dig("filters", "scope")
+    assert_nil body["viewport"]
+    assert_equal 1, body.dig("filtered_total", "entry_count")
+    assert_equal 3, body.dig("filtered_total", "bird_sum_count")
+  end
+
+  test "point stats can return viewport-only aggregates" do
+    entry = Entry.create!(
+      year: 2026,
+      external_id: 1552,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: true,
+    )
+    bird = Bird.create!(external_id: 50, name: "Merel")
+    EntryBirdCount.create!(entry: entry, bird: bird, rank: 1, count: 5, bird_name_cache: "Merel")
+
+    get "/api/v1/years/2026/point_stats", params: {
+      include_private: 0,
+      include_isorg: 1,
+      scope: "viewport",
+      bbox: "4.90,52.36,4.91,52.37",
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "viewport", body.dig("filters", "scope")
+    assert_nil body["filtered_total"]
+    assert_equal 1, body.dig("viewport", "entry_count")
+    assert_equal 5, body.dig("viewport", "bird_sum_count")
+  end
+
   test "pc4 bounds returns a padded bbox for a year and pc4" do
     Entry.create!(
       year: 2026,

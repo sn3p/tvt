@@ -273,12 +273,13 @@ export class BackendApiSource extends DataSource {
     return p;
   }
 
-  async getPointStats({ year, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
+  async getPointStats({ year, pc4, includePrivate = true, includeIsorg = true, bbox, scope = "both", signal } = {}) {
     const safeYear = toSafeInt(year, "year");
     const params = new URLSearchParams({ });
     appendIfPresent(params, "pc4", pc4);
     params.set("include_private", includePrivate ? "1" : "0");
     params.set("include_isorg", includeIsorg ? "1" : "0");
+    params.set("scope", String(scope || "both"));
     appendIfPresent(params, "bbox", bboxToParam(bbox));
     const url = joinUrl(this.baseUrl, `years/${safeYear}/point_stats?${params.toString()}`);
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);

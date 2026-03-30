@@ -9,6 +9,7 @@ module Api
             include_private: params[:include_private],
             include_isorg: params[:include_isorg],
             bbox: params[:bbox],
+            scope: params[:scope],
           )
           render json: snapshot.as_json
         end

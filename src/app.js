@@ -632,6 +632,10 @@ export function initApp() {
   let workerClusterFailed = false;
   let workerClusterPointSignature = "";
   let pointStatsOverride = null;
+  let pointTotalsOverride = null;
+  let pointTotalsSignature = "";
+  let pointTotalsPromise = null;
+  let pointTotalsAbortController = null;
 
   function readPointModeFiltersFromStorage() {
     try {
@@ -1106,15 +1110,85 @@ export function initApp() {
     return pointTilesPrimarySource.getPointStats(params);
   }
 
-  function pointStatsSummaryFromResponse(json) {
+  function pointViewportSummaryFromResponse(json) {
     return {
       entries: Number(json?.viewport?.entry_count ?? 0) || 0,
       privateCount: Number(json?.viewport?.private_entries_count ?? 0) || 0,
       isorgCount: Number(json?.viewport?.isorg_entries_count ?? 0) || 0,
       birds: Number(json?.viewport?.bird_sum_count ?? 0) || 0,
+    };
+  }
+
+  function pointTotalsSummaryFromResponse(json) {
+    return {
       totalEntries: Number(json?.filtered_total?.entry_count ?? 0) || 0,
       totalBirds: Number(json?.filtered_total?.bird_sum_count ?? 0) || 0,
     };
+  }
+
+  function pointTotalsKey({ year, includePrivate, includeIsorg }) {
+    return [
+      Number(year || 0) || 0,
+      includePrivate ? 1 : 0,
+      includeIsorg ? 1 : 0,
+    ].join(":");
+  }
+
+  async function ensurePointTotals({ year, includePrivate, includeIsorg }) {
+    const signature = pointTotalsKey({ year, includePrivate, includeIsorg });
+    if (pointTotalsOverride && pointTotalsSignature === signature) {
+      return pointTotalsOverride;
+    }
+    if (pointTotalsPromise && pointTotalsSignature === signature) {
+      return pointTotalsPromise;
+    }
+
+    if (pointTotalsAbortController) pointTotalsAbortController.abort();
+    const controller = new AbortController();
+    pointTotalsAbortController = controller;
+    pointTotalsSignature = signature;
+    pointTotalsOverride = null;
+
+    pointTotalsPromise = getPointStats({
+      year,
+      includePrivate,
+      includeIsorg,
+      scope: "totals",
+      signal: controller.signal,
+    })
+      .then((json) => {
+        if (controller.signal.aborted) {
+          const abortErr = new Error("The operation was aborted.");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        const summary = pointTotalsSummaryFromResponse(json);
+        pointTotalsOverride = summary;
+        totals = {
+          entries: summary.totalEntries,
+          birds: summary.totalBirds,
+        };
+        if (mode === "points") updateViewportStats();
+        return summary;
+      })
+      .catch((err) => {
+        if (isAbortError(err)) throw err;
+        console.warn("Point totals fetch failed:", err);
+        pointTotalsOverride = null;
+        totals = { entries: 0, birds: 0 };
+        if (mode === "points") updateViewportStats();
+        return null;
+      })
+      .finally(() => {
+        if (pointTotalsAbortController === controller) {
+          pointTotalsAbortController = null;
+        }
+        if (pointTotalsSignature === signature) {
+          pointTotalsPromise = null;
+        }
+      });
+
+    return pointTotalsPromise;
   }
 
   function currentSpeciesBounds() {
@@ -1635,8 +1709,8 @@ export function initApp() {
       const inViewPrivate = Number(pointStatsOverride.privateCount) || 0;
       const inViewIsorg = Number(pointStatsOverride.isorgCount) || 0;
       const inViewBirds = Number(pointStatsOverride.birds) || 0;
-      const totalEntries = Number(pointStatsOverride.totalEntries) || 0;
-      const totalBirds = Number(pointStatsOverride.totalBirds) || 0;
+      const totalEntries = Number(pointTotalsOverride?.totalEntries) || 0;
+      const totalBirds = Number(pointTotalsOverride?.totalBirds) || 0;
 
       hudStats = { entries: inViewEntries, birds: inViewBirds };
       const main = document.createElement("span");
@@ -2797,6 +2871,17 @@ export function initApp() {
     refreshRenderedPointStats();
   }
 
+  function clearPointTotalsState() {
+    if (pointTotalsAbortController) {
+      pointTotalsAbortController.abort();
+      pointTotalsAbortController = null;
+    }
+    pointTotalsPromise = null;
+    pointTotalsOverride = null;
+    pointTotalsSignature = "";
+    totals = { entries: 0, birds: 0 };
+  }
+
   async function mapWithConcurrency(items, limit, worker) {
     const out = new Array(items.length);
     let cursor = 0;
@@ -2921,8 +3006,8 @@ export function initApp() {
       entry: state.entry,
     }));
     totals = {
-      entries: pointStatsOverride?.totalEntries ?? rendered.length,
-      birds: pointStatsOverride?.totalBirds ?? 0,
+      entries: pointTotalsOverride?.totalEntries ?? rendered.length,
+      birds: pointTotalsOverride?.totalBirds ?? 0,
     };
     updateViewportStats();
     maybeMessageForPointCap();
@@ -3227,13 +3312,11 @@ export function initApp() {
         privateCount: inViewPrivate,
         isorgCount: inViewIsorg,
         birds: 0,
-        totalEntries: latestPointEntryCount,
-        totalBirds: 0,
       };
     }
     totals = {
-      entries: pointStatsOverride.totalEntries,
-      birds: pointStatsOverride.totalBirds,
+      entries: pointTotalsOverride?.totalEntries ?? latestPointEntryCount,
+      birds: pointTotalsOverride?.totalBirds ?? 0,
     };
     updateViewportStats();
     maybeMessageForPointCap();
@@ -3266,6 +3349,7 @@ export function initApp() {
 
     try {
       if (enabledPointModes.length === 0) {
+        clearPointTotalsState();
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
         updatePointsControlsVisibility();
@@ -3288,9 +3372,11 @@ export function initApp() {
       const targetYear = Number(year || 0) || defaultYear;
 
       if (!targetYear) {
+        clearPointTotalsState();
         throw new Error("No tile year available");
       }
       if (yearsAvailable.length > 0 && !yearsAvailable.includes(targetYear)) {
+        clearPointTotalsState();
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
         updatePointsControlsVisibility();
@@ -3323,11 +3409,18 @@ export function initApp() {
         return;
       }
 
+      void ensurePointTotals({
+        year: targetYear,
+        includePrivate,
+        includeIsorg,
+      });
+
       const pointStatsPromise = getPointStats({
         year: targetYear,
         includePrivate,
         includeIsorg,
         bbox: bounds,
+        scope: "viewport",
         signal: controller.signal,
       }).catch((err) => {
         if (isAbortError(err)) throw err;
@@ -3350,6 +3443,7 @@ export function initApp() {
       );
 
       if (fetchModes.length === 0) {
+        clearPointTotalsState();
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
         updatePointsControlsVisibility();
@@ -3387,11 +3481,11 @@ export function initApp() {
 
       if (seq !== pointTileFetchSeq || mode !== "points") return;
       pointStatsOverride = pointStatsJson
-        ? pointStatsSummaryFromResponse(pointStatsJson)
+        ? pointViewportSummaryFromResponse(pointStatsJson)
         : null;
       totals = {
-        entries: pointStatsOverride?.totalEntries ?? 0,
-        birds: pointStatsOverride?.totalBirds ?? 0,
+        entries: pointTotalsOverride?.totalEntries ?? 0,
+        birds: pointTotalsOverride?.totalBirds ?? 0,
       };
 
       const nextEntriesById = new Map();
