@@ -12,6 +12,10 @@ export class DataSource {
     throw new Error("DataSource.getPointTile() not implemented");
   }
 
+  async getPointStats(_params) {
+    throw new Error("DataSource.getPointStats() not implemented");
+  }
+
   async getEntryTopBirds(_params) {
     throw new Error("DataSource.getEntryTopBirds() not implemented");
   }
@@ -263,6 +267,19 @@ export class BackendApiSource extends DataSource {
 
     if (!signal) this.tilePromiseByUrl.set(url, p);
     return p;
+  }
+
+  async getPointStats({ year, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
+    const safeYear = toSafeInt(year, "year");
+    const params = new URLSearchParams({ });
+    appendIfPresent(params, "pc4", pc4);
+    params.set("include_private", includePrivate ? "1" : "0");
+    params.set("include_isorg", includeIsorg ? "1" : "0");
+    appendIfPresent(params, "bbox", bboxToParam(bbox));
+    const url = joinUrl(this.baseUrl, `years/${safeYear}/point_stats?${params.toString()}`);
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point stats (${url})`);
+    return r.json();
   }
 
   async getEntryTopBirds({ year, id, signal } = {}) {

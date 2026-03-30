@@ -141,6 +141,82 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert_equal [], body["points"]
   end
 
+  test "point stats returns viewport and filtered totals" do
+    private_inside = Entry.create!(
+      year: 2026,
+      external_id: 1501,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: false,
+    )
+    isorg_inside = Entry.create!(
+      year: 2026,
+      external_id: 1502,
+      pc4: "1011",
+      lat: 52.3680,
+      lng: 4.9050,
+      is_org: true,
+    )
+    private_outside_bbox = Entry.create!(
+      year: 2026,
+      external_id: 1503,
+      pc4: "1011",
+      lat: 52.3900,
+      lng: 4.9400,
+      is_org: false,
+    )
+    other_pc4 = Entry.create!(
+      year: 2026,
+      external_id: 1504,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+
+    ekster = Bird.create!(external_id: 9, name: "Ekster")
+    merel = Bird.create!(external_id: 50, name: "Merel")
+
+    EntryBirdCount.create!(entry: private_inside, bird: ekster, rank: 1, count: 3, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: isorg_inside, bird: merel, rank: 1, count: 5, bird_name_cache: "Merel")
+    EntryBirdCount.create!(entry: private_outside_bbox, bird: ekster, rank: 1, count: 7, bird_name_cache: "Ekster")
+    EntryBirdCount.create!(entry: other_pc4, bird: ekster, rank: 1, count: 11, bird_name_cache: "Ekster")
+
+    get "/api/v1/years/2026/point_stats", params: {
+      pc4: "1011",
+      include_private: 1,
+      include_isorg: 1,
+      bbox: "4.90,52.36,4.91,52.37",
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 2026, body["year"]
+    assert_equal "1011", body.dig("filters", "pc4")
+    assert_equal true, body.dig("filters", "include_private")
+    assert_equal true, body.dig("filters", "include_isorg")
+    assert_equal [4.9, 52.36, 4.91, 52.37], body.dig("filters", "bbox")
+
+    assert_equal 2, body.dig("viewport", "entry_count")
+    assert_equal 1, body.dig("viewport", "private_entries_count")
+    assert_equal 1, body.dig("viewport", "isorg_entries_count")
+    assert_equal 8, body.dig("viewport", "bird_sum_count")
+
+    assert_equal 3, body.dig("filtered_total", "entry_count")
+    assert_equal 2, body.dig("filtered_total", "private_entries_count")
+    assert_equal 1, body.dig("filtered_total", "isorg_entries_count")
+    assert_equal 15, body.dig("filtered_total", "bird_sum_count")
+  end
+
+  test "point stats rejects invalid parameters" do
+    get "/api/v1/years/2026/point_stats", params: { include_private: 0, include_isorg: 0 }
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid point stats parameters", body["error"]
+  end
+
   test "species manifest returns Groningen summary for a year" do
     private_entry = Entry.create!(
       year: 2026,

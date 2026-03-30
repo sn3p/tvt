@@ -957,6 +957,21 @@ export function initApp() {
     return pointTilesPrimarySource.getPointTile(params);
   }
 
+  async function getPointStats(params) {
+    return pointTilesPrimarySource.getPointStats(params);
+  }
+
+  function pointStatsSummaryFromResponse(json) {
+    return {
+      entries: Number(json?.viewport?.entry_count ?? 0) || 0,
+      privateCount: Number(json?.viewport?.private_entries_count ?? 0) || 0,
+      isorgCount: Number(json?.viewport?.isorg_entries_count ?? 0) || 0,
+      birds: Number(json?.viewport?.bird_sum_count ?? 0) || 0,
+      totalEntries: Number(json?.filtered_total?.entry_count ?? 0) || 0,
+      totalBirds: Number(json?.filtered_total?.bird_sum_count ?? 0) || 0,
+    };
+  }
+
   function currentSpeciesBounds() {
     try {
       return map.getBounds();
@@ -1430,7 +1445,9 @@ export function initApp() {
       const inViewEntries = Number(pointStatsOverride.entries) || 0;
       const inViewPrivate = Number(pointStatsOverride.privateCount) || 0;
       const inViewIsorg = Number(pointStatsOverride.isorgCount) || 0;
-      const inViewBirds = 0;
+      const inViewBirds = Number(pointStatsOverride.birds) || 0;
+      const totalEntries = Number(pointStatsOverride.totalEntries) || 0;
+      const totalBirds = Number(pointStatsOverride.totalBirds) || 0;
 
       hudStats = { entries: inViewEntries, birds: inViewBirds };
       const main = document.createElement("span");
@@ -1439,7 +1456,7 @@ export function initApp() {
 
       const provisional = document.createElement("span");
       provisional.className = "stats-provisional";
-      provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+      provisional.textContent = `(${fmtInt(totalEntries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totalBirds)} totaal)`;
 
       statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
       if (legendPrivateTextEl)
@@ -1470,7 +1487,7 @@ export function initApp() {
 
     const provisional = document.createElement("span");
     provisional.className = "stats-provisional";
-    provisional.textContent = `(${fmtInt(totals.entries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totals.birds)} totaal)`;
+    provisional.textContent = `(${fmtInt(totals.entries)} totaal)`;
 
     statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
 
@@ -2679,7 +2696,6 @@ export function initApp() {
   }
 
   function refreshRenderedPointStats() {
-    pointStatsOverride = null;
     rendered = Array.from(pointMarkerStateById.values()).map((state) => ({
       latlng: state.latlng,
       birdsTotal: 0,
@@ -2689,7 +2705,10 @@ export function initApp() {
       birdNames: new Set(),
       entry: state.entry,
     }));
-    totals = { entries: rendered.length, birds: 0 };
+    totals = {
+      entries: pointStatsOverride?.totalEntries ?? rendered.length,
+      birds: pointStatsOverride?.totalBirds ?? 0,
+    };
     updateViewportStats();
     maybeMessageForPointCap();
   }
@@ -2986,13 +3005,21 @@ export function initApp() {
       else inViewPrivate += 1;
     }
 
-    pointStatsOverride = {
-      entries: inViewEntries,
-      privateCount: inViewPrivate,
-      isorgCount: inViewIsorg,
-    };
     rendered = [];
-    totals = { entries: latestPointEntryCount, birds: 0 };
+    if (!pointStatsOverride) {
+      pointStatsOverride = {
+        entries: inViewEntries,
+        privateCount: inViewPrivate,
+        isorgCount: inViewIsorg,
+        birds: 0,
+        totalEntries: latestPointEntryCount,
+        totalBirds: 0,
+      };
+    }
+    totals = {
+      entries: pointStatsOverride.totalEntries,
+      birds: pointStatsOverride.totalBirds,
+    };
     updateViewportStats();
     maybeMessageForPointCap();
   }
@@ -3018,7 +3045,8 @@ export function initApp() {
     const controller = new AbortController();
     pointTileAbortController = controller;
 
-    const { year, pc4, enabledPointModes } = getFilters();
+    const { year, pc4, includePrivate, includeIsorg, enabledPointModes } =
+      getFilters();
 
     try {
       if (enabledPointModes.length === 0) {
@@ -3062,9 +3090,10 @@ export function initApp() {
 
       const zoomMin = Number(manifest?.defaults?.zoom_min ?? 6) || 6;
       const zoomMax = Number(manifest?.defaults?.zoom_max ?? 13) || 13;
+      const bounds = map.getBounds();
       const z = Math.max(zoomMin, Math.min(zoomMax, Math.floor(map.getZoom())));
       const tiles = tilesForBounds(
-        map.getBounds(),
+        bounds,
         z,
         pointsSettings.tileBuffer,
       );
@@ -3078,6 +3107,19 @@ export function initApp() {
         clearPointMarkers();
         return;
       }
+
+      const pointStatsPromise = getPointStats({
+        year: targetYear,
+        pc4,
+        includePrivate,
+        includeIsorg,
+        bbox: bounds,
+        signal: controller.signal,
+      }).catch((err) => {
+        if (isAbortError(err)) throw err;
+        console.warn("Viewport point stats fetch failed:", err);
+        return null;
+      });
 
       const modesAvailable = new Set(
         (Array.isArray(manifest?.modes_available)
@@ -3125,8 +3167,16 @@ export function initApp() {
         });
         return { mode: req.mode, json };
       });
+      const pointStatsJson = await pointStatsPromise;
 
       if (seq !== pointTileFetchSeq || mode !== "points") return;
+      pointStatsOverride = pointStatsJson
+        ? pointStatsSummaryFromResponse(pointStatsJson)
+        : null;
+      totals = {
+        entries: pointStatsOverride?.totalEntries ?? 0,
+        birds: pointStatsOverride?.totalBirds ?? 0,
+      };
 
       const nextEntriesById = new Map();
 
