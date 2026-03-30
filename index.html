@@ -51,11 +51,6 @@
       </nav>
 
       <form id="filtersForm" class="filters" autocomplete="off">
-        <label class="field">
-          <span>Jaar</span>
-          <input id="yearInput" name="year" type="number" min="2010" max="2100" step="1" value="2026">
-        </label>
-
         <div class="field-group field-group-location" role="group" aria-label="Postcode of huidige locatie">
           <label class="field field-group-main">
             <span>Postcode</span>
@@ -68,6 +63,11 @@
             <span data-controller="icon" data-icon-src-value="img/icons/locate.svg" aria-hidden="true"></span>
           </button>
         </div>
+
+        <label class="field">
+          <span>Jaar</span>
+          <input id="yearInput" name="year" type="number" min="2010" max="2100" step="1" value="2026">
+        </label>
 
         <div class="check-group" role="group" aria-label="Type inzending">
           <label class="check">
