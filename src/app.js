@@ -884,6 +884,10 @@ export function initApp() {
     typeof globalThis.L?.canvas === "function"
       ? globalThis.L.canvas({ padding: 0.25 })
       : null;
+  const gridSvgRenderer =
+    typeof globalThis.L?.svg === "function"
+      ? globalThis.L.svg({ padding: 0.25 })
+      : null;
   const pointsClusterLayer = createPointsClusterLayer();
   const pointsWorkerClusterLayer = globalThis.L.layerGroup();
   const pointsCanvasLayer = globalThis.L.layerGroup();
@@ -891,7 +895,10 @@ export function initApp() {
   let pointsLayer = pointsCanvasLayer;
   pointsLayer.addTo(map);
 
-  const gridLayer = globalThis.L.layerGroup();
+  const gridLayer =
+    typeof globalThis.L?.featureGroup === "function"
+      ? globalThis.L.featureGroup()
+      : globalThis.L.layerGroup();
 
   let rendered = [];
   let totals = { entries: 0, birds: 0 };
@@ -1174,6 +1181,9 @@ export function initApp() {
           stroke: false,
           fillColor,
           fillOpacity,
+          interactive: true,
+          bubblingMouseEvents: false,
+          renderer: gridSvgRenderer || undefined,
         });
         circle.bindTooltip(tooltip, { sticky: false });
         circle.addTo(gridLayer);
@@ -1183,6 +1193,9 @@ export function initApp() {
           weight: 1,
           fillColor,
           fillOpacity,
+          interactive: true,
+          bubblingMouseEvents: false,
+          renderer: gridSvgRenderer || undefined,
         });
         rect.bindTooltip(tooltip, { sticky: false });
         rect.addTo(gridLayer);
