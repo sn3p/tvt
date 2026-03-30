@@ -2485,6 +2485,10 @@ export function initApp() {
         { persist: false },
       );
       didAutoSelectInitialSpecies = true;
+      if (mode === "species") {
+        schedulePresenceGridCompute();
+        updateHud();
+      }
     }
 
     speciesListEl.innerHTML = "";
