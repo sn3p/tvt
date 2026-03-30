@@ -807,7 +807,23 @@ export function initApp() {
   // Prevent accidental form submit refresh on Enter.
   filtersForm.addEventListener("submit", (e) => e.preventDefault());
 
-  statsEl.textContent = "Dataset laden…";
+  function setStatsLoading(message = "Gegevens laden…") {
+    statsEl.classList.add("is-loading");
+    const dot = document.createElement("span");
+    dot.className = "stats-loading-dot";
+    dot.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "stats-loading-label";
+    label.textContent = String(message || "Gegevens laden…");
+    statsEl.replaceChildren(dot, label);
+  }
+
+  function setStatsPlainText(message = "") {
+    statsEl.classList.remove("is-loading");
+    statsEl.textContent = String(message || "");
+  }
+
+  setStatsLoading("Dataset laden…");
 
   const map = globalThis.L.map(mapEl, {
     zoomControl: false,
@@ -1007,6 +1023,9 @@ export function initApp() {
     const controller = new AbortController();
     if (speciesCatalogAbortController) speciesCatalogAbortController.abort();
     speciesCatalogAbortController = controller;
+    setStatsLoading(
+      speciesScope === "viewport" ? "Soortendata inladen…" : "Soortendata laden…",
+    );
 
     try {
       const bounds =
@@ -1053,7 +1072,9 @@ export function initApp() {
     } catch (err) {
       if (isAbortError(err)) return;
       if (mode === "species") {
-        statsEl.textContent = `Soortencatalogus laden mislukt: ${err?.message || String(err)}`;
+        setStatsPlainText(
+          `Soortencatalogus laden mislukt: ${err?.message || String(err)}`,
+        );
       }
     } finally {
       if (speciesCatalogAbortController === controller)
@@ -1223,7 +1244,9 @@ export function initApp() {
       if (isAbortError(err)) return;
       gridLayer.clearLayers();
       setComputing(false);
-      statsEl.textContent = `Soortenraster laden mislukt: ${err?.message || String(err)}`;
+      setStatsPlainText(
+        `Soortenraster laden mislukt: ${err?.message || String(err)}`,
+      );
       updateHud();
     } finally {
       if (speciesGridAbortController === controller)
@@ -1408,6 +1431,7 @@ export function initApp() {
   }
 
   function updateViewportStats() {
+    statsEl.classList.remove("is-loading");
     // During early startup (e.g. mode=species from URL), this can run before setView().
     // In that case Leaflet throws "Set map center and zoom first.".
     let b = null;
@@ -3056,7 +3080,7 @@ export function initApp() {
         updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("Selecteer minimaal één filter.");
-        statsEl.textContent = "Selecteer minimaal één filter.";
+        setStatsPlainText("Selecteer minimaal één filter.");
         return;
       }
 
@@ -3082,11 +3106,12 @@ export function initApp() {
         updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("");
-        statsEl.textContent = `Geen puntendataset beschikbaar voor ${targetYear}.`;
+        setStatsPlainText(`Geen puntendataset beschikbaar voor ${targetYear}.`);
         return;
       }
 
       pointTileYear = targetYear;
+      setStatsLoading("Kaartgegevens laden…");
 
       const zoomMin = Number(manifest?.defaults?.zoom_min ?? 6) || 6;
       const zoomMax = Number(manifest?.defaults?.zoom_max ?? 13) || 13;
@@ -3144,8 +3169,9 @@ export function initApp() {
         setPointsSidebarMessage(
           "Geen puntendataset beschikbaar voor de geselecteerde filters.",
         );
-        statsEl.textContent =
-          "Geen puntendataset beschikbaar voor de geselecteerde filters.";
+        setStatsPlainText(
+          "Geen puntendataset beschikbaar voor de geselecteerde filters.",
+        );
         return;
       }
 
@@ -3156,18 +3182,20 @@ export function initApp() {
         }
       }
 
-      const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
-        const json = await getPointTile({
-          year: targetYear,
-          mode: req.mode,
-          z: req.z,
-          x: req.x,
-          y: req.y,
-          signal: controller.signal,
-        });
-        return { mode: req.mode, json };
-      });
-      const pointStatsJson = await pointStatsPromise;
+      const [tileResults, pointStatsJson] = await Promise.all([
+        mapWithConcurrency(requests, 8, async (req) => {
+          const json = await getPointTile({
+            year: targetYear,
+            mode: req.mode,
+            z: req.z,
+            x: req.x,
+            y: req.y,
+            signal: controller.signal,
+          });
+          return { mode: req.mode, json };
+        }),
+        pointStatsPromise,
+      ]);
 
       if (seq !== pointTileFetchSeq || mode !== "points") return;
       pointStatsOverride = pointStatsJson
@@ -3301,7 +3329,9 @@ export function initApp() {
     } catch (err) {
       if (isAbortError(err)) return;
       console.warn("Viewport tile fetch failed:", err);
-      statsEl.textContent = `Laden van puntentiles mislukt: ${err?.message || String(err)}`;
+      setStatsPlainText(
+        `Laden van puntentiles mislukt: ${err?.message || String(err)}`,
+      );
     } finally {
       if (pointTileAbortController === controller)
         pointTileAbortController = null;
@@ -3334,7 +3364,7 @@ export function initApp() {
     const y = Number(year || 0) || 0;
     if (!y) return;
 
-    statsEl.textContent = `Dataset ${y} laden…`;
+    setStatsLoading(`Dataset ${y} laden…`);
 
     try {
       const manifest = await speciesSource.getSpeciesManifest({
@@ -3356,7 +3386,9 @@ export function initApp() {
       if (mode === "species") {
         clearPointMarkers();
         gridLayer.clearLayers();
-        statsEl.textContent = `Soortendata laden mislukt: ${err?.message || String(err)}`;
+        setStatsPlainText(
+          `Soortendata laden mislukt: ${err?.message || String(err)}`,
+        );
       }
     }
   }
@@ -3444,16 +3476,21 @@ export function initApp() {
     pointZoomForControls = map.getZoom();
     updatePointsControlsVisibility();
     if (mode === "points") {
+      setStatsLoading("Kaartgegevens laden…");
       schedulePointTileFetch();
-      updateViewportStats();
+      return;
+    }
+    if (mode === "species") {
+      if (speciesScope === "viewport") {
+        setStatsLoading("Soortendata inladen…");
+        scheduleSpeciesCatalogFetch({ immediate: true });
+      } else {
+        updateViewportStats();
+      }
+      schedulePresenceGridCompute();
       return;
     }
     updateViewportStats();
-    if (mode === "species") {
-      if (speciesScope === "viewport")
-        scheduleSpeciesCatalogFetch({ immediate: true });
-      schedulePresenceGridCompute();
-    }
   };
 
   map.on("moveend", onViewportSettled);
