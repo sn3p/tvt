@@ -504,9 +504,6 @@ export function initApp() {
   }
 
   let pointsSettings = readPointsSettingsFromStorage();
-  let pointZoomForControls = 11;
-  let controlsRenderKind = "points";
-  let controlsIsCapExceeded = false;
   let workerClusterSource = null;
   let workerClusterFailed = false;
   let workerClusterPointSignature = "";
@@ -1595,7 +1592,6 @@ export function initApp() {
     if (typeof previousLayer.clearLayers === "function")
       previousLayer.clearLayers();
     pointRenderKind = resolved;
-    controlsRenderKind = pointRenderKind;
     pointsLayer = nextLayer;
     pointMarkerStateById.clear();
     refreshRenderedPointStats();
@@ -3076,7 +3072,6 @@ export function initApp() {
       if (enabledPointModes.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
-        controlsIsCapExceeded = false;
         updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("Selecteer minimaal één filter.");
@@ -3102,7 +3097,6 @@ export function initApp() {
       if (yearsAvailable.length > 0 && !yearsAvailable.includes(targetYear)) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
-        controlsIsCapExceeded = false;
         updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage("");
@@ -3126,7 +3120,6 @@ export function initApp() {
       if (tiles.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
-        controlsIsCapExceeded = false;
         updatePointsControlsVisibility();
         setPointsSidebarMessage("");
         clearPointMarkers();
@@ -3163,7 +3156,6 @@ export function initApp() {
       if (fetchModes.length === 0) {
         latestPointEntryCount = 0;
         isPointCapExceeded = false;
-        controlsIsCapExceeded = false;
         updatePointsControlsVisibility();
         clearPointMarkers();
         setPointsSidebarMessage(
@@ -3245,8 +3237,6 @@ export function initApp() {
       isPointCapExceeded =
         hasMaxPointsInViewCap() &&
         latestPointEntryCount > pointsSettings.maxPointsInView;
-      controlsIsCapExceeded = isPointCapExceeded;
-      pointZoomForControls = map.getZoom();
       updatePointsControlsVisibility();
 
       setPointRenderKind(
@@ -3470,10 +3460,8 @@ export function initApp() {
 
   // Initial view while loading.
   map.setView([53.22, 6.57], 11);
-  pointZoomForControls = map.getZoom();
   updatePointsControlsVisibility();
   const onViewportSettled = () => {
-    pointZoomForControls = map.getZoom();
     updatePointsControlsVisibility();
     if (mode === "points") {
       setStatsLoading("Kaartgegevens laden…");
@@ -3498,7 +3486,6 @@ export function initApp() {
   map.on("move", () => {
     if (mode !== "points") return;
     if (!pointsSettings.updateOnMove) return;
-    pointZoomForControls = map.getZoom();
     schedulePointTileFetch();
   });
 
