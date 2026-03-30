@@ -96,6 +96,30 @@ export function isAbortError(err) {
   return Boolean(err && typeof err === "object" && err.name === "AbortError");
 }
 
+function withAbortSignal(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(toAbortError());
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(toAbortError());
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 function normalizeBirdRows(json) {
   if (Array.isArray(json?.birds)) {
     return json.birds
@@ -240,9 +264,11 @@ export class BackendApiSource extends DataSource {
 
     if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
     if (signal?.aborted) throw toAbortError();
-    if (!signal && this.tilePromiseByUrl.has(url)) return this.tilePromiseByUrl.get(url);
+    if (this.tilePromiseByUrl.has(url)) {
+      return withAbortSignal(this.tilePromiseByUrl.get(url), signal);
+    }
 
-    const p = this.fetchImpl(url, signal ? { signal } : undefined)
+    const p = this.fetchImpl(url)
       .then((r) => {
         if (r.status === 404) {
           return {
@@ -264,13 +290,16 @@ export class BackendApiSource extends DataSource {
         return json;
       })
       .catch((err) => {
-        if (!signal) this.tilePromiseByUrl.delete(url);
+        this.tilePromiseByUrl.delete(url);
         if (isAbortError(err)) throw err;
         throw err;
+      })
+      .finally(() => {
+        this.tilePromiseByUrl.delete(url);
       });
 
-    if (!signal) this.tilePromiseByUrl.set(url, p);
-    return p;
+    this.tilePromiseByUrl.set(url, p);
+    return withAbortSignal(p, signal);
   }
 
   async getPointStats({ year, pc4, includePrivate = true, includeIsorg = true, bbox, scope = "both", signal } = {}) {
