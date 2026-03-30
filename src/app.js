@@ -4020,6 +4020,10 @@ export function initApp() {
     invalidate();
     // A second invalidate on next tick tends to fix "size is 0" edge cases.
     setTimeout(invalidate, 0);
+    window.requestAnimationFrame(() => {
+      if (mode !== "species") return;
+      onViewportSettled();
+    });
   });
   window.addEventListener("resize", () => invalidate());
   window.addEventListener("beforeunload", () => {
