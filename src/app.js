@@ -1235,6 +1235,7 @@ export function initApp() {
 
       speciesGridSummary = speciesSummaryFromGridResponse(json);
       renderBackendSpeciesGrid(json);
+      setComputing(false);
     } catch (err) {
       if (isAbortError(err)) return;
       gridLayer.clearLayers();
