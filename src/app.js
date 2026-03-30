@@ -3361,9 +3361,14 @@ export function initApp() {
   function setLocateMePending(next) {
     locateMePending = Boolean(next);
     locateMeBtn.disabled = locateMePending;
-    locateMeBtn.textContent = locateMePending
-      ? "Locatie bepalen…"
-      : "Mijn locatie";
+    locateMeBtn.setAttribute(
+      "aria-label",
+      locateMePending ? "Locatie bepalen…" : "Gebruik mijn locatie",
+    );
+    locateMeBtn.setAttribute(
+      "title",
+      locateMePending ? "Locatie bepalen…" : "Gebruik mijn locatie",
+    );
   }
 
   async function jumpToPc4() {

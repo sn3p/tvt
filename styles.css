@@ -284,6 +284,49 @@ input {
   color: var(--muted);
 }
 
+.field-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.field-group-location {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  overflow: hidden;
+}
+
+.field-group-location .field-group-main,
+.field-group-location .field-group-action {
+  background: transparent;
+  border: 0;
+}
+
+.field-group-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.field-group-action {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 0;
+  min-width: 38px;
+  justify-content: center;
+  align-items: center;
+  display: inline-flex;
+  padding-inline: 10px;
+}
+
+.field-group-location .field-group-action {
+  border-left: 1px solid var(--border);
+}
+
+.field-group-action [data-controller="icon"] {
+  width: 1rem;
+  height: 1rem;
+}
+
 .field-btn {
   appearance: none;
   border: 1px solid var(--border);
@@ -297,6 +340,10 @@ input {
 }
 
 .field-btn:hover {
+  background: var(--surface-elevated-hover);
+}
+
+.field-group-location .field-group-action:hover {
   background: var(--surface-elevated-hover);
 }
 
@@ -365,8 +412,6 @@ body[data-theme="light"] #pointsModeIsorgInput {
   font-weight: 600;
   user-select: none;
 }
-
-#pc4Input { width: 84px; }
 
 .stats {
   flex: 0 0 auto;
