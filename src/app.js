@@ -1183,18 +1183,19 @@ export function initApp() {
           interactive: true,
           bubblingMouseEvents: false,
           renderer: gridSvgRenderer || undefined,
+          className: "tvt-species-grid-cell",
         });
         circle.bindTooltip(tooltip, { sticky: false });
         circle.addTo(gridLayer);
       } else {
         const rect = globalThis.L.rectangle(bb, {
-          color: "rgba(255,255,255,0.18)",
-          weight: 1,
+          stroke: false,
           fillColor,
           fillOpacity,
           interactive: true,
           bubblingMouseEvents: false,
           renderer: gridSvgRenderer || undefined,
+          className: "tvt-species-grid-cell",
         });
         rect.bindTooltip(tooltip, { sticky: false });
         rect.addTo(gridLayer);

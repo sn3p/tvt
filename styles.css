@@ -978,6 +978,11 @@ body[data-theme="light"] #pointsModeIsorgInput {
   background: rgba(251, 146, 60, 0.92);
 }
 
+.leaflet-interactive.tvt-species-grid-cell {
+  cursor: default;
+  outline: none;
+}
+
 .tvt-cluster--isorg > div {
   background: rgba(96, 165, 250, 0.92);
 }
