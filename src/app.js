@@ -169,6 +169,26 @@ export function initApp() {
     return;
   }
 
+  function nowMs() {
+    if (globalThis.performance && typeof globalThis.performance.now === "function") {
+      return globalThis.performance.now();
+    }
+    return Date.now();
+  }
+
+  function recordDiagnostic(kind, payload = {}) {
+    if (!ENABLE_DIAGNOSTICS) return;
+    const bucketKey = `__tvt${kind[0].toUpperCase()}${kind.slice(1)}Diagnostics`;
+    const bucket = Array.isArray(globalThis[bucketKey]) ? globalThis[bucketKey] : [];
+    const entry = {
+      atUtc: new Date().toISOString(),
+      ...payload,
+    };
+    bucket.push(entry);
+    globalThis[bucketKey] = bucket.slice(-25);
+    console.info(`[tvt:${kind}]`, entry);
+  }
+
   // Grid cell size (meters): Auto (zoom-driven) + Manual override.
   //
   // Important: This grid is defined in *meters* (projected space). That means:
@@ -1127,6 +1147,7 @@ export function initApp() {
 
     const year = Number(yearInput.value || 0) || 0;
     if (!year) return;
+    const startedAtMs = nowMs();
 
     const seq = ++speciesCatalogSeq;
     const controller = new AbortController();
@@ -1176,6 +1197,13 @@ export function initApp() {
 
       renderSpeciesList({ query: speciesSearchInput.value });
       updateViewportStats();
+      recordDiagnostic("speciesCatalog", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year,
+        scope: speciesScope,
+        speciesCount: speciesCatalogRows.length,
+        entryCount: speciesCatalogStats.entryCount,
+      });
     } catch (err) {
       if (isAbortError(err)) return;
       if (mode === "species") {
@@ -1183,6 +1211,12 @@ export function initApp() {
           `Soortencatalogus laden mislukt: ${err?.message || String(err)}`,
         );
       }
+      recordDiagnostic("speciesCatalog", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year,
+        scope: speciesScope,
+        error: err?.message || String(err),
+      });
     } finally {
       if (speciesCatalogAbortController === controller)
         speciesCatalogAbortController = null;
@@ -1328,6 +1362,7 @@ export function initApp() {
       setComputing(false);
       return;
     }
+    const startedAtMs = nowMs();
 
     const seq = ++speciesGridSeq;
     const controller = new AbortController();
@@ -1353,6 +1388,15 @@ export function initApp() {
       speciesGridSummary = speciesSummaryFromGridResponse(json);
       renderBackendSpeciesGrid(json);
       setComputing(false);
+      recordDiagnostic("speciesGrid", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year,
+        birdId: selectedSpecies.id,
+        metric,
+        cellSizeM: gridCellM,
+        cellCount: Array.isArray(json?.cells) ? json.cells.length : 0,
+        entryCount: speciesGridSummary.total,
+      });
     } catch (err) {
       if (isAbortError(err)) return;
       gridLayer.clearLayers();
@@ -1361,6 +1405,14 @@ export function initApp() {
         `Soortenraster laden mislukt: ${err?.message || String(err)}`,
       );
       updateHud();
+      recordDiagnostic("speciesGrid", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year,
+        birdId: selectedSpecies?.id,
+        metric,
+        cellSizeM: gridCellM,
+        error: err?.message || String(err),
+      });
     } finally {
       if (speciesGridAbortController === controller)
         speciesGridAbortController = null;
@@ -3207,6 +3259,7 @@ export function initApp() {
     abortPointTileFetchCycle();
     const controller = new AbortController();
     pointTileAbortController = controller;
+    const startedAtMs = nowMs();
 
     const { year, includePrivate, includeIsorg, enabledPointModes } =
       getFilters();
@@ -3259,6 +3312,7 @@ export function initApp() {
         z,
         pointsSettings.tileBuffer,
       );
+      const tileRequestCount = tiles.length * enabledPointModes.length;
 
       if (tiles.length === 0) {
         latestPointEntryCount = 0;
@@ -3409,6 +3463,18 @@ export function initApp() {
         pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
       }
 
+      recordDiagnostic("pointTiles", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year: targetYear,
+        zoom: z,
+        tileCount: tiles.length,
+        tileRequestCount,
+        fetchedModes: fetchModes,
+        mergedPointCount: nextEntriesById.size,
+        renderedPointCount: entriesForRender.length,
+        totalEntries: totals.entries,
+      });
+
       const wantsWorkerClusters =
         pointRenderKind === "clusters" &&
         pointsSettings.clusterEngine === "worker" &&
@@ -3459,6 +3525,11 @@ export function initApp() {
       }
     } catch (err) {
       if (isAbortError(err)) return;
+      recordDiagnostic("pointTiles", {
+        durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
+        year,
+        error: err?.message || String(err),
+      });
       console.warn("Viewport tile fetch failed:", err);
       setStatsPlainText(
         `Laden van puntentiles mislukt: ${err?.message || String(err)}`,
