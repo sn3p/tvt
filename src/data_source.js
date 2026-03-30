@@ -16,6 +16,10 @@ export class DataSource {
     throw new Error("DataSource.getPointStats() not implemented");
   }
 
+  async getPc4Bounds(_params) {
+    throw new Error("DataSource.getPc4Bounds() not implemented");
+  }
+
   async getEntryTopBirds(_params) {
     throw new Error("DataSource.getEntryTopBirds() not implemented");
   }
@@ -279,6 +283,22 @@ export class BackendApiSource extends DataSource {
     const url = joinUrl(this.baseUrl, `years/${safeYear}/point_stats?${params.toString()}`);
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point stats (${url})`);
+    return r.json();
+  }
+
+  async getPc4Bounds({ year, pc4, signal } = {}) {
+    await this.getManifest();
+    const safeYear = toSafeInt(year, "year");
+    const safePc4 = String(pc4 || "").trim();
+    if (!safePc4.match(/^\d{4}$/)) {
+      throw new Error("pc4 must be exactly 4 digits");
+    }
+    const url = joinUrl(
+      this.baseUrl,
+      `years/${safeYear}/pc4_bounds/${encodeURIComponent(safePc4)}`,
+    );
+    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend pc4 bounds (${url})`);
     return r.json();
   }
 

@@ -1037,7 +1037,6 @@ export function initApp() {
       const { includePrivate, includeIsorg } = getFilters();
       const json = await speciesSource.getSpeciesCatalog({
         year,
-        pc4: normalizePc4(pc4Input.value),
         includePrivate,
         includeIsorg,
         scope: speciesScope,
@@ -1238,7 +1237,6 @@ export function initApp() {
         metric,
         cellSizeM: gridCellM,
         minN,
-        pc4: normalizePc4(pc4Input.value),
         includePrivate,
         includeIsorg,
         bbox: bounds,
@@ -2580,13 +2578,12 @@ export function initApp() {
 
   function getFilters() {
     const year = Number(yearInput.value || 0) || 0;
-    const pc4 = normalizePc4(pc4Input.value);
     const includePrivate = pointsModePrivateInput.checked;
     const includeIsorg = pointsModeIsorgInput.checked;
     const enabledPointModes = [];
     if (pointsModePrivateInput.checked) enabledPointModes.push("private");
     if (pointsModeIsorgInput.checked) enabledPointModes.push("isorg");
-    return { year, pc4, includePrivate, includeIsorg, enabledPointModes };
+    return { year, includePrivate, includeIsorg, enabledPointModes };
   }
 
   function abortPointTileFetchCycle() {
@@ -3077,7 +3074,7 @@ export function initApp() {
     const controller = new AbortController();
     pointTileAbortController = controller;
 
-    const { year, pc4, includePrivate, includeIsorg, enabledPointModes } =
+    const { year, includePrivate, includeIsorg, enabledPointModes } =
       getFilters();
 
     try {
@@ -3140,7 +3137,6 @@ export function initApp() {
 
       const pointStatsPromise = getPointStats({
         year: targetYear,
-        pc4,
         includePrivate,
         includeIsorg,
         bbox: bounds,
@@ -3227,7 +3223,6 @@ export function initApp() {
           )
             continue;
           const pc4Value = String(p?.pc4 ?? "");
-          if (pc4 && pc4Value !== pc4) continue;
 
           const markerId = `${isorg ? "isorg" : "private"}:${id}`;
           if (nextEntriesById.has(markerId)) continue;
@@ -3354,11 +3349,45 @@ export function initApp() {
   }
 
   function onFiltersChanged() {
-    // Normalize PC4 input "while typing" (only on change events).
-    const pc4 = normalizePc4(pc4Input.value);
-    if (pc4Input.value && pc4Input.value !== pc4) pc4Input.value = pc4;
     persistPointModeFiltersToStorage();
     render();
+  }
+
+  async function jumpToPc4() {
+    const rawPc4 = String(pc4Input.value || "").trim();
+    if (!rawPc4) return;
+
+    const pc4 = normalizePc4(rawPc4);
+    if (!pc4) {
+      setStatsPlainText("Gebruik 4 cijfers om naar een PC4 te springen.");
+      return;
+    }
+    if (pc4Input.value !== pc4) pc4Input.value = pc4;
+
+    const year = Number(yearInput.value || 0) || 0;
+    if (!year) return;
+
+    setStatsLoading(`PC4 ${pc4} opzoeken…`);
+
+    try {
+      const json = await pointTilesPrimarySource.getPc4Bounds({ year, pc4 });
+      const bbox = Array.isArray(json?.bbox) ? json.bbox : null;
+      if (!bbox || bbox.length !== 4) {
+        throw new Error("invalid pc4 bbox");
+      }
+
+      const [west, south, east, north] = bbox.map((v) => Number(v));
+      const bounds = globalThis.L.latLngBounds([south, west], [north, east]);
+      if (!bounds.isValid()) throw new Error("invalid pc4 bbox");
+
+      map.fitBounds(bounds, {
+        padding: [32, 32],
+        maxZoom: 15,
+      });
+    } catch (err) {
+      setStatsPlainText(`PC4 ${pc4} niet gevonden voor ${year}.`);
+      console.warn("PC4 jump failed:", err);
+    }
   }
 
   async function loadForYear(year) {
@@ -3447,12 +3476,25 @@ export function initApp() {
     }
     loadForYear(year);
   });
-  pc4Input.addEventListener("change", onFiltersChanged);
+  pc4Input.addEventListener("change", () => {
+    void jumpToPc4();
+  });
+  pc4Input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void jumpToPc4();
+  });
   pointsModePrivateInput.addEventListener("change", onFiltersChanged);
   pointsModeIsorgInput.addEventListener("change", onFiltersChanged);
 
   // Initial view while loading.
-  map.setView([53.22, 6.57], 11);
+  map.fitBounds(
+    [
+      [50.75, 3.2],
+      [53.7, 7.25],
+    ],
+    { padding: [20, 20] },
+  );
   updatePointsControlsVisibility();
   const onViewportSettled = () => {
     updatePointsControlsVisibility();

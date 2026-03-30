@@ -217,6 +217,53 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     assert_equal "invalid point stats parameters", body["error"]
   end
 
+  test "pc4 bounds returns a padded bbox for a year and pc4" do
+    Entry.create!(
+      year: 2026,
+      external_id: 1601,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: false,
+    )
+    Entry.create!(
+      year: 2026,
+      external_id: 1602,
+      pc4: "1011",
+      lat: 52.3680,
+      lng: 4.9050,
+      is_org: true,
+    )
+
+    get "/api/v1/years/2026/pc4_bounds/1011"
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 2026, body["year"]
+    assert_equal "1011", body["pc4"]
+    assert_equal 2, body["entry_count"]
+    assert_in_delta 4.8981, body["bbox"][0], 0.000001
+    assert_in_delta 52.3636, body["bbox"][1], 0.000001
+    assert_in_delta 4.911, body["bbox"][2], 0.000001
+    assert_in_delta 52.372, body["bbox"][3], 0.000001
+  end
+
+  test "pc4 bounds returns not found for an unknown pc4" do
+    get "/api/v1/years/2026/pc4_bounds/9999"
+
+    assert_response :not_found
+    body = JSON.parse(response.body)
+    assert_equal "pc4 not found", body["error"]
+  end
+
+  test "pc4 bounds rejects invalid parameters" do
+    get "/api/v1/years/not-a-year/pc4_bounds/abcd"
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_equal "invalid pc4 bounds parameters", body["error"]
+  end
+
   test "species manifest returns Groningen summary for a year" do
     private_entry = Entry.create!(
       year: 2026,
