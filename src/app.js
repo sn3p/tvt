@@ -216,6 +216,8 @@ export function initApp() {
   }
 
   const POINT_MODE_FILTERS_LS_KEY = "tvt:pointModeFilters";
+  const PC4_STORAGE_KEY = "tvt:navigationPc4";
+  const LOCATION_STORAGE_KEY = "tvt:navigationLocation";
   const THEME_STORAGE_KEY = "tvt:theme";
   const INFO_DIALOG_SEEN_KEY = "tvt:ui:infoDialogSeen";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
@@ -273,6 +275,79 @@ export function initApp() {
   }
 
   let activeTheme = applyTheme(readThemeFromStorage(), { persist: false });
+
+  function readPc4FromStorage() {
+    try {
+      return normalizePc4(window.localStorage.getItem(PC4_STORAGE_KEY));
+    } catch {
+      return "";
+    }
+  }
+
+  function persistPc4ToStorage(pc4) {
+    try {
+      const normalized = normalizePc4(pc4);
+      if (!normalized) {
+        window.localStorage.removeItem(PC4_STORAGE_KEY);
+        return;
+      }
+      window.localStorage.setItem(PC4_STORAGE_KEY, normalized);
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function readLocationFromStorage() {
+    try {
+      const raw = window.localStorage.getItem(LOCATION_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const lat = Number(parsed?.lat);
+      const lng = Number(parsed?.lng);
+      const accuracy = Number(parsed?.accuracy) || 0;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return {
+        lat,
+        lng,
+        accuracy: Number.isFinite(accuracy) && accuracy > 0 ? accuracy : 0,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function persistLocationToStorage({ lat, lng, accuracy = 0 }) {
+    try {
+      const safeLat = Number(lat);
+      const safeLng = Number(lng);
+      const safeAccuracy = Number(accuracy) || 0;
+      if (!Number.isFinite(safeLat) || !Number.isFinite(safeLng)) {
+        window.localStorage.removeItem(LOCATION_STORAGE_KEY);
+        return;
+      }
+      window.localStorage.setItem(
+        LOCATION_STORAGE_KEY,
+        JSON.stringify({
+          lat: safeLat,
+          lng: safeLng,
+          accuracy:
+            Number.isFinite(safeAccuracy) && safeAccuracy > 0
+              ? safeAccuracy
+              : 0,
+        }),
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function clearLocationStorage() {
+    try {
+      window.localStorage.removeItem(LOCATION_STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
+  }
 
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {
@@ -1884,6 +1959,15 @@ export function initApp() {
     }
   }
 
+  function pc4FromUrl() {
+    try {
+      const url = new URL(window.location.href);
+      return normalizePc4(url.searchParams.get("pc4"));
+    } catch {
+      return "";
+    }
+  }
+
   function syncModeToUrl(next) {
     // Keep mode in URL (shareable, back/forward friendly), not in localStorage.
     const modeValue = next === "species" ? "species" : "points";
@@ -1893,13 +1977,32 @@ export function initApp() {
     window.history.replaceState(null, "", url);
   }
 
+  function syncPc4ToUrl(next) {
+    const pc4Value = normalizePc4(next);
+    const url = new URL(window.location.href);
+    if (!pc4Value) url.searchParams.delete("pc4");
+    else url.searchParams.set("pc4", pc4Value);
+    window.history.replaceState(null, "", url);
+  }
+
+  const initialPc4 = pc4FromUrl() || readPc4FromStorage();
+  const initialStoredLocation = initialPc4 ? null : readLocationFromStorage();
+  if (initialPc4) pc4Input.value = initialPc4;
+
   // Initial mode: URL is source of truth.
   setMode(modeFromUrl(), { skipRender: true });
 
-  // React to back/forward navigation if mode changes in URL.
+  // React to back/forward navigation if mode or postcode changes in URL.
   window.addEventListener("popstate", () => {
     const m = modeFromUrl();
     if (m !== mode) setMode(m);
+
+    const nextPc4 = pc4FromUrl();
+    const currentPc4 = normalizePc4(pc4Input.value);
+    if (nextPc4 === currentPc4) return;
+
+    pc4Input.value = nextPc4;
+    if (nextPc4) void jumpToPc4();
   });
 
   function isMobile() {
@@ -3371,12 +3474,42 @@ export function initApp() {
     );
   }
 
+  function clearPc4NavigationState() {
+    if (pc4Input.value) pc4Input.value = "";
+    syncPc4ToUrl("");
+    persistPc4ToStorage("");
+  }
+
+  function applyStoredLocationNavigation({ lat, lng, accuracy = 0 }) {
+    const safeLat = Number(lat);
+    const safeLng = Number(lng);
+    const safeAccuracy = Number(accuracy) || 0;
+    if (!Number.isFinite(safeLat) || !Number.isFinite(safeLng)) return false;
+
+    if (safeAccuracy > 0 && Number.isFinite(safeAccuracy)) {
+      const center = globalThis.L.latLng(safeLat, safeLng);
+      const bounds = center.toBounds(
+        Math.min(Math.max(safeAccuracy * 2, 400), 3000),
+      );
+      map.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 });
+      return true;
+    }
+
+    map.flyTo([safeLat, safeLng], 14, { duration: 0.6 });
+    return true;
+  }
+
   async function jumpToPc4() {
     const rawPc4 = String(pc4Input.value || "").trim();
-    if (!rawPc4) return;
+    if (!rawPc4) {
+      clearPc4NavigationState();
+      return;
+    }
 
     const pc4 = normalizePc4(rawPc4);
     if (!pc4) {
+      syncPc4ToUrl("");
+      persistPc4ToStorage("");
       setStatsPlainText("Gebruik 4 cijfers om naar een PC4 te springen.");
       return;
     }
@@ -3402,6 +3535,9 @@ export function initApp() {
         padding: [32, 32],
         maxZoom: 15,
       });
+      syncPc4ToUrl(pc4);
+      persistPc4ToStorage(pc4);
+      clearLocationStorage();
     } catch (err) {
       setStatsPlainText(`PC4 ${pc4} niet gevonden voor ${year}.`);
       console.warn("PC4 jump failed:", err);
@@ -3429,14 +3565,9 @@ export function initApp() {
           return;
         }
 
-        if (accuracy > 0 && Number.isFinite(accuracy)) {
-          const center = globalThis.L.latLng(lat, lng);
-          const bounds = center.toBounds(Math.min(Math.max(accuracy * 2, 400), 3000));
-          map.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 });
-          return;
-        }
-
-        map.flyTo([lat, lng], 14, { duration: 0.6 });
+        clearPc4NavigationState();
+        persistLocationToStorage({ lat, lng, accuracy });
+        applyStoredLocationNavigation({ lat, lng, accuracy });
       },
       (error) => {
         setLocateMePending(false);
@@ -3625,5 +3756,10 @@ export function initApp() {
     loadForYear(Number(yearInput.value || 0) || 0);
   } else {
     render();
+  }
+  if (initialPc4) {
+    void jumpToPc4();
+  } else if (initialStoredLocation) {
+    applyStoredLocationNavigation(initialStoredLocation);
   }
 }
