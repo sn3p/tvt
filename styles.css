@@ -284,6 +284,27 @@ input {
   color: var(--muted);
 }
 
+.field-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.field-btn:hover {
+  background: var(--surface-elevated-hover);
+}
+
+.field-btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
 .check-group {
   display: flex;
   align-items: center;

@@ -15,6 +15,7 @@ export function initApp() {
   const modeSpeciesBtn = document.querySelector("#modeSpeciesBtn");
   const yearInput = document.querySelector("#yearInput");
   const pc4Input = document.querySelector("#pc4Input");
+  const locateMeBtn = document.querySelector("#locateMeBtn");
   const pointsModePrivateInput = document.querySelector(
     "#pointsModePrivateInput",
   );
@@ -108,6 +109,7 @@ export function initApp() {
     !statsEl ||
     !yearInput ||
     !pc4Input ||
+    !locateMeBtn ||
     !pointsModePrivateInput ||
     !pointsModeIsorgInput ||
     !filtersForm ||
@@ -905,6 +907,7 @@ export function initApp() {
   let loadSeq = 0;
   let mode = "points"; // "points" | "species"
   let selectedSpecies = null; // { id?: number|null, name: string }
+  let locateMePending = false;
   const SELECTED_SPECIES_LS_KEY = "tvt:selectedSpecies";
   let computeTimer = 0;
   let speciesScope = "viewport"; // "viewport" | "all"
@@ -3354,6 +3357,14 @@ export function initApp() {
     render();
   }
 
+  function setLocateMePending(next) {
+    locateMePending = Boolean(next);
+    locateMeBtn.disabled = locateMePending;
+    locateMeBtn.textContent = locateMePending
+      ? "Locatie bepalen…"
+      : "Mijn locatie";
+  }
+
   async function jumpToPc4() {
     const rawPc4 = String(pc4Input.value || "").trim();
     if (!rawPc4) return;
@@ -3389,6 +3400,61 @@ export function initApp() {
       setStatsPlainText(`PC4 ${pc4} niet gevonden voor ${year}.`);
       console.warn("PC4 jump failed:", err);
     }
+  }
+
+  function jumpToCurrentLocation() {
+    if (locateMePending) return;
+    if (!navigator.geolocation) {
+      setStatsPlainText("Locatie is niet beschikbaar in deze browser.");
+      return;
+    }
+
+    setLocateMePending(true);
+    setStatsLoading("Huidige locatie bepalen…");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocateMePending(false);
+        const lat = Number(position?.coords?.latitude);
+        const lng = Number(position?.coords?.longitude);
+        const accuracy = Number(position?.coords?.accuracy) || 0;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          setStatsPlainText("Locatie bepalen mislukt.");
+          return;
+        }
+
+        if (accuracy > 0 && Number.isFinite(accuracy)) {
+          const center = globalThis.L.latLng(lat, lng);
+          const bounds = center.toBounds(Math.min(Math.max(accuracy * 2, 400), 3000));
+          map.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 });
+          return;
+        }
+
+        map.flyTo([lat, lng], 14, { duration: 0.6 });
+      },
+      (error) => {
+        setLocateMePending(false);
+        const code = Number(error?.code || 0);
+        if (code === 1) {
+          setStatsPlainText("Locatietoegang geweigerd.");
+          return;
+        }
+        if (code === 2) {
+          setStatsPlainText("Locatie niet beschikbaar.");
+          return;
+        }
+        if (code === 3) {
+          setStatsPlainText("Locatie bepalen duurde te lang.");
+          return;
+        }
+        setStatsPlainText("Locatie bepalen mislukt.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 300000,
+      },
+    );
   }
 
   async function loadForYear(year) {
@@ -3485,6 +3551,7 @@ export function initApp() {
     event.preventDefault();
     void jumpToPc4();
   });
+  locateMeBtn.addEventListener("click", jumpToCurrentLocation);
   pointsModePrivateInput.addEventListener("change", onFiltersChanged);
   pointsModeIsorgInput.addEventListener("change", onFiltersChanged);
 
