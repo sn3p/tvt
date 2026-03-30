@@ -360,8 +360,6 @@ body[data-theme="light"] #pointsModeIsorgInput {
 .stats-provisional {
   color: var(--muted-2);
   opacity: 0.85;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 
 /* Main map */
