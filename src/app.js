@@ -176,7 +176,7 @@ export function initApp() {
   // You can add preset buttons in HTML like:
   //   <button data-grid-cell-m="1000">1 km</button>
   const GRID_CELL_M_PRESETS = [
-    200, 250, 300, 400, 500, 650, 800, 1000, 1250, 1600, 2000, 2500,
+    100, 150, 200, 250, 300, 400, 500, 650, 800, 1000, 1250, 1600, 2000, 2500,
     // 3200, 4000, 5000, 8000, 10000
   ];
 
@@ -198,13 +198,14 @@ export function initApp() {
   // Heuristic: meters-per-cell for Groningen-ish density.
   // Discrete steps prevent jitter between zoom levels.
   function autoGridCellMForZoom(z) {
-    if (z >= 16) return 200;
-    if (z === 15) return 250;
-    if (z === 14) return 350;
-    if (z === 13) return 500;
-    if (z === 12) return 800;
-    if (z === 11) return 1200;
-    if (z === 10) return 1800;
+    if (z >= 17) return 100;
+    if (z === 16) return 150;
+    if (z === 15) return 200;
+    if (z === 14) return 300;
+    if (z === 13) return 400;
+    if (z === 12) return 650;
+    if (z === 11) return 1000;
+    if (z === 10) return 1600;
     return 2500; // z <= 9
   }
 
