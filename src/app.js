@@ -6,6 +6,7 @@ import {
   tilesForBounds,
 } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
+import tippy from "./lib/tippy.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
 export function initApp() {
@@ -16,6 +17,7 @@ export function initApp() {
   const yearInput = document.querySelector("#yearInput");
   const pc4Input = document.querySelector("#pc4Input");
   const locateMeBtn = document.querySelector("#locateMeBtn");
+  const locationFieldGroup = document.querySelector(".field-group-location");
   const pointsModePrivateInput = document.querySelector(
     "#pointsModePrivateInput",
   );
@@ -220,6 +222,7 @@ export function initApp() {
   const LOCATION_STORAGE_KEY = "tvt:navigationLocation";
   const THEME_STORAGE_KEY = "tvt:theme";
   const INFO_DIALOG_SEEN_KEY = "tvt:ui:infoDialogSeen";
+  const LOCATION_ONBOARDING_SEEN_KEY = "tvt:ui:locationOnboardingSeen";
   const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
@@ -275,6 +278,7 @@ export function initApp() {
   }
 
   let activeTheme = applyTheme(readThemeFromStorage(), { persist: false });
+  let locationOnboardingTippy = null;
 
   function readPc4FromStorage() {
     try {
@@ -349,6 +353,24 @@ export function initApp() {
     }
   }
 
+  function hasSeenLocationOnboarding() {
+    try {
+      return (
+        window.localStorage.getItem(LOCATION_ONBOARDING_SEEN_KEY) === "1"
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function persistLocationOnboardingSeen() {
+    try {
+      window.localStorage.setItem(LOCATION_ONBOARDING_SEEN_KEY, "1");
+    } catch {
+      // ignore storage failures
+    }
+  }
+
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {
       activeTheme = applyTheme(
@@ -392,10 +414,14 @@ export function initApp() {
     if (!infoDialog || !infoDialog.open) return;
     if (typeof infoDialog.close === "function") infoDialog.close();
     else infoDialog.removeAttribute("open");
+    window.requestAnimationFrame(() => {
+      showLocationOnboarding();
+    });
   }
 
   function openInfoDialog() {
     if (!infoDialog || infoDialog.open) return;
+    hideLocationOnboarding({ persistSeen: false });
     if (typeof infoDialog.showModal === "function") infoDialog.showModal();
     else infoDialog.setAttribute("open", "");
 
@@ -3461,6 +3487,92 @@ export function initApp() {
     render();
   }
 
+  function hideLocationOnboarding({ persistSeen = true } = {}) {
+    if (!locationOnboardingTippy) return;
+    if (persistSeen) persistLocationOnboardingSeen();
+    locationOnboardingTippy.hide();
+    locationOnboardingTippy.destroy();
+    locationOnboardingTippy = null;
+  }
+
+  function shouldShowLocationOnboarding() {
+    return (
+      Boolean(locationFieldGroup) &&
+      !hasSeenLocationOnboarding() &&
+      !normalizePc4(pc4Input.value) &&
+      !readPc4FromStorage() &&
+      !readLocationFromStorage() &&
+      !(infoDialog && infoDialog.open)
+    );
+  }
+
+  function showLocationOnboarding() {
+    if (!shouldShowLocationOnboarding() || !locationFieldGroup) return;
+    if (locationOnboardingTippy) return;
+
+    const content = document.createElement("div");
+    content.className = "tvt-onboarding-tip";
+
+    const title = document.createElement("div");
+    title.className = "tvt-onboarding-tip-title";
+    title.textContent = "Sneller van start in je buurt";
+    content.appendChild(title);
+
+    const body = document.createElement("div");
+    body.className = "tvt-onboarding-tip-body";
+    body.textContent =
+      "Bekijk sneller de lokale tellingen met je postcode of huidige locatie.";
+    content.appendChild(body);
+
+    const actions = document.createElement("div");
+    actions.className = "tvt-onboarding-tip-actions";
+
+    const locateAction = document.createElement("button");
+    locateAction.type = "button";
+    locateAction.className = "tvt-onboarding-tip-btn tvt-onboarding-tip-btn-primary";
+    locateAction.innerHTML =
+      '<span class="tvt-onboarding-tip-btn-icon" data-controller="icon" data-icon-src-value="img/icons/locate.svg" aria-hidden="true"></span><span>Gebruik mijn locatie</span>';
+    locateAction.addEventListener("click", () => {
+      hideLocationOnboarding();
+      jumpToCurrentLocation();
+    });
+    actions.appendChild(locateAction);
+
+    const dismissAction = document.createElement("button");
+    dismissAction.type = "button";
+    dismissAction.className = "tvt-onboarding-tip-btn";
+    dismissAction.textContent = "Niet nu";
+    dismissAction.addEventListener("click", () => {
+      hideLocationOnboarding();
+    });
+    actions.appendChild(dismissAction);
+
+    content.appendChild(actions);
+
+    locationOnboardingTippy = tippy(locationFieldGroup, {
+      content,
+      allowHTML: true,
+      appendTo: () => document.body,
+      interactive: true,
+      trigger: "manual",
+      placement: "bottom-start",
+      offset: [0, 12],
+      maxWidth: 320,
+      theme: "tvt-onboarding",
+      onHide() {
+        persistLocationOnboardingSeen();
+      },
+      onHidden(instance) {
+        if (locationOnboardingTippy === instance) {
+          instance.destroy();
+          locationOnboardingTippy = null;
+        }
+      },
+    });
+
+    locationOnboardingTippy.show();
+  }
+
   function setLocateMePending(next) {
     locateMePending = Boolean(next);
     locateMeBtn.disabled = locateMePending;
@@ -3500,6 +3612,7 @@ export function initApp() {
   }
 
   async function jumpToPc4() {
+    hideLocationOnboarding();
     const rawPc4 = String(pc4Input.value || "").trim();
     if (!rawPc4) {
       clearPc4NavigationState();
@@ -3545,6 +3658,7 @@ export function initApp() {
   }
 
   function jumpToCurrentLocation() {
+    hideLocationOnboarding();
     if (locateMePending) return;
     if (!navigator.geolocation) {
       setStatsPlainText("Locatie is niet beschikbaar in deze browser.");
@@ -3761,5 +3875,9 @@ export function initApp() {
     void jumpToPc4();
   } else if (initialStoredLocation) {
     applyStoredLocationNavigation(initialStoredLocation);
+  } else {
+    window.requestAnimationFrame(() => {
+      if (!(infoDialog && infoDialog.open)) showLocationOnboarding();
+    });
   }
 }

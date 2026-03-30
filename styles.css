@@ -352,6 +352,90 @@ input {
   opacity: 0.65;
 }
 
+.tippy-box[data-theme~="tvt-onboarding"] {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--dialog-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.tippy-box[data-theme~="tvt-onboarding"] .tippy-content {
+  padding: 14px;
+}
+
+.tippy-box[data-theme~="tvt-onboarding"][data-placement^="top"] > .tippy-arrow::before {
+  border-top-color: var(--dialog-bg);
+}
+
+.tippy-box[data-theme~="tvt-onboarding"][data-placement^="bottom"] > .tippy-arrow::before {
+  border-bottom-color: var(--dialog-bg);
+}
+
+.tippy-box[data-theme~="tvt-onboarding"][data-placement^="left"] > .tippy-arrow::before {
+  border-left-color: var(--dialog-bg);
+}
+
+.tippy-box[data-theme~="tvt-onboarding"][data-placement^="right"] > .tippy-arrow::before {
+  border-right-color: var(--dialog-bg);
+}
+
+.tvt-onboarding-tip {
+  display: grid;
+  gap: 10px;
+}
+
+.tvt-onboarding-tip-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.tvt-onboarding-tip-body {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tvt-onboarding-tip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tvt-onboarding-tip-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tvt-onboarding-tip-btn:hover {
+  background: var(--surface-elevated-hover);
+}
+
+.tvt-onboarding-tip-btn-primary {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--tab-active);
+}
+
+.tvt-onboarding-tip-btn-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+}
+
 .check-group {
   display: flex;
   align-items: center;
