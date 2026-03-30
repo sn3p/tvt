@@ -1,152 +1,74 @@
-# Species / Groningen Backend Next Steps
+# Species Backend Next Steps
 
-## Decision
+## Current state
 
-Proceed with backend aggregation for species mode.
+Groningen species mode has backend parity:
 
-Assumptions:
+- backend area definition exists
+- `species_manifest` exists
+- `species_catalog` exists
+- `species_grid` exists
+- frontend species mode is backend-only
 
-- MVP / Groningen-only first
-- backend returns primitive aggregates
-- frontend remains responsible for presentation
-- backend may evolve as metrics evolve
+That means the old Groningen migration plan is complete enough for current use.
 
-## Phase 2 plan
+## Recommended next priorities
 
-### Step 1: Area definition in backend
-
-Goal:
-- make Groningen a backend-known area instead of relying on the frontend static file path
-
-Work:
-- add a checked-in Groningen area definition in `tvt/backend`
-- source can be copied from `tvt-harvest/data/reference/pc4_municipality_groningen.json`
-- expose a small helper/service for area lookup and PC4 membership
-
-Done when:
-- backend can resolve `groningen` to the correct 50 PC4 codes
-
-### Step 2: Species manifest endpoint
+### 1. Simplify frontend controls and behavior
 
 Goal:
-- provide metadata for species mode
 
-Endpoint:
-- `GET /api/v1/areas/groningen/species_manifest?year=2026`
+- review the species and points sidebars
+- remove options that no longer pull their weight
+- tighten defaults around the backend-only model
 
-Return:
-- area metadata
-- year
-- available filters
-- counts summary
+Likely candidates:
 
-Primitive fields:
-- `area`
-- `year`
-- `pc4_count`
-- `entry_count`
-- `private_entries_count`
-- `isorg_entries_count`
-- `species_count`
+- legacy clustering/settings combinations that add complexity without much user value
+- diagnostics-facing affordances that were useful during migration
+- copy that still reflects transitional behavior
 
-Done when:
-- frontend can load species metadata from backend instead of assuming a static JSON exists
-
-### Step 3: Species catalog endpoint
+### 2. NL-wide species mode design
 
 Goal:
-- replace client-side species list derivation
 
-Endpoint:
-- `GET /api/v1/areas/groningen/species_catalog`
+- make species mode work beyond Groningen
 
-Params:
-- `year`
-- optional `pc4`
-- `include_private`
-- `include_isorg`
-- `scope=all|viewport`
-- optional `bbox`
+Questions to answer first:
 
-Return per species:
-- `bird_id`
-- `name`
-- `with_count`
-- `sum_count`
+- what is the area model:
+  - whole NL only
+  - predefined areas
+  - arbitrary viewport as the primary scope
+- should species manifest stay area-based or become national/year-based
+- what indexes or summaries are needed for acceptable response times
 
-Done when:
-- frontend species list can be built entirely from backend data
+Recommended approach:
 
-### Step 4: Species grid endpoint
+1. define the NL species API contract first
+2. test plain Postgres performance on realistic NL query shapes
+3. add indexing or pre-aggregation only where measurements show a need
+
+### 3. Backend hardening for MVP
 
 Goal:
-- replace client-side grid aggregation
 
-Endpoint:
-- `GET /api/v1/areas/groningen/species_grid`
+- make the existing backend more robust before deployment work starts
 
-Params:
-- `year`
-- `bird_id`
-- `metric=presence|avg|sum`
-- optional `pc4`
-- `include_private`
-- `include_isorg`
-- required `bbox`
-- `cell_size_m`
-- `min_n`
+Useful improvements:
 
-Return per cell primitive aggregates:
-- `ix`
-- `iy`
-- `entry_count`
-- `with_count`
-- `sum_count`
-- `value`
+- broader request/integration test coverage for species endpoints
+- lightweight performance checks for large bbox/grid queries
+- clear failure behavior for invalid params and unsupported years/areas
 
-Notes:
-- `value` is convenience only
-- primitive fields remain the source of truth
-- frontend still decides rendering/color/tooltips
+## Not recommended right now
 
-Done when:
-- frontend no longer computes grid aggregation for Groningen species mode
+Do not switch to PostGIS just because NL-wide species mode is on the roadmap.
 
-### Step 5: Frontend adapter for species mode
+PostGIS becomes attractive when one of these is true:
 
-Goal:
-- migrate species mode off `municipality_groningen.json`
+- bbox/grid queries are measurably too slow in plain Postgres
+- you need more advanced spatial predicates than current rectangular filtering
+- you want backend-native spatial indexing and aggregation that materially simplifies the code
 
-Work:
-- add backend species source methods
-- swap species list load to backend catalog
-- swap grid computation to backend grid endpoint
-- keep current UI behavior where practical
-
-Done when:
-- species mode no longer requires `public/data/<year>/municipality_groningen.json`
-
-### Step 6: Static Groningen cleanup
-
-Goal:
-- retire legacy species JSON only after backend parity is proven
-
-Work:
-- compare results against old implementation
-- decide whether to keep static file as fallback during transition
-- remove old dependency when stable
-
-Done when:
-- species mode runs from backend by default
-
-## Immediate next implementation step
-
-Start with:
-
-`SPECIES-001 — Add Groningen area definition + species manifest endpoint`
-
-Why this first:
-- smallest backend-visible step
-- establishes area handling cleanly
-- low risk
-- unblocks the catalog/grid endpoints
+Until then, it is extra migration cost, operational complexity, and schema churn without proven payoff.

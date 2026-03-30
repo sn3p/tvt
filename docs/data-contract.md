@@ -1,178 +1,157 @@
-# TVT Shared Data Contract (v1)
+# TVT Frontend/Backend Contract
 
-This project uses **static compiled datasets** (not a single huge JSON) to render maps.
+This document describes the current runtime contract used by the webapp.
 
-We currently support **two datasets**:
+The frontend is now backend-only:
 
-1) **NL Points Tiles** (Mode 1: points) — scalable to all of NL
-2) **Groningen Compiled JSON** (Mode 2: species) — kept for now so the species UI remains working
-
-A future backend can replace either dataset without changing UI by swapping the DataSource adapter.
-
----
-
-## Contract versioning
-
-- `contract_version`: **1**
+- no static runtime dataset under `public/data`
+- no frontend fallback to local compiled JSON
+- points mode and species mode both read from Rails under `/api/v1`
 
 ---
 
-## Dataset A — NL Points Tiles (v0)
+## Runtime config
 
-### Scope (v0)
-- Mode: **Mode 1 (Points) v0**
-- Data: entry locations only (`id`, `lat`, `lng`)
-- Popover details: fetched on-demand from the live endpoint (see below)
-- Clustering: client-side, based on points in view
-- Goal: browse all of NL for a year (start: 2026) without loading a giant dataset
+Frontend runtime config is provided through `window.__TVT_CONFIG__` in [index.html](/Users/matthijskuiper/git/tvt/index.html).
 
-### Zoom defaults (NL-safe)
-- `zoom_min`: **6**
-- `zoom_max`: **13**
+Current fields:
 
-Rationale:
-- z6–8: NL/regional overview (heavy clustering)
-- z9–11: city/province
-- z12–13: neighbourhood detail
+- `backendApiBaseUrl`
+- `enableDiagnostics`
 
-### Modes and semantics (IMPORTANT)a
-The TVT API behaviour suggests `isorg=true` is a **subset** of `type=1`.
+Defaults:
 
-We compile from source sets:
-
-- `type1` tiles: **all local entries** (includes school/org)
-- `isorg` tiles: **school/org entries only** (subset of `type1`)
-
-Published point modes for the webapp are disjoint:
-- `private` tiles: **private/local-only entries** (`type1 - isorg`)
-- `isorg` tiles: **school/org entries**
-
-Consumer rules:
-- `private` and `isorg` are **disjoint** (no duplicate ids across both modes for a tile/year).
-- The webapp may merge both modes into one list in memory:
-  - `entries = [{ id, lat, lng, isorg: true|false }]`
-- “All entries” in the UI is: `private ∪ isorg`.
-
-Tile path examples:
-- `public/data/tvt/tiles/<year>/private/points/<z>/<x>/<y>.json`
-- `public/data/tvt/tiles/<year>/isorg/points/<z>/<x>/<y>.json`
+- local dev: `http://localhost:3000/api/v1`
+- non-local: same-origin `/api/v1`
 
 ---
 
-## Dataset B — Groningen Compiled JSON (kept for now)
+## Backend endpoints in use
 
-### Purpose
-Keep the existing Groningen species visualisations working while NL points tiles are introduced.
+### Status
 
-### Scope
-- Mode: **Mode 2 (Species map)**
-- Input: existing Groningen compiled dataset(s) produced earlier from NDJSON
-- This dataset is not required to scale to all of NL in v0
+- `GET /api/v1/status`
 
-### Notes
-- This dataset is considered “legacy v0” and may be replaced later by:
-  - compiled tiles for Mode 2, or
-  - a database/backend (PostGIS), or
-  - PMTiles/vector tiles
+Used for diagnostics / startup probing only.
 
----
+### Points manifest
 
-## Export layout (produced by tvt-harvest)
+- `GET /api/v1/point_tiles/manifest`
 
-`tvt-harvest` produces NL tiles + manifest under `data/compiled/tvt/` and exports them into the webapp under:
+Expected fields:
 
-- NL tiles: `tvt/public/data/tvt/`
-- Groningen JSON: `tvt/public/data/<year>/municipality_groningen.json`
+- `contract_version`
+- `years_available`
+- `modes_available`
+- `defaults.year`
+- `defaults.mode`
+- `defaults.zoom_min`
+- `defaults.zoom_max`
 
-The webapp should treat the relevant manifest(s) as the source of truth (no hardcoded paths).
+### Point tiles
 
----
+- `GET /api/v1/years/:year/point_tiles/:mode/:z/:x/:y`
 
-## NL Tiles — Manifest (generated, not hand-written)
+Current supported modes:
 
-Path:
-- `public/data/tvt/manifest.json`
+- `private`
+- `isorg`
 
-Fields (v1 minimal):
-- `contract_version` (number)
-- `generated_at_utc` (ISO string)
-- `years_available` (array of numbers)
-- `modes_available` (array of strings) — v0: `["private","isorg"]`
-- `defaults` (object):
-  - `year` (number)
-  - `mode` (string) — recommended default: `"private"`
-  - `zoom_min` (number)
-  - `zoom_max` (number)
-- `paths` (object):
-  - `points_root` (string template)
+Tile payload:
 
-Optional (recommended):
-- `bbox_nl` (object): `{ west, south, east, north }`
-- `stats` (object): quick counts per year/mode
-
-### points_root template
-Recommended format:
-- `tiles/{year}/{mode}/points/{z}/{x}/{y}.json`
-
----
-
-## NL Tiles — Points Tile
-
-Path:
-- `public/data/tvt/tiles/<year>/<mode>/points/<z>/<x>/<y>.json`
-
-Tile payload (v1):
-- `contract_version` (number)
-- `year` (number)
-- `mode` (string) — `"private"` or `"isorg"`
-- `z`, `x`, `y` (numbers)
-- `tileSize` (number, default 256)
-- `points` (array):
-  - `id` (number) — entry id for `entry-top-birds`
-  - `lat` (number)
-  - `lng` (number)
-  - optional: `pc4` (string)
-
-Example:
-```json
-{
-  "contract_version": 1,
-  "year": 2026,
-  "mode": "private",
-  "z": 10,
-  "x": 537,
-  "y": 344,
-  "tileSize": 256,
-  "points": [
-    { "id": 561023, "lat": 53.1913, "lng": 6.5739 }
-  ]
-}
-```
+- `contract_version`
+- `year`
+- `mode`
+- `z`
+- `x`
+- `y`
+- `tileSize`
+- `points[]`
+  - `id`
+  - `lat`
+  - `lng`
+  - optional `pc4`
 
 Notes:
-- Tile selection is standard WebMercator slippy tiles (z/x/y).
-- The consumer loads only tiles needed for the current viewport (+ buffer).
-- Popover content is fetched live on click and should be cached client-side.
+
+- 404 tiles are treated by the frontend as empty tiles
+- popover details are fetched separately per entry
+
+### Point entry details
+
+- `GET /api/v1/years/:year/entries/:id/top_birds`
+
+Response is normalized by the frontend to:
+
+- `birds[]`
+  - `name`
+  - `count`
+
+### Species manifest
+
+- `GET /api/v1/areas/groningen/species_manifest?year=2026`
+
+Used to validate/load species mode for the selected year.
+
+### Species catalog
+
+- `GET /api/v1/areas/groningen/species_catalog`
+
+Query params:
+
+- `year`
+- optional `pc4`
+- `include_private=0|1`
+- `include_isorg=0|1`
+- `scope=all|viewport`
+- optional `bbox=west,south,east,north`
+
+Response fields used by the frontend:
+
+- `entry_count`
+- `private_entries_count`
+- `isorg_entries_count`
+- `species[]`
+  - `bird_id`
+  - `name`
+  - `with_count`
+  - `sum_count`
+
+### Species grid
+
+- `GET /api/v1/areas/groningen/species_grid`
+
+Query params:
+
+- `year`
+- `bird_id`
+- `metric=presence|avg|sum`
+- `cell_size_m`
+- `min_n`
+- optional `pc4`
+- `include_private=0|1`
+- `include_isorg=0|1`
+- required `bbox=west,south,east,north`
+
+Response fields used by the frontend:
+
+- `summary.entry_count`
+- `summary.with_count`
+- `summary.sum_count`
+- `summary.avg_count`
+- `cells[]`
+  - `ix`
+  - `iy`
+  - `entry_count`
+  - `with_count`
+  - `sum_count`
+  - `value`
 
 ---
 
-## Live endpoint (popover details)
+## Current scope
 
-For v0, the webapp may fetch entry details on demand from:
+- points mode: national, tile-based, backend-backed
+- species mode: backend-backed for area `groningen`
 
-`https://vbn-tvt.northsea.cloud/v1/report/entry-top-birds?id=<id>&limit=9999`
-
-Notes:
-- Implement client-side caching and basic backoff handling (429/5xx).
-- A future backend can replace this live fetch behind the DataSource adapter.
-
----
-
-## Groningen Compiled JSON — guidance
-
-This contract does not prescribe a strict schema for Groningen compiled JSON, but recommends:
-
-- top-level `meta` with `year`, `area`, `generated_at_utc`
-- `entries[]` each with:
-  - `id`, `lat`, `lng`, `pc4` (optional), `is_org` (optional), `birds[]` (for Mode 2)
-- Webapp should continue using its current Groningen loader until Mode 2 is migrated.
+The next functional expansion is NL-wide species mode, which likely needs a broader area model and possibly different query/indexing strategy than the current Groningen-only implementation.

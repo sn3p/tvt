@@ -36,5 +36,5 @@ Frontend runtime defaults are:
 
 - local: `http://localhost:3000/api/v1`
 - non-local: same-origin `/api/v1`
-- fallbacks enabled locally
-- fallbacks disabled outside local development
+- diagnostics enabled locally
+- diagnostics disabled outside local development
