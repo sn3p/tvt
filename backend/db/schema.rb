@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_28_094300) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_30_194500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -35,6 +35,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_28_094300) do
     t.index ["is_org"], name: "index_entries_on_is_org"
     t.index ["pc4"], name: "index_entries_on_pc4"
     t.index ["year", "external_id"], name: "index_entries_on_year_and_external_id", unique: true
+    t.index ["year", "lat", "lng"], name: "index_entries_on_year_lat_lng"
+    t.index ["year", "pc4", "is_org"], name: "index_entries_on_year_pc4_is_org"
     t.index ["year"], name: "index_entries_on_year"
   end
 
