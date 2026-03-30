@@ -4,21 +4,22 @@ module Species
     TRUE_VALUES = %w[1 true yes on].freeze
     FALSE_VALUES = %w[0 false no off].freeze
 
-    attr_reader :bbox, :include_isorg, :include_private, :pc4, :scope, :year
+    attr_reader :area, :bbox, :include_isorg, :include_private, :pc4, :scope, :year
 
     def initialize(area_slug:, year:, pc4: nil, include_private: nil, include_isorg: nil, scope: nil, bbox: nil)
-      @area = Areas::Catalog.fetch!(area_slug)
       @year = Integer(year)
       @pc4 = normalize_pc4(pc4)
       @include_private = parse_boolean(include_private, default: true)
       @include_isorg = parse_boolean(include_isorg, default: true)
       @scope = normalize_scope(scope)
       @bbox = parse_bbox(bbox)
+      @area = load_area(area_slug)
       validate!
     end
 
     def relation
-      scoped = Entry.for_year(year).where(pc4: allowed_pc4_codes)
+      scoped = Entry.for_year(year)
+      scoped = scoped.where(pc4: allowed_pc4_codes) if area
       scoped = scoped.where(pc4: pc4) if pc4.present?
       scoped = apply_mode_filter(scoped)
       scoped = apply_bbox(scoped) if scope == "viewport"
@@ -27,10 +28,15 @@ module Species
 
     private
 
-    attr_reader :area
-
     def allowed_pc4_codes
       @allowed_pc4_codes ||= area.pc4_codes
+    end
+
+    def load_area(area_slug)
+      normalized = area_slug.to_s.strip
+      return nil if normalized.empty?
+
+      Areas::Catalog.fetch!(normalized)
     end
 
     def normalize_pc4(value)
@@ -78,7 +84,7 @@ module Species
       raise ArgumentError, "year must be positive" unless year.positive?
       raise ArgumentError, "at least one mode must be included" unless include_private || include_isorg
       raise ArgumentError, "bbox required for viewport scope" if scope == "viewport" && bbox.nil?
-      raise ArgumentError, "pc4 outside area" if pc4.present? && !allowed_pc4_codes.include?(pc4)
+      raise ArgumentError, "pc4 outside area" if area && pc4.present? && !allowed_pc4_codes.include?(pc4)
     end
 
     def apply_mode_filter(scoped)

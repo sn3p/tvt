@@ -5,7 +5,6 @@ module Species
     MAX_LATITUDE = 85.05112878
 
     def initialize(area_slug:, year:, bird_id:, metric:, cell_size_m:, min_n:, pc4: nil, include_private: nil, include_isorg: nil, bbox: nil)
-      @area = Areas::Catalog.fetch!(area_slug)
       @entry_scope = EntryScope.new(
         area_slug: area_slug,
         year: year,
@@ -15,6 +14,7 @@ module Species
         scope: "viewport",
         bbox: bbox,
       )
+      @area = entry_scope.area
       @year = Integer(year)
       @bird_id = Integer(bird_id)
       @metric = normalize_metric(metric)
@@ -25,12 +25,7 @@ module Species
 
     def as_json(*)
       {
-        area: {
-          slug: area.slug,
-          name: area.name,
-          type: area.type,
-          code: area.code,
-        },
+        area: serialized_area,
         year: year,
         bird_id: bird_id,
         metric: metric,
@@ -151,6 +146,17 @@ module Species
     def serialized_bbox
       bbox = entry_scope.bbox
       [bbox[:west], bbox[:south], bbox[:east], bbox[:north]]
+    end
+
+    def serialized_area
+      return nil unless area
+
+      {
+        slug: area.slug,
+        name: area.name,
+        type: area.type,
+        code: area.code,
+      }
     end
   end
 end

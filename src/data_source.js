@@ -299,9 +299,10 @@ export class BackendApiSource extends DataSource {
     return r.json();
   }
 
-  async getSpeciesManifest({ year, area = "groningen", signal } = {}) {
+  async getSpeciesManifest({ year, area, signal } = {}) {
     const safeYear = toSafeInt(year, "year");
-    const safeArea = String(area || "groningen").trim() || "groningen";
+    const safeArea = String(area || "").trim();
+    if (!safeArea) throw new Error("area is required for species manifest");
     const params = new URLSearchParams({ year: String(safeYear) });
     const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_manifest?${params.toString()}`);
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
@@ -309,24 +310,27 @@ export class BackendApiSource extends DataSource {
     return r.json();
   }
 
-  async getSpeciesCatalog({ year, area = "groningen", pc4, includePrivate = true, includeIsorg = true, scope = "all", bbox, signal } = {}) {
+  async getSpeciesCatalog({ year, area, pc4, includePrivate = true, includeIsorg = true, scope = "all", bbox, signal } = {}) {
     const safeYear = toSafeInt(year, "year");
-    const safeArea = String(area || "groningen").trim() || "groningen";
+    const safeArea = String(area || "").trim();
     const params = new URLSearchParams({ year: String(safeYear), scope: String(scope || "all") });
     appendIfPresent(params, "pc4", pc4);
     params.set("include_private", includePrivate ? "1" : "0");
     params.set("include_isorg", includeIsorg ? "1" : "0");
     if (scope === "viewport") appendIfPresent(params, "bbox", bboxToParam(bbox));
-    const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_catalog?${params.toString()}`);
+    const path = safeArea
+      ? `areas/${encodeURIComponent(safeArea)}/species_catalog`
+      : "species_catalog";
+    const url = joinUrl(this.baseUrl, `${path}?${params.toString()}`);
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species catalog (${url})`);
     return r.json();
   }
 
-  async getSpeciesGrid({ year, area = "groningen", birdId, metric, cellSizeM, minN = 1, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
+  async getSpeciesGrid({ year, area, birdId, metric, cellSizeM, minN = 1, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
     const safeYear = toSafeInt(year, "year");
     const safeBirdId = toSafeInt(birdId, "birdId");
-    const safeArea = String(area || "groningen").trim() || "groningen";
+    const safeArea = String(area || "").trim();
     const params = new URLSearchParams({
       year: String(safeYear),
       bird_id: String(safeBirdId),
@@ -338,7 +342,10 @@ export class BackendApiSource extends DataSource {
     params.set("include_private", includePrivate ? "1" : "0");
     params.set("include_isorg", includeIsorg ? "1" : "0");
     appendIfPresent(params, "bbox", bboxToParam(bbox));
-    const url = joinUrl(this.baseUrl, `areas/${encodeURIComponent(safeArea)}/species_grid?${params.toString()}`);
+    const path = safeArea
+      ? `areas/${encodeURIComponent(safeArea)}/species_grid`
+      : "species_grid";
+    const url = joinUrl(this.baseUrl, `${path}?${params.toString()}`);
     const r = await this.fetchImpl(url, signal ? { signal } : undefined);
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species grid (${url})`);
     return r.json();

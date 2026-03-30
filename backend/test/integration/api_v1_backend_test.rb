@@ -330,6 +330,47 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     ], body["species"]
   end
 
+  test "species catalog viewport works without an area boundary" do
+    amsterdam_entry = Entry.create!(
+      year: 2026,
+      external_id: 3051,
+      pc4: "1011",
+      lat: 52.3676,
+      lng: 4.9041,
+      is_org: false,
+    )
+    groningen_entry = Entry.create!(
+      year: 2026,
+      external_id: 3052,
+      pc4: "9721",
+      lat: 53.2194,
+      lng: 6.5665,
+      is_org: false,
+    )
+
+    spreeuw = Bird.create!(external_id: 157, name: "Spreeuw")
+    merel = Bird.create!(external_id: 50, name: "Merel")
+
+    EntryBirdCount.create!(entry: amsterdam_entry, bird: spreeuw, rank: 1, count: 6, bird_name_cache: "Spreeuw")
+    EntryBirdCount.create!(entry: groningen_entry, bird: merel, rank: 1, count: 3, bird_name_cache: "Merel")
+
+    get "/api/v1/species_catalog", params: {
+      year: 2026,
+      scope: "viewport",
+      bbox: "4.89,52.36,4.92,52.38",
+    }
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_nil body["area"]
+    assert_equal "viewport", body["scope"]
+    assert_equal [4.89, 52.36, 4.92, 52.38], body.dig("filters", "bbox")
+    assert_equal 1, body["entry_count"]
+    assert_equal [
+      { "bird_id" => 157, "name" => "Spreeuw", "with_count" => 1, "sum_count" => 6 },
+    ], body["species"]
+  end
+
   test "species catalog applies pc4 and mode filters" do
     private_entry = Entry.create!(
       year: 2026,
@@ -363,7 +404,7 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     EntryBirdCount.create!(entry: isorg_entry, bird: merel, rank: 1, count: 3, bird_name_cache: "Merel")
     EntryBirdCount.create!(entry: other_pc4, bird: ekster, rank: 1, count: 4, bird_name_cache: "Ekster")
 
-    get "/api/v1/areas/groningen/species_catalog", params: {
+    get "/api/v1/species_catalog", params: {
       year: 2026,
       pc4: "9721",
       include_private: 0,
@@ -372,6 +413,7 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     body = JSON.parse(response.body)
+    assert_nil body["area"]
     assert_equal "9721", body.dig("filters", "pc4")
     assert_equal false, body.dig("filters", "include_private")
     assert_equal true, body.dig("filters", "include_isorg")
@@ -422,7 +464,7 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
     EntryBirdCount.create!(entry: inside_c, bird: merel, rank: 1, count: 2, bird_name_cache: "Merel")
     EntryBirdCount.create!(entry: outside_bbox, bird: ekster, rank: 1, count: 8, bird_name_cache: "Ekster")
 
-    get "/api/v1/areas/groningen/species_grid", params: {
+    get "/api/v1/species_grid", params: {
       year: 2026,
       bird_id: 9,
       metric: "presence",
@@ -433,6 +475,7 @@ class ApiV1BackendTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     body = JSON.parse(response.body)
+    assert_nil body["area"]
     assert_equal 9, body["bird_id"]
     assert_equal "presence", body["metric"]
     assert_equal 100000, body["cell_size_m"]

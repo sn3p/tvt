@@ -1030,7 +1030,6 @@ export function initApp() {
       const { includePrivate, includeIsorg } = getFilters();
       const json = await speciesSource.getSpeciesCatalog({
         year,
-        area: "groningen",
         pc4: normalizePc4(pc4Input.value),
         includePrivate,
         includeIsorg,
@@ -1222,7 +1221,6 @@ export function initApp() {
       const { includePrivate, includeIsorg } = getFilters();
       const json = await speciesSource.getSpeciesGrid({
         year,
-        area: "groningen",
         birdId: selectedSpecies.id,
         metric,
         cellSizeM: gridCellM,
@@ -3356,31 +3354,12 @@ export function initApp() {
 
     setStatsLoading(`Dataset ${y} laden…`);
 
-    try {
-      const manifest = await speciesSource.getSpeciesManifest({
-        year: y,
-        area: "groningen",
-      });
-      if (seq !== loadSeq) return;
-      speciesCatalogRows = [];
-      speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
-      speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-      setComputing(false);
-      render();
-    } catch (err) {
-      if (seq !== loadSeq) return;
-      speciesCatalogRows = [];
-      speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
-      speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-      setSelectedSpecies(null);
-      if (mode === "species") {
-        clearPointMarkers();
-        gridLayer.clearLayers();
-        setStatsPlainText(
-          `Soortendata laden mislukt: ${err?.message || String(err)}`,
-        );
-      }
-    }
+    if (seq !== loadSeq) return;
+    speciesCatalogRows = [];
+    speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+    speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+    setComputing(false);
+    render();
   }
 
   async function probePointTilesSource() {

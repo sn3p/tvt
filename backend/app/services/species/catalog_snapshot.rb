@@ -1,7 +1,6 @@
 module Species
   class CatalogSnapshot
     def initialize(area_slug:, year:, pc4: nil, include_private: nil, include_isorg: nil, scope: nil, bbox: nil)
-      @area = Areas::Catalog.fetch!(area_slug)
       @entry_scope = EntryScope.new(
         area_slug: area_slug,
         year: year,
@@ -11,17 +10,13 @@ module Species
         scope: scope,
         bbox: bbox,
       )
+      @area = entry_scope.area
       @year = Integer(year)
     end
 
     def as_json(*)
       {
-        area: {
-          slug: area.slug,
-          name: area.name,
-          type: area.type,
-          code: area.code,
-        },
+        area: serialized_area,
         year: year,
         scope: entry_scope.scope,
         filters: {
@@ -78,6 +73,17 @@ module Species
 
       bbox = entry_scope.bbox
       [bbox[:west], bbox[:south], bbox[:east], bbox[:north]]
+    end
+
+    def serialized_area
+      return nil unless area
+
+      {
+        slug: area.slug,
+        name: area.name,
+        type: area.type,
+        code: area.code,
+      }
     end
   end
 end
