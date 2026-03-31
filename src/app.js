@@ -3884,6 +3884,32 @@ export function initApp() {
 
     setStatsLoading(`Dataset ${y} laden…`);
 
+    try {
+      const manifest = await getPointManifest();
+      if (seq !== loadSeq) return;
+
+      const yearsAvailable = Array.isArray(manifest?.years_available)
+        ? manifest.years_available
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value))
+        : [];
+
+      if (yearsAvailable.length > 0 && !yearsAvailable.includes(y)) {
+        rendered = [];
+        speciesCatalogRows = [];
+        speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+        speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+        gridLayer.clearLayers();
+        setComputing(false);
+        renderSpeciesList({ query: speciesSearchInput.value });
+        updateViewportStats();
+        setStatsPlainText(`Geen dataset beschikbaar voor ${y}.`);
+        return;
+      }
+    } catch {
+      // Fall through to the normal species load path if the manifest is unavailable.
+    }
+
     if (seq !== loadSeq) return;
     speciesCatalogRows = [];
     speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
