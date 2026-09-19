@@ -202,21 +202,21 @@ com-1password-notification {
 .muted-2 { color: var(--muted-2); }
 
 .topbar-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas: "brand modes filters stats";
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 4px;
   width: min(1400px, 100%);
   margin: 0 auto;
-  flex-wrap: wrap;
 }
 
 .brand {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  flex: 0 0 auto;
-  min-width: 110px;
+  grid-area: brand;
 }
 
 .brand-title {
@@ -237,6 +237,7 @@ com-1password-notification {
 .brand-link:hover { color: var(--text); background: var(--surface-elevated-hover); }
 
 .modes {
+  grid-area: modes;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -270,11 +271,12 @@ com-1password-notification {
 }
 
 .filters {
+  grid-area: filters;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .field {
@@ -504,14 +506,25 @@ body[data-theme="light"] #pointsModeIsorgInput {
   user-select: none;
 }
 
+.stats-slot {
+  grid-area: stats;
+  min-width: 0;
+}
+
 .stats {
-  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.3;
+  min-height: calc(2 * 1.3em);
+  font-variant-numeric: tabular-nums;
 }
 
 .stats.is-loading {
-  display: inline-flex;
+  flex-direction: row;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -533,6 +546,13 @@ body[data-theme="light"] #pointsModeIsorgInput {
 
 .stats-loading-label {
   letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+
+.stats-main,
+.stats-provisional {
+  display: block;
+  white-space: nowrap;
 }
 
 .stats-main {
@@ -1533,9 +1553,39 @@ body[data-theme="light"] .theme-toggle-btn::after {
   box-shadow: 0 0 0 3px var(--theme-toggle-outline), var(--shadow);
 }
 
-@media (max-width: 880px) {
-  .stats { min-width: 0; text-align: left; }
-  .brand { min-width: auto; }
+@media (max-width: 1280px) {
+  .topbar-inner {
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      "brand modes filters"
+      "stats stats stats";
+  }
+
+  .stats {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.45em;
+    min-height: 1.3em;
+    text-align: left;
+  }
+
+  .stats.is-loading {
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .stats-main,
+  .stats-provisional {
+    display: inline;
+  }
+}
+
+@media (max-width: 800px) {
+  .filters {
+    flex-wrap: wrap;
+  }
 }
 
 .tvt-legend {

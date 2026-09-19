@@ -952,6 +952,23 @@ export function initApp() {
     statsEl.textContent = String(message || "");
   }
 
+  function setStatsLines(mainText, detailText = "") {
+    statsEl.classList.remove("is-loading");
+    const main = document.createElement("span");
+    main.className = "stats-main";
+    main.textContent = String(mainText || "");
+
+    if (!detailText) {
+      statsEl.replaceChildren(main);
+      return;
+    }
+
+    const detail = document.createElement("span");
+    detail.className = "stats-provisional";
+    detail.textContent = String(detailText);
+    statsEl.replaceChildren(main, detail);
+  }
+
   setStatsLoading("Dataset laden…");
 
   const map = globalThis.L.map(mapEl, {
@@ -1678,7 +1695,6 @@ export function initApp() {
   }
 
   function updateViewportStats() {
-    statsEl.classList.remove("is-loading");
     // During early startup (e.g. mode=species from URL), this can run before setView().
     // In that case Leaflet throws "Set map center and zoom first.".
     let b = null;
@@ -1692,18 +1708,12 @@ export function initApp() {
       const inScopeEntries = Number(speciesCatalogStats.entryCount) || 0;
       hudStats = { entries: inScopeEntries, birds: 0 };
 
-      const main = document.createElement("span");
-      main.className = "stats-main";
-      main.textContent =
+      setStatsLines(
         speciesScope === "viewport"
           ? `${fmtInt(inScopeEntries)} inzendingen in beeld`
-          : `${fmtInt(inScopeEntries)} inzendingen in selectie`;
-
-      const provisional = document.createElement("span");
-      provisional.className = "stats-provisional";
-      provisional.textContent = `${fmtInt(speciesCatalogStats.privateCount)} particulier • ${fmtInt(speciesCatalogStats.isorgCount)} school`;
-
-      statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+          : `${fmtInt(inScopeEntries)} inzendingen in selectie`,
+        `${fmtInt(speciesCatalogStats.privateCount)} particulier • ${fmtInt(speciesCatalogStats.isorgCount)} school`,
+      );
       if (legendPrivateTextEl)
         legendPrivateTextEl.textContent = `Particulier (${fmtInt(speciesCatalogStats.privateCount)})`;
       if (legendIsorgTextEl)
@@ -1721,15 +1731,10 @@ export function initApp() {
       const totalBirds = Number(pointTotalsOverride?.totalBirds) || 0;
 
       hudStats = { entries: inViewEntries, birds: inViewBirds };
-      const main = document.createElement("span");
-      main.className = "stats-main";
-      main.textContent = `${fmtInt(inViewEntries)} inzendingen in beeld`;
-
-      const provisional = document.createElement("span");
-      provisional.className = "stats-provisional";
-      provisional.textContent = `(${fmtInt(totalEntries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totalBirds)} totaal)`;
-
-      statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+      setStatsLines(
+        `${fmtInt(inViewEntries)} inzendingen in beeld`,
+        `(${fmtInt(totalEntries)} totaal) • ${fmtInt(inViewBirds)} vogels geteld (${fmtInt(totalBirds)} totaal)`,
+      );
       if (legendPrivateTextEl)
         legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
       if (legendIsorgTextEl)
@@ -1754,15 +1759,10 @@ export function initApp() {
     }
 
     hudStats = { entries: inViewEntries, birds: inViewBirds };
-    const main = document.createElement("span");
-    main.className = "stats-main";
-    main.textContent = `${fmtInt(inViewEntries)} inzendingen in beeld`;
-
-    const provisional = document.createElement("span");
-    provisional.className = "stats-provisional";
-    provisional.textContent = `(${fmtInt(totals.entries)} totaal)`;
-
-    statsEl.replaceChildren(main, document.createTextNode(" "), provisional);
+    setStatsLines(
+      `${fmtInt(inViewEntries)} inzendingen in beeld`,
+      `(${fmtInt(totals.entries)} totaal)`,
+    );
 
     if (legendPrivateTextEl)
       legendPrivateTextEl.textContent = `Particulier (${inViewPrivate})`;
