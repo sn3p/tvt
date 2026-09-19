@@ -2863,6 +2863,7 @@ export function initApp() {
   }
 
   function abortPointTileFetchCycle() {
+    pointTileFetchSeq += 1;
     if (!pointTileAbortController) return;
     pointTileAbortController.abort();
     pointTileAbortController = null;
@@ -3114,7 +3115,7 @@ export function initApp() {
     maybeMessageForPointCap();
   }
 
-  function upsertPointMarkers(entries) {
+  function upsertPointMarkers(entries, { pruneMissing = true } = {}) {
     const nextById = new Map();
     for (const entry of entries) {
       const lat = Number(entry?.lat);
@@ -3123,14 +3124,16 @@ export function initApp() {
       nextById.set(pointMarkerIdKey(entry), entry);
     }
 
-    for (const [markerId, state] of pointMarkerStateById.entries()) {
-      if (nextById.has(markerId)) continue;
-      try {
-        pointsLayer.removeLayer(state.marker);
-      } catch {
-        // ignore
+    if (pruneMissing) {
+      for (const [markerId, state] of pointMarkerStateById.entries()) {
+        if (nextById.has(markerId)) continue;
+        try {
+          pointsLayer.removeLayer(state.marker);
+        } catch {
+          // ignore
+        }
+        pointMarkerStateById.delete(markerId);
       }
-      pointMarkerStateById.delete(markerId);
     }
 
     for (const [markerId, entry] of nextById.entries()) {
@@ -3485,21 +3488,17 @@ export function initApp() {
   function schedulePointTileFetch({ immediate = false } = {}) {
     if (mode !== "points") return;
     clearPointTileFetchTimer();
-    if (immediate) {
-      void refreshPointTilesForViewport();
-      return;
-    }
     pointTileFetchTimer = window.setTimeout(() => {
       pointTileFetchTimer = 0;
       void refreshPointTilesForViewport();
-    }, 160);
+    }, immediate ? 0 : 160);
   }
 
   async function refreshPointTilesForViewport() {
     if (mode !== "points") return;
 
-    const seq = ++pointTileFetchSeq;
     abortPointTileFetchCycle();
+    const seq = pointTileFetchSeq;
     const controller = new AbortController();
     pointTileAbortController = controller;
     const startedAtMs = nowMs();
@@ -3642,7 +3641,7 @@ export function initApp() {
         }),
       );
       const paintProgressively = pointRenderKind === "points";
-      if (paintProgressively && expectCells) {
+      if (pointsSettings.displayMode === "points" && expectCells) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       }
 
@@ -3655,7 +3654,7 @@ export function initApp() {
       const nextEntriesById = new Map();
       let mergedEntryCount = 0;
       let mergedRecordCount = 0;
-      let tileKind = expectCells ? "cell" : "point";
+      let tileKind = "";
       let paintQueued = false;
 
       const ingestTileResult = (result) => {
@@ -3683,6 +3682,7 @@ export function initApp() {
         const isCellPayload = tileKind === "cell" || tileKind === "mixed";
         let entries = Array.from(nextEntriesById.values());
         if (
+          pointRenderKind === "points" &&
           tileKind !== "cell" &&
           isPointCapExceeded &&
           hasMaxPointsInViewCap()
@@ -3701,14 +3701,15 @@ export function initApp() {
         return entries;
       };
 
-      const paintMergedPoints = () => {
+      const paintMergedPoints = ({ pruneMissing = true } = {}) => {
         if (seq !== pointTileFetchSeq || mode !== "points") return;
+        if (controller.signal.aborted) return;
         const entriesForRender = entriesForCurrentMerge();
         pointEntryByKeyForCurrentRender.clear();
         for (const entry of entriesForRender) {
           pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
         }
-        upsertPointMarkers(entriesForRender);
+        upsertPointMarkers(entriesForRender, { pruneMissing });
         refreshRenderedPointStats();
         lastPaintedMapZoomFloor = z;
       };
@@ -3716,15 +3717,10 @@ export function initApp() {
       const queueProgressivePaint = () => {
         if (!paintProgressively || paintQueued) return;
         paintQueued = true;
-        const flush = () => {
+        window.setTimeout(() => {
           paintQueued = false;
-          paintMergedPoints();
-        };
-        if (document.visibilityState === "hidden") {
-          queueMicrotask(flush);
-          return;
-        }
-        requestAnimationFrame(flush);
+          paintMergedPoints({ pruneMissing: false });
+        }, 0);
       };
 
       await mapWithConcurrency(requests, 8, async (req) => {
@@ -3736,14 +3732,22 @@ export function initApp() {
           y: req.y,
           signal: controller.signal,
         });
+        if (seq !== pointTileFetchSeq || controller.signal.aborted) return;
         const result = { mode: req.mode, json };
         ingestTileResult(result);
         queueProgressivePaint();
         return result;
       });
 
-      if (seq !== pointTileFetchSeq || mode !== "points") return;
+      if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
+      setPointRenderKind(
+        resolvePointRenderKind({
+          zoom: map.getZoom(),
+          totalCount: mergedEntryCount,
+          forceClusters: forceClustersForCellTiles,
+        }),
+      );
       const entriesForRender = entriesForCurrentMerge();
       pointEntryByKeyForCurrentRender.clear();
       for (const entry of entriesForRender) {
@@ -3772,7 +3776,7 @@ export function initApp() {
       const finishViewportPaint = () => {
         lastPaintedMapZoomFloor = z;
         void pointStatsPromise.then((json) => {
-          if (seq !== pointTileFetchSeq || mode !== "points" || !json) return;
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted || !json) return;
           pointStatsOverride = pointViewportSummaryFromResponse(json);
           updateViewportStats();
         });
@@ -3799,7 +3803,7 @@ export function initApp() {
             });
             workerClusterPointSignature = signature;
           }
-          if (seq !== pointTileFetchSeq || mode !== "points") return;
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
           const bounds = map.getBounds();
           const bbox = [
@@ -3813,7 +3817,7 @@ export function initApp() {
             bbox,
             zoom: workerQueryZoom,
           });
-          if (seq !== pointTileFetchSeq || mode !== "points") return;
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
           renderWorkerClusterFeatures(clusters);
           finishViewportPaint();
         } catch (workerErr) {
@@ -4219,6 +4223,7 @@ export function initApp() {
     { padding: [20, 20] },
   );
   updatePointsControlsVisibility();
+
   const onViewportSettled = () => {
     updatePointsControlsVisibility();
     if (mode === "points") {

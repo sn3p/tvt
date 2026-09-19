@@ -1,6 +1,8 @@
 const RUNTIME_CONFIG = globalThis.window?.__TVT_CONFIG__ || {};
 
-export const BACKEND_API_BASE_URL = String(RUNTIME_CONFIG.backendApiBaseUrl || "http://localhost:3000/api/v1");
+export const BACKEND_API_BASE_URL = String(
+  RUNTIME_CONFIG.backendApiBaseUrl || "http://127.0.0.1:3000/api/v1",
+);
 export const ENABLE_DIAGNOSTICS = RUNTIME_CONFIG.enableDiagnostics !== false;
 
 export class DataSource {
@@ -364,14 +366,14 @@ export class BackendApiSource extends DataSource {
     };
     const url = joinUrl(this.baseUrl, `years/${vars.year}/point_tiles/${encodeURIComponent(vars.mode)}/${vars.z}/${vars.x}/${vars.y}`);
 
-    if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
     if (signal?.aborted) throw toAbortError();
+    if (this.tileDataByUrl.has(url)) return this.tileDataByUrl.get(url);
     if (this.tilePromiseByUrl.has(url)) {
       return withAbortSignal(this.tilePromiseByUrl.get(url), signal);
     }
 
     let p;
-    p = this.fetchImpl(url, signal ? { signal } : undefined)
+    p = this.fetchImpl(url)
       .then((r) => {
         if (r.status === 404) {
           return emptyPointTile({
@@ -401,14 +403,6 @@ export class BackendApiSource extends DataSource {
       });
 
     this.tilePromiseByUrl.set(url, p);
-    if (signal) {
-      const dropInFlight = () => {
-        if (this.tilePromiseByUrl.get(url) === p) {
-          this.tilePromiseByUrl.delete(url);
-        }
-      };
-      signal.addEventListener("abort", dropInFlight, { once: true });
-    }
     return withAbortSignal(p, signal);
   }
 
