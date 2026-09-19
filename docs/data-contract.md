@@ -2,7 +2,7 @@
 
 This document describes the current runtime contract used by the webapp.
 
-The frontend is now backend-only:
+The Rails API lives in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api), not in this repository. The frontend is now API-only:
 
 - no static runtime dataset under `public/data`
 - no frontend fallback to local compiled JSON
