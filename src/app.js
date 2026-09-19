@@ -692,7 +692,6 @@ export function initApp() {
 
   function updatePointsControlsVisibility() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
-    const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
     const disableClusteringAtZoomEnabled =
       pointsSettings.displayMode !== "points";
     const clusterEngineEnabled = pointsSettings.displayMode !== "points";
@@ -704,11 +703,8 @@ export function initApp() {
       input.disabled = !clusterStyleEnabled;
     }
 
-    pointsAutoClusterThresholdRow.classList.toggle(
-      "is-disabled",
-      !autoClusterThresholdEnabled,
-    );
-    pointsAutoClusterThresholdInput.disabled = !autoClusterThresholdEnabled;
+    pointsAutoClusterThresholdRow.hidden = true;
+    pointsAutoClusterThresholdInput.disabled = true;
 
     pointsDisableClusteringAtZoomRow.classList.toggle(
       "is-disabled",
@@ -3064,10 +3060,6 @@ export function initApp() {
     return pointsSettings.displayMode !== "clusters";
   }
 
-  function resolveAutoPointRenderKind({ zoom }) {
-    return zoom < pointsSettings.autoClusterThreshold ? "clusters" : "points";
-  }
-
   function hasMaxPointsInViewCap() {
     return (
       Number.isFinite(pointsSettings.maxPointsInView) &&
@@ -3076,17 +3068,12 @@ export function initApp() {
   }
 
   function resolvePointRenderKind({
-    zoom,
     totalCount,
     forceClusters = false,
     preferCellDots = false,
   }) {
     if (forceClusters) return "clusters";
     if (preferCellDots) return "points";
-    const requested =
-      pointsSettings.displayMode === "auto"
-        ? resolveAutoPointRenderKind({ zoom })
-        : pointsSettings.displayMode;
     if (
       pointsSettings.displayMode === "auto" &&
       hasMaxPointsInViewCap() &&
@@ -3094,11 +3081,21 @@ export function initApp() {
     ) {
       return "clusters";
     }
-    return requested === "clusters" ? "clusters" : "points";
+    return pointsSettings.displayMode === "clusters" ? "clusters" : "points";
   }
 
   function maybeMessageForPointCap() {
     if (!isPointCapExceeded || !hasMaxPointsInViewCap()) return;
+    if (
+      pointsSettings.displayMode === "auto" &&
+      pointRenderKind === "clusters"
+    ) {
+      setPointsSidebarMessage(
+        `Te veel punten in beeld — Automatisch toont clusters (${fmtInt(latestPointEntryCount)}).`,
+      );
+      return;
+    }
+    if (pointRenderKind !== "points") return;
     setPointsSidebarMessage(
       `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`,
     );
@@ -3645,13 +3642,16 @@ export function initApp() {
       updatePointsControlsVisibility();
       setPointRenderKind(
         resolvePointRenderKind({
-          zoom: map.getZoom(),
           totalCount: latestPointEntryCount,
           forceClusters: forceClustersForCellTiles,
           preferCellDots,
         }),
       );
-      const paintProgressively = pointRenderKind === "points";
+      const paintProgressively =
+        pointRenderKind === "points" &&
+        (preferCellDots ||
+          pointsSettings.displayMode === "points" ||
+          !hasMaxPointsInViewCap());
       if (preferCellDots) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       }
@@ -3693,6 +3693,7 @@ export function initApp() {
         const isCellPayload = tileKind === "cell" || tileKind === "mixed";
         let entries = Array.from(nextEntriesById.values());
         if (
+          pointsSettings.displayMode === "points" &&
           pointRenderKind === "points" &&
           tileKind !== "cell" &&
           isPointCapExceeded &&
@@ -3701,6 +3702,14 @@ export function initApp() {
           entries = entries.slice(0, pointsSettings.maxPointsInView);
           setPointsSidebarMessage(
             `${POINT_CAP_HINT} (${fmtInt(entries.length)} / ${fmtInt(latestPointEntryCount)})`,
+          );
+        } else if (
+          pointsSettings.displayMode === "auto" &&
+          pointRenderKind === "clusters" &&
+          isPointCapExceeded
+        ) {
+          setPointsSidebarMessage(
+            `Te veel punten in beeld — Automatisch toont clusters (${fmtInt(latestPointEntryCount)}).`,
           );
         } else if (wantsCellDots() && isCellPayload) {
           setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
@@ -3754,7 +3763,6 @@ export function initApp() {
 
       setPointRenderKind(
         resolvePointRenderKind({
-          zoom: map.getZoom(),
           totalCount: mergedEntryCount,
           forceClusters: forceClustersForCellTiles,
           preferCellDots,
