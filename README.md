@@ -4,8 +4,8 @@ Lightweight viewer voor resultaten van de Nationale Tuinvogeltelling (Vogelbesch
 
 ## Repo structuur (2026)
 
-- **Nieuwe doorstart (backend-first)**: root `index.html` + `main.js` + `src/app.js`
-  - Runtime data komt uit de Rails API in `backend/`.
+- **Kaart (deze repo)**: root `index.html` + `main.js` + `src/app.js`
+  - Runtime data komt uit de Rails API in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api).
 - **Oude app (live endpoints)**: `old/` (oude `index.html`, `styles.css`, `main.js`, `src/`), bedoeld om werkend te blijven.
 
 ## Features Draft
@@ -18,53 +18,29 @@ Zie DRAFT.md
   - Nieuwe app: `index.html`
   - Oude app: `old/index.html`
 
-### Backend + Frontend (huidige dev setup)
+### API + Frontend (huidige dev setup)
 
-De app gebruikt nu een kleine Rails backend voor alle runtime data:
+De app gebruikt de Rails API in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api) voor alle runtime data:
 
 - point tiles manifest
 - point tiles
 - point detail popovers (`top_birds`)
-- soortenmanifest (Groningen)
+- soortenmanifest
 - soortencatalogus (geaggregeerd)
 - soortenraster (geaggregeerd)
 
-Start de backend:
+Run that API from a `sn3p/tvt-api` checkout. Local database name remains `tvt_backend_development`. See the tvt-api README for Ruby/Postgres setup, import, tests, and [deployment](https://github.com/sn3p/tvt-api/blob/master/docs/deployment.md).
 
 ```bash
-cd backend
-cp .env.example .env  # optioneel, vooral handig buiten lokale defaults
+# in a sn3p/tvt-api checkout
 bundle install
 bin/rails db:prepare
-bin/rails tvt:import_all
 bin/rails server
 ```
 
-Inspecteer backend status:
+Default local API: `http://localhost:3000/api/v1`.
 
-```bash
-cd backend
-bin/rails tvt:status
-YEARS=2025,2026 bin/rails tvt:verify_imports
-curl http://localhost:3000/api/v1/status
-```
-
-Importeer harvested data uit `../tvt-harvest`:
-
-```bash
-cd backend
-bin/rails tvt:import_all
-```
-
-Of importeer een specifiek jaar:
-
-```bash
-cd backend
-bin/rails 'tvt:import_year[2025]'
-bin/rails 'tvt:import_year[2026]'
-```
-
-Start daarna de frontend via een simpele lokale webserver vanuit repo root.
+Start daarna de frontend via een simpele lokale webserver vanuit deze repo root.
 
 ### Frontend runtime config
 
@@ -85,10 +61,10 @@ Belangrijk:
 
 - lokaal (`localhost` / `127.0.0.1`) gebruikt de app standaard `http://localhost:3000/api/v1`
 - buiten lokaal gebruikt de app standaard hetzelfde origin op `/api/v1`
-- de frontend gebruikt alleen de backend API; er is geen lokale JSON fallback meer
+- de frontend gebruikt alleen de API; er is geen lokale JSON fallback meer
 - `enableDiagnostics` zet startup probes naar `window.__tvtBackendStatusProbe` en `window.__tvtPointTilesProbe` aan of uit
-- voor cross-origin frontend/backend deployments moet de backend `TVT_ALLOWED_ORIGINS` expliciet toestaan
-- zie `backend/docs/deployment.md` voor same-origin vs cross-origin deployment
+- voor cross-origin frontend/API deployments moet tvt-api `TVT_ALLOWED_ORIGINS` expliciet toestaan
+- zie [tvt-api `docs/deployment.md`](https://github.com/sn3p/tvt-api/blob/master/docs/deployment.md) voor same-origin vs cross-origin deployment
 - je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)
