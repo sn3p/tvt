@@ -40,7 +40,7 @@ bin/rails server
 
 Default local API: `http://localhost:3000/api/v1`.
 
-Start daarna de frontend via een simpele lokale webserver vanuit deze repo root.
+Start daarna de frontend via een simpele lokale webserver vanuit deze repo root. In Conductor, Run serves this repo root over HTTP on `$CONDUCTOR_PORT`; the map still calls `http://localhost:3000/api/v1`, so tvt-api must be running on port 3000 (its own Conductor Run).
 
 ### Frontend runtime config
 
