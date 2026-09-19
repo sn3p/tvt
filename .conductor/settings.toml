@@ -1,0 +1,15 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+# Static no-build map. Runtime data comes from tvt-api on localhost:3000.
+[scripts]
+setup = """
+# Static checkout: no install, bundler, or build.
+true
+"""
+run_mode = "concurrent"
+
+[scripts.run.static]
+command = 'python3 -m http.server "$CONDUCTOR_PORT" --bind 127.0.0.1'
+available_in = ["local"]
+default = true
+icon = "globe"
