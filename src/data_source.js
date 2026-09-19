@@ -370,7 +370,7 @@ export class BackendApiSource extends DataSource {
       return withAbortSignal(this.tilePromiseByUrl.get(url), signal);
     }
 
-    const p = this.fetchImpl(url)
+    const p = this.fetchImpl(url, signal ? { signal } : undefined)
       .then((r) => {
         if (r.status === 404) {
           return emptyPointTile({
@@ -400,6 +400,14 @@ export class BackendApiSource extends DataSource {
       });
 
     this.tilePromiseByUrl.set(url, p);
+    if (signal) {
+      const dropInFlight = () => {
+        if (this.tilePromiseByUrl.get(url) === p) {
+          this.tilePromiseByUrl.delete(url);
+        }
+      };
+      signal.addEventListener("abort", dropInFlight, { once: true });
+    }
     return withAbortSignal(p, signal);
   }
 

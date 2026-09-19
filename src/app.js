@@ -1088,6 +1088,7 @@ export function initApp() {
   let latestPointEntryCount = 0;
   let isPointCapExceeded = false;
   let forceClustersForCellTiles = false;
+  let lastPaintedMapZoomFloor = null;
   const pointMarkerStateById = new Map();
   const pointEntryDetailsPromiseByKey = new Map();
   const pointEntryDetailsByKey = new Map();
@@ -3581,7 +3582,7 @@ export function initApp() {
         scope: "viewport",
         signal: controller.signal,
       }).catch((err) => {
-        if (isAbortError(err)) throw err;
+        if (isAbortError(err)) return null;
         console.warn("Viewport point stats fetch failed:", err);
         return null;
       });
@@ -3622,25 +3623,20 @@ export function initApp() {
         }
       }
 
-      const [tileResults, pointStatsJson] = await Promise.all([
-        mapWithConcurrency(requests, 8, async (req) => {
-          const json = await getPointTile({
-            year: targetYear,
-            mode: req.mode,
-            z: req.z,
-            x: req.x,
-            y: req.y,
-            signal: controller.signal,
-          });
-          return { mode: req.mode, json };
-        }),
-        pointStatsPromise,
-      ]);
+      const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
+        const json = await getPointTile({
+          year: targetYear,
+          mode: req.mode,
+          z: req.z,
+          x: req.x,
+          y: req.y,
+          signal: controller.signal,
+        });
+        return { mode: req.mode, json };
+      });
 
       if (seq !== pointTileFetchSeq || mode !== "points") return;
-      pointStatsOverride = pointStatsJson
-        ? pointViewportSummaryFromResponse(pointStatsJson)
-        : null;
+      pointStatsOverride = null;
       totals = {
         entries: pointTotalsOverride?.totalEntries ?? 0,
         birds: pointTotalsOverride?.totalBirds ?? 0,
@@ -3730,6 +3726,15 @@ export function initApp() {
         totalEntries: totals.entries,
       });
 
+      const finishViewportPaint = () => {
+        lastPaintedMapZoomFloor = Math.floor(map.getZoom());
+        void pointStatsPromise.then((json) => {
+          if (seq !== pointTileFetchSeq || mode !== "points" || !json) return;
+          pointStatsOverride = pointViewportSummaryFromResponse(json);
+          updateViewportStats();
+        });
+      };
+
       const wantsWorkerClusters =
         pointRenderKind === "clusters" &&
         effectiveClusterEngine() === "worker";
@@ -3767,15 +3772,18 @@ export function initApp() {
           });
           if (seq !== pointTileFetchSeq || mode !== "points") return;
           renderWorkerClusterFeatures(clusters);
+          finishViewportPaint();
         } catch (workerErr) {
           fallbackFromWorkerCluster(workerErr);
           setPointRenderKind("clusters", { force: true });
           upsertPointMarkers(entriesForRender);
           refreshRenderedPointStats();
+          finishViewportPaint();
         }
       } else {
         upsertPointMarkers(entriesForRender);
         refreshRenderedPointStats();
+        finishViewportPaint();
       }
     } catch (err) {
       if (isAbortError(err)) return;
@@ -4169,6 +4177,14 @@ export function initApp() {
   const onViewportSettled = () => {
     updatePointsControlsVisibility();
     if (mode === "points") {
+      const zoomFloor = Math.floor(map.getZoom());
+      if (
+        lastPaintedMapZoomFloor != null &&
+        zoomFloor !== lastPaintedMapZoomFloor
+      ) {
+        abortPointTileFetchCycle();
+        clearPointMarkers();
+      }
       setStatsLoading("Kaartgegevens laden…");
       schedulePointTileFetch();
       return;
