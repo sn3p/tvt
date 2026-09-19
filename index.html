@@ -27,7 +27,7 @@
     const __tvtHost = window.location.hostname;
     const __tvtIsLocalDev = (__tvtHost === "localhost" || __tvtHost === "127.0.0.1");
     const __tvtDefaultBackendApiBaseUrl = __tvtIsLocalDev
-      ? "http://localhost:3000/api/v1"
+      ? "http://127.0.0.1:3000/api/v1"
       : new URL("/api/v1", window.location.origin).toString();
 
     window.__TVT_CONFIG__ = Object.assign({

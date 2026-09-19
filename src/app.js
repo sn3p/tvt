@@ -1,6 +1,7 @@
 import {
   ENABLE_DIAGNOSTICS,
   BackendApiSource,
+  GRID_ZOOM_MAX_DEFAULT,
   isAbortError,
   lngLatToTileXY,
   pointTileKind,
@@ -251,7 +252,7 @@ export function initApp() {
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const CELL_TILE_POINTS_HINT =
-    "Op dit zoomniveau zijn er geen individuele punten; de kaart toont clusters. Zoom in voor punten.";
+    "Op dit zoomniveau toont Punten één stip per rastercel. Zoom in voor individuele tellingen.";
   const WORKER_CLUSTER_FALLBACK_HINT =
     "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
@@ -1105,6 +1106,7 @@ export function initApp() {
   let latestPointEntryCount = 0;
   let isPointCapExceeded = false;
   let forceClustersForCellTiles = false;
+  let lastPaintedMapZoomFloor = null;
   const pointMarkerStateById = new Map();
   const pointEntryDetailsPromiseByKey = new Map();
   const pointEntryDetailsByKey = new Map();
@@ -2861,6 +2863,7 @@ export function initApp() {
   }
 
   function abortPointTileFetchCycle() {
+    pointTileFetchSeq += 1;
     if (!pointTileAbortController) return;
     pointTileAbortController.abort();
     pointTileAbortController = null;
@@ -2956,11 +2959,20 @@ export function initApp() {
     });
   }
 
-  function pointMarkerPathStyle(isorg) {
+  function cellDotRadius(count) {
+    const weight = Number.isFinite(count) && count > 0 ? count : 1;
+    return Math.min(5, 3 + Math.log10(weight));
+  }
+
+  function usesWeightedClusterBadge(count) {
+    return pointRenderKind !== "points" && count > 1;
+  }
+
+  function pointMarkerPathStyle(isorg, { count = 1, cell = false } = {}) {
     return {
-      radius: 5,
+      radius: cell ? cellDotRadius(count) : 5,
       color: "rgba(255,255,255,0.92)",
-      weight: 2,
+      weight: cell ? 1 : 2,
       fillColor: isorg ? "#60a5fa" : "#fb923c",
       fillOpacity: 0.9,
       opacity: 1,
@@ -2968,10 +2980,14 @@ export function initApp() {
     };
   }
 
-  function setPointMarkerVisual(marker, isorg, { count = 1 } = {}) {
+  function setPointMarkerVisual(
+    marker,
+    isorg,
+    { count = 1, cell = false } = {},
+  ) {
     const weight = Number.isFinite(count) && count > 0 ? count : 1;
     marker.options.tvtCount = weight;
-    if (weight > 1) {
+    if (usesWeightedClusterBadge(weight)) {
       const icon = weightedClusterIcon({
         total: weight,
         isorgCount: isorg ? weight : 0,
@@ -2983,7 +2999,7 @@ export function initApp() {
       marker.setIcon(pointMarkerIcon(isorg));
       marker.setZIndexOffset(isorg ? 1000 : 0);
     } else if (typeof marker.setStyle === "function") {
-      marker.setStyle(pointMarkerPathStyle(isorg));
+      marker.setStyle(pointMarkerPathStyle(isorg, { count: weight, cell }));
     }
     marker.options.tvtIsorg = Boolean(isorg);
   }
@@ -3020,9 +3036,9 @@ export function initApp() {
     });
   }
 
-  function createPointMarker(latlng, isorg, { count = 1 } = {}) {
+  function createPointMarker(latlng, isorg, { count = 1, cell = false } = {}) {
     const weight = Number.isFinite(count) && count > 0 ? count : 1;
-    if (weight > 1) {
+    if (usesWeightedClusterBadge(weight)) {
       return createWeightedClusterMarker(latlng, {
         total: weight,
         isorgCount: isorg ? weight : 0,
@@ -3038,9 +3054,9 @@ export function initApp() {
       });
     }
     return globalThis.L.circleMarker(latlng, {
-      ...pointMarkerPathStyle(isorg),
+      ...pointMarkerPathStyle(isorg, { count: weight, cell }),
       tvtIsorg: isorg,
-      tvtCount: 1,
+      tvtCount: weight,
     });
   }
 
@@ -3099,7 +3115,7 @@ export function initApp() {
     maybeMessageForPointCap();
   }
 
-  function upsertPointMarkers(entries) {
+  function upsertPointMarkers(entries, { pruneMissing = true } = {}) {
     const nextById = new Map();
     for (const entry of entries) {
       const lat = Number(entry?.lat);
@@ -3108,14 +3124,16 @@ export function initApp() {
       nextById.set(pointMarkerIdKey(entry), entry);
     }
 
-    for (const [markerId, state] of pointMarkerStateById.entries()) {
-      if (nextById.has(markerId)) continue;
-      try {
-        pointsLayer.removeLayer(state.marker);
-      } catch {
-        // ignore
+    if (pruneMissing) {
+      for (const [markerId, state] of pointMarkerStateById.entries()) {
+        if (nextById.has(markerId)) continue;
+        try {
+          pointsLayer.removeLayer(state.marker);
+        } catch {
+          // ignore
+        }
+        pointMarkerStateById.delete(markerId);
       }
-      pointMarkerStateById.delete(markerId);
     }
 
     for (const [markerId, entry] of nextById.entries()) {
@@ -3124,6 +3142,7 @@ export function initApp() {
       const isorg = pointEntryIsorg(entry);
       const count = entryWeight(entry);
       const bindPopup = isPointEntry(entry);
+      const isCell = entry?.kind === "cell";
       const id = Number(entry.id);
       const detailKey = bindPopup
         ? pointDetailsKey({
@@ -3141,12 +3160,18 @@ export function initApp() {
           Math.abs(existing.latlng.lng - latlng.lng) > 1e-9;
         const modeChanged = existing.isIsorg !== isorg;
         const countChanged = entryWeight(existing.entry) !== count;
+        const existingBadge = usesWeightedClusterBadge(
+          entryWeight(existing.entry),
+        );
         const needsRebuild =
-          countChanged && count > 1 !== entryWeight(existing.entry) > 1;
+          existingBadge !== usesWeightedClusterBadge(count);
         if (!needsRebuild) {
           if (moved || modeChanged || countChanged) {
             existing.marker.setLatLng(latlng);
-            setPointMarkerVisual(existing.marker, isorg, { count });
+            setPointMarkerVisual(existing.marker, isorg, {
+              count,
+              cell: isCell,
+            });
           }
           if (bindPopup) {
             existing.marker.setPopupContent(
@@ -3170,7 +3195,10 @@ export function initApp() {
         pointMarkerStateById.delete(markerId);
       }
 
-      const marker = createPointMarker(latlng, isorg, { count });
+      const marker = createPointMarker(latlng, isorg, {
+        count,
+        cell: isCell,
+      });
       if (bindPopup) {
         marker
           .bindPopup(
@@ -3188,7 +3216,7 @@ export function initApp() {
         ensurePointPopupToggle(marker);
       } else {
         marker.addTo(pointsLayer);
-        if (count > 1) bindCellZoom(marker, latlng);
+        bindCellZoom(marker, latlng);
       }
 
       pointMarkerStateById.set(markerId, {
@@ -3460,24 +3488,21 @@ export function initApp() {
   function schedulePointTileFetch({ immediate = false } = {}) {
     if (mode !== "points") return;
     clearPointTileFetchTimer();
-    if (immediate) {
-      void refreshPointTilesForViewport();
-      return;
-    }
     pointTileFetchTimer = window.setTimeout(() => {
       pointTileFetchTimer = 0;
       void refreshPointTilesForViewport();
-    }, 160);
+    }, immediate ? 0 : 160);
   }
 
   async function refreshPointTilesForViewport() {
     if (mode !== "points") return;
 
-    const seq = ++pointTileFetchSeq;
     abortPointTileFetchCycle();
+    const seq = pointTileFetchSeq;
     const controller = new AbortController();
     pointTileAbortController = controller;
     const startedAtMs = nowMs();
+    let pointStatsPromise = Promise.resolve(null);
 
     const { year, includePrivate, includeIsorg, enabledPointModes } =
       getFilters();
@@ -3550,7 +3575,7 @@ export function initApp() {
         includeIsorg,
       });
 
-      const pointStatsPromise = getPointStats({
+      pointStatsPromise = getPointStats({
         year: targetYear,
         includePrivate,
         includeIsorg,
@@ -3558,7 +3583,7 @@ export function initApp() {
         scope: "viewport",
         signal: controller.signal,
       }).catch((err) => {
-        if (isAbortError(err)) throw err;
+        if (isAbortError(err)) return null;
         console.warn("Viewport point stats fetch failed:", err);
         return null;
       });
@@ -3599,25 +3624,28 @@ export function initApp() {
         }
       }
 
-      const [tileResults, pointStatsJson] = await Promise.all([
-        mapWithConcurrency(requests, 8, async (req) => {
-          const json = await getPointTile({
-            year: targetYear,
-            mode: req.mode,
-            z: req.z,
-            x: req.x,
-            y: req.y,
-            signal: controller.signal,
-          });
-          return { mode: req.mode, json };
+      const gridZoomMax = Number(manifest?.defaults?.grid_zoom_max);
+      const expectCells =
+        z <=
+        (Number.isFinite(gridZoomMax) && gridZoomMax > 0
+          ? gridZoomMax
+          : GRID_ZOOM_MAX_DEFAULT);
+      forceClustersForCellTiles =
+        expectCells && pointsSettings.displayMode !== "points";
+      updatePointsControlsVisibility();
+      setPointRenderKind(
+        resolvePointRenderKind({
+          zoom: map.getZoom(),
+          totalCount: latestPointEntryCount,
+          forceClusters: forceClustersForCellTiles,
         }),
-        pointStatsPromise,
-      ]);
+      );
+      const paintProgressively = pointRenderKind === "points";
+      if (pointsSettings.displayMode === "points" && expectCells) {
+        setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
+      }
 
-      if (seq !== pointTileFetchSeq || mode !== "points") return;
-      pointStatsOverride = pointStatsJson
-        ? pointViewportSummaryFromResponse(pointStatsJson)
-        : null;
+      pointStatsOverride = null;
       totals = {
         entries: pointTotalsOverride?.totalEntries ?? 0,
         birds: pointTotalsOverride?.totalBirds ?? 0,
@@ -3627,8 +3655,9 @@ export function initApp() {
       let mergedEntryCount = 0;
       let mergedRecordCount = 0;
       let tileKind = "";
+      let paintQueued = false;
 
-      for (const result of tileResults) {
+      const ingestTileResult = (result) => {
         const records = recordsFromPointTile(result?.json, {
           mode: result?.mode,
         });
@@ -3642,49 +3671,84 @@ export function initApp() {
           mergedRecordCount += 1;
           mergedEntryCount += entryWeight(record);
         }
-      }
+      };
 
-      latestPointEntryCount = mergedEntryCount;
-      isPointCapExceeded =
-        tileKind !== "cell" &&
-        hasMaxPointsInViewCap() &&
-        latestPointEntryCount > pointsSettings.maxPointsInView;
-      forceClustersForCellTiles =
-        tileKind === "cell" || tileKind === "mixed";
-      updatePointsControlsVisibility();
+      const entriesForCurrentMerge = () => {
+        latestPointEntryCount = mergedEntryCount;
+        isPointCapExceeded =
+          tileKind !== "cell" &&
+          hasMaxPointsInViewCap() &&
+          latestPointEntryCount > pointsSettings.maxPointsInView;
+        const isCellPayload = tileKind === "cell" || tileKind === "mixed";
+        let entries = Array.from(nextEntriesById.values());
+        if (
+          pointRenderKind === "points" &&
+          tileKind !== "cell" &&
+          isPointCapExceeded &&
+          hasMaxPointsInViewCap()
+        ) {
+          entries = entries.slice(0, pointsSettings.maxPointsInView);
+          setPointsSidebarMessage(
+            `${POINT_CAP_HINT} (${fmtInt(entries.length)} / ${fmtInt(latestPointEntryCount)})`,
+          );
+        } else if (pointsSettings.displayMode === "points" && isCellPayload) {
+          setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
+        } else if (
+          !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
+        ) {
+          setPointsSidebarMessage("");
+        }
+        return entries;
+      };
+
+      const paintMergedPoints = ({ pruneMissing = true } = {}) => {
+        if (seq !== pointTileFetchSeq || mode !== "points") return;
+        if (controller.signal.aborted) return;
+        const entriesForRender = entriesForCurrentMerge();
+        pointEntryByKeyForCurrentRender.clear();
+        for (const entry of entriesForRender) {
+          pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
+        }
+        upsertPointMarkers(entriesForRender, { pruneMissing });
+        refreshRenderedPointStats();
+        lastPaintedMapZoomFloor = z;
+      };
+
+      const queueProgressivePaint = () => {
+        if (!paintProgressively || paintQueued) return;
+        paintQueued = true;
+        window.setTimeout(() => {
+          paintQueued = false;
+          paintMergedPoints({ pruneMissing: false });
+        }, 0);
+      };
+
+      await mapWithConcurrency(requests, 8, async (req) => {
+        const json = await getPointTile({
+          year: targetYear,
+          mode: req.mode,
+          z: req.z,
+          x: req.x,
+          y: req.y,
+          signal: controller.signal,
+        });
+        if (seq !== pointTileFetchSeq || controller.signal.aborted) return;
+        const result = { mode: req.mode, json };
+        ingestTileResult(result);
+        queueProgressivePaint();
+        return result;
+      });
+
+      if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
       setPointRenderKind(
         resolvePointRenderKind({
           zoom: map.getZoom(),
-          totalCount: latestPointEntryCount,
+          totalCount: mergedEntryCount,
           forceClusters: forceClustersForCellTiles,
         }),
       );
-
-      let entriesForRender = Array.from(nextEntriesById.values());
-      if (
-        tileKind !== "cell" &&
-        isPointCapExceeded &&
-        hasMaxPointsInViewCap()
-      ) {
-        entriesForRender = entriesForRender.slice(
-          0,
-          pointsSettings.maxPointsInView,
-        );
-        setPointsSidebarMessage(
-          `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`,
-        );
-      } else if (
-        pointsSettings.displayMode === "points" &&
-        forceClustersForCellTiles
-      ) {
-        setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
-      } else if (
-        !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
-      ) {
-        setPointsSidebarMessage("");
-      }
-
+      const entriesForRender = entriesForCurrentMerge();
       pointEntryByKeyForCurrentRender.clear();
       for (const entry of entriesForRender) {
         pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
@@ -3698,6 +3762,8 @@ export function initApp() {
         tileRequestCount,
         fetchedModes: fetchModes,
         tileKind: tileKind || "points",
+        displayMode: pointsSettings.displayMode,
+        pointRenderKind,
         mergedRecordCount,
         mergedPointCount: mergedEntryCount,
         renderedPointCount: entriesForRender.reduce(
@@ -3706,6 +3772,15 @@ export function initApp() {
         ),
         totalEntries: totals.entries,
       });
+
+      const finishViewportPaint = () => {
+        lastPaintedMapZoomFloor = z;
+        void pointStatsPromise.then((json) => {
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted || !json) return;
+          pointStatsOverride = pointViewportSummaryFromResponse(json);
+          updateViewportStats();
+        });
+      };
 
       const wantsWorkerClusters =
         pointRenderKind === "clusters" &&
@@ -3728,7 +3803,7 @@ export function initApp() {
             });
             workerClusterPointSignature = signature;
           }
-          if (seq !== pointTileFetchSeq || mode !== "points") return;
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
           const bounds = map.getBounds();
           const bbox = [
@@ -3742,17 +3817,19 @@ export function initApp() {
             bbox,
             zoom: workerQueryZoom,
           });
-          if (seq !== pointTileFetchSeq || mode !== "points") return;
+          if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
           renderWorkerClusterFeatures(clusters);
+          finishViewportPaint();
         } catch (workerErr) {
           fallbackFromWorkerCluster(workerErr);
           setPointRenderKind("clusters", { force: true });
           upsertPointMarkers(entriesForRender);
           refreshRenderedPointStats();
+          finishViewportPaint();
         }
       } else {
-        upsertPointMarkers(entriesForRender);
-        refreshRenderedPointStats();
+        paintMergedPoints();
+        finishViewportPaint();
       }
     } catch (err) {
       if (isAbortError(err)) return;
@@ -3766,8 +3843,11 @@ export function initApp() {
         `Laden van puntentiles mislukt: ${err?.message || String(err)}`,
       );
     } finally {
-      if (pointTileAbortController === controller)
-        pointTileAbortController = null;
+      void pointStatsPromise.finally(() => {
+        if (pointTileAbortController === controller) {
+          pointTileAbortController = null;
+        }
+      });
     }
   }
 
@@ -4143,9 +4223,17 @@ export function initApp() {
     { padding: [20, 20] },
   );
   updatePointsControlsVisibility();
+
   const onViewportSettled = () => {
     updatePointsControlsVisibility();
     if (mode === "points") {
+      const zoomFloor = Math.max(6, Math.min(13, Math.floor(map.getZoom())));
+      if (
+        lastPaintedMapZoomFloor != null &&
+        zoomFloor !== lastPaintedMapZoomFloor
+      ) {
+        abortPointTileFetchCycle();
+      }
       setStatsLoading("Kaartgegevens laden…");
       schedulePointTileFetch();
       return;
