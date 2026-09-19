@@ -370,7 +370,8 @@ export class BackendApiSource extends DataSource {
       return withAbortSignal(this.tilePromiseByUrl.get(url), signal);
     }
 
-    const p = this.fetchImpl(url, signal ? { signal } : undefined)
+    let p;
+    p = this.fetchImpl(url, signal ? { signal } : undefined)
       .then((r) => {
         if (r.status === 404) {
           return emptyPointTile({
@@ -391,12 +392,12 @@ export class BackendApiSource extends DataSource {
         return json;
       })
       .catch((err) => {
-        this.tilePromiseByUrl.delete(url);
+        if (this.tilePromiseByUrl.get(url) === p) this.tilePromiseByUrl.delete(url);
         if (isAbortError(err)) throw err;
         throw err;
       })
       .finally(() => {
-        this.tilePromiseByUrl.delete(url);
+        if (this.tilePromiseByUrl.get(url) === p) this.tilePromiseByUrl.delete(url);
       });
 
     this.tilePromiseByUrl.set(url, p);

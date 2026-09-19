@@ -1,6 +1,7 @@
 import {
   ENABLE_DIAGNOSTICS,
   BackendApiSource,
+  GRID_ZOOM_MAX_DEFAULT,
   isAbortError,
   lngLatToTileXY,
   pointTileKind,
@@ -3502,6 +3503,7 @@ export function initApp() {
     const controller = new AbortController();
     pointTileAbortController = controller;
     const startedAtMs = nowMs();
+    let pointStatsPromise = Promise.resolve(null);
 
     const { year, includePrivate, includeIsorg, enabledPointModes } =
       getFilters();
@@ -3574,7 +3576,7 @@ export function initApp() {
         includeIsorg,
       });
 
-      const pointStatsPromise = getPointStats({
+      pointStatsPromise = getPointStats({
         year: targetYear,
         includePrivate,
         includeIsorg,
@@ -3623,19 +3625,27 @@ export function initApp() {
         }
       }
 
-      const tileResults = await mapWithConcurrency(requests, 8, async (req) => {
-        const json = await getPointTile({
-          year: targetYear,
-          mode: req.mode,
-          z: req.z,
-          x: req.x,
-          y: req.y,
-          signal: controller.signal,
-        });
-        return { mode: req.mode, json };
-      });
+      const gridZoomMax = Number(manifest?.defaults?.grid_zoom_max);
+      const expectCells =
+        z <=
+        (Number.isFinite(gridZoomMax) && gridZoomMax > 0
+          ? gridZoomMax
+          : GRID_ZOOM_MAX_DEFAULT);
+      forceClustersForCellTiles =
+        expectCells && pointsSettings.displayMode !== "points";
+      updatePointsControlsVisibility();
+      setPointRenderKind(
+        resolvePointRenderKind({
+          zoom: map.getZoom(),
+          totalCount: latestPointEntryCount,
+          forceClusters: forceClustersForCellTiles,
+        }),
+      );
+      const paintProgressively = pointRenderKind === "points";
+      if (paintProgressively && expectCells) {
+        setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
+      }
 
-      if (seq !== pointTileFetchSeq || mode !== "points") return;
       pointStatsOverride = null;
       totals = {
         entries: pointTotalsOverride?.totalEntries ?? 0,
@@ -3645,9 +3655,10 @@ export function initApp() {
       const nextEntriesById = new Map();
       let mergedEntryCount = 0;
       let mergedRecordCount = 0;
-      let tileKind = "";
+      let tileKind = expectCells ? "cell" : "point";
+      let paintQueued = false;
 
-      for (const result of tileResults) {
+      const ingestTileResult = (result) => {
         const records = recordsFromPointTile(result?.json, {
           mode: result?.mode,
         });
@@ -3661,47 +3672,79 @@ export function initApp() {
           mergedRecordCount += 1;
           mergedEntryCount += entryWeight(record);
         }
-      }
+      };
 
-      latestPointEntryCount = mergedEntryCount;
-      isPointCapExceeded =
-        tileKind !== "cell" &&
-        hasMaxPointsInViewCap() &&
-        latestPointEntryCount > pointsSettings.maxPointsInView;
-      const isCellPayload = tileKind === "cell" || tileKind === "mixed";
-      forceClustersForCellTiles =
-        isCellPayload && pointsSettings.displayMode !== "points";
-      updatePointsControlsVisibility();
+      const entriesForCurrentMerge = () => {
+        latestPointEntryCount = mergedEntryCount;
+        isPointCapExceeded =
+          tileKind !== "cell" &&
+          hasMaxPointsInViewCap() &&
+          latestPointEntryCount > pointsSettings.maxPointsInView;
+        const isCellPayload = tileKind === "cell" || tileKind === "mixed";
+        let entries = Array.from(nextEntriesById.values());
+        if (
+          tileKind !== "cell" &&
+          isPointCapExceeded &&
+          hasMaxPointsInViewCap()
+        ) {
+          entries = entries.slice(0, pointsSettings.maxPointsInView);
+          setPointsSidebarMessage(
+            `${POINT_CAP_HINT} (${fmtInt(entries.length)} / ${fmtInt(latestPointEntryCount)})`,
+          );
+        } else if (pointsSettings.displayMode === "points" && isCellPayload) {
+          setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
+        } else if (
+          !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
+        ) {
+          setPointsSidebarMessage("");
+        }
+        return entries;
+      };
 
-      setPointRenderKind(
-        resolvePointRenderKind({
-          zoom: map.getZoom(),
-          totalCount: latestPointEntryCount,
-          forceClusters: forceClustersForCellTiles,
-        }),
-      );
+      const paintMergedPoints = () => {
+        if (seq !== pointTileFetchSeq || mode !== "points") return;
+        const entriesForRender = entriesForCurrentMerge();
+        pointEntryByKeyForCurrentRender.clear();
+        for (const entry of entriesForRender) {
+          pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
+        }
+        upsertPointMarkers(entriesForRender);
+        refreshRenderedPointStats();
+        lastPaintedMapZoomFloor = z;
+      };
 
-      let entriesForRender = Array.from(nextEntriesById.values());
-      if (
-        tileKind !== "cell" &&
-        isPointCapExceeded &&
-        hasMaxPointsInViewCap()
-      ) {
-        entriesForRender = entriesForRender.slice(
-          0,
-          pointsSettings.maxPointsInView,
-        );
-        setPointsSidebarMessage(
-          `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`,
-        );
-      } else if (pointsSettings.displayMode === "points" && isCellPayload) {
-        setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
-      } else if (
-        !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
-      ) {
-        setPointsSidebarMessage("");
-      }
+      const queueProgressivePaint = () => {
+        if (!paintProgressively || paintQueued) return;
+        paintQueued = true;
+        const flush = () => {
+          paintQueued = false;
+          paintMergedPoints();
+        };
+        if (document.visibilityState === "hidden") {
+          queueMicrotask(flush);
+          return;
+        }
+        requestAnimationFrame(flush);
+      };
 
+      await mapWithConcurrency(requests, 8, async (req) => {
+        const json = await getPointTile({
+          year: targetYear,
+          mode: req.mode,
+          z: req.z,
+          x: req.x,
+          y: req.y,
+          signal: controller.signal,
+        });
+        const result = { mode: req.mode, json };
+        ingestTileResult(result);
+        queueProgressivePaint();
+        return result;
+      });
+
+      if (seq !== pointTileFetchSeq || mode !== "points") return;
+
+      const entriesForRender = entriesForCurrentMerge();
       pointEntryByKeyForCurrentRender.clear();
       for (const entry of entriesForRender) {
         pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
@@ -3727,7 +3770,7 @@ export function initApp() {
       });
 
       const finishViewportPaint = () => {
-        lastPaintedMapZoomFloor = Math.floor(map.getZoom());
+        lastPaintedMapZoomFloor = z;
         void pointStatsPromise.then((json) => {
           if (seq !== pointTileFetchSeq || mode !== "points" || !json) return;
           pointStatsOverride = pointViewportSummaryFromResponse(json);
@@ -3781,8 +3824,7 @@ export function initApp() {
           finishViewportPaint();
         }
       } else {
-        upsertPointMarkers(entriesForRender);
-        refreshRenderedPointStats();
+        paintMergedPoints();
         finishViewportPaint();
       }
     } catch (err) {
@@ -3797,8 +3839,11 @@ export function initApp() {
         `Laden van puntentiles mislukt: ${err?.message || String(err)}`,
       );
     } finally {
-      if (pointTileAbortController === controller)
-        pointTileAbortController = null;
+      void pointStatsPromise.finally(() => {
+        if (pointTileAbortController === controller) {
+          pointTileAbortController = null;
+        }
+      });
     }
   }
 
@@ -4177,13 +4222,12 @@ export function initApp() {
   const onViewportSettled = () => {
     updatePointsControlsVisibility();
     if (mode === "points") {
-      const zoomFloor = Math.floor(map.getZoom());
+      const zoomFloor = Math.max(6, Math.min(13, Math.floor(map.getZoom())));
       if (
         lastPaintedMapZoomFloor != null &&
         zoomFloor !== lastPaintedMapZoomFloor
       ) {
         abortPointTileFetchCycle();
-        clearPointMarkers();
       }
       setStatsLoading("Kaartgegevens laden…");
       schedulePointTileFetch();
