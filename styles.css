@@ -163,6 +163,13 @@ input {
   width: 70px;
 }
 
+/* 1Password: hide injected fill/save chrome if the extension still attaches. */
+com-1password-button,
+com-1password-menu,
+com-1password-notification {
+  display: none !important;
+}
+
 /* Icons */
 .icon,
 [data-controller="icon"] {
