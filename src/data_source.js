@@ -208,6 +208,97 @@ export function tilesForBounds(bounds, z, bufferTiles = 1) {
   return out;
 }
 
+export const GRID_ZOOM_MAX_DEFAULT = 10;
+export const CELL_ZOOM_EXTRA_DEFAULT = 5;
+
+export function pointTileKind(json) {
+  const kind = String(json?.kind || "").trim();
+  if (kind === "cells" || kind === "points") return kind;
+  if (Array.isArray(json?.cells)) return "cells";
+  return "points";
+}
+
+export function emptyPointTile({
+  year,
+  mode,
+  z,
+  x,
+  y,
+  gridZoomMax = GRID_ZOOM_MAX_DEFAULT,
+  cellZoomExtra = CELL_ZOOM_EXTRA_DEFAULT,
+} = {}) {
+  const zoom = Number(z) || 0;
+  const kind = zoom <= Number(gridZoomMax || GRID_ZOOM_MAX_DEFAULT) ? "cells" : "points";
+  const extra = Number(cellZoomExtra) || CELL_ZOOM_EXTRA_DEFAULT;
+  const envelope = {
+    contract_version: 2,
+    year,
+    mode,
+    z,
+    x,
+    y,
+    tileSize: 256,
+    kind,
+  };
+  if (kind === "cells") {
+    return { ...envelope, cell_z: zoom + extra, cells: [] };
+  }
+  return { ...envelope, points: [] };
+}
+
+export function recordsFromPointTile(json, { mode } = {}) {
+  const isorg = String(mode || json?.mode || "").trim() === "isorg";
+  const modeKey = isorg ? "isorg" : "private";
+  const kind = pointTileKind(json);
+
+  if (kind === "cells") {
+    const cells = Array.isArray(json?.cells) ? json.cells : [];
+    const out = [];
+    for (const cell of cells) {
+      const lat = Number(cell?.lat);
+      const lng = Number(cell?.lng);
+      const count = Number(cell?.count);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const weight = Number.isFinite(count) && count > 0 ? Math.round(count) : 1;
+      out.push({
+        kind: "cell",
+        key: `cell:${modeKey}:${lat}:${lng}`,
+        id: null,
+        lat,
+        lng,
+        pc4: "",
+        count: weight,
+        isorg,
+        modes: [modeKey],
+        birds: [],
+      });
+    }
+    return out;
+  }
+
+  const points = Array.isArray(json?.points) ? json.points : [];
+  const out = [];
+  for (const point of points) {
+    const id = Number(point?.id);
+    const lat = Number(point?.lat);
+    const lng = Number(point?.lng);
+    if (!Number.isFinite(id) || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    out.push({
+      kind: "point",
+      key: `${modeKey}:${id}`,
+      id,
+      lat,
+      lng,
+      pc4: String(point?.pc4 ?? ""),
+      count: 1,
+      isorg,
+      modes: [modeKey],
+      birds: [],
+    });
+  }
+  return out;
+}
+
 export class BackendApiSource extends DataSource {
   constructor({
     baseUrl = BACKEND_API_BASE_URL,
@@ -223,6 +314,8 @@ export class BackendApiSource extends DataSource {
     this.tilePromiseByUrl = new Map();
     this.tileDataByUrl = new Map();
     this.baseUrlCandidates = [this.baseUrl];
+    this.gridZoomMax = GRID_ZOOM_MAX_DEFAULT;
+    this.cellZoomExtra = CELL_ZOOM_EXTRA_DEFAULT;
   }
 
   async getManifest() {
@@ -236,7 +329,16 @@ export class BackendApiSource extends DataSource {
         const r = await this.fetchImpl(url);
         if (r.ok) {
           this.baseUrl = candidateBaseUrl;
-          return r.json();
+          const json = await r.json();
+          const gridZoomMax = Number(json?.defaults?.grid_zoom_max);
+          const cellZoomExtra = Number(json?.defaults?.cell_zoom_extra);
+          if (Number.isFinite(gridZoomMax) && gridZoomMax > 0) {
+            this.gridZoomMax = gridZoomMax;
+          }
+          if (Number.isFinite(cellZoomExtra) && cellZoomExtra > 0) {
+            this.cellZoomExtra = cellZoomExtra;
+          }
+          return json;
         }
         lastErr = new Error(`HTTP ${r.status} while loading backend manifest (${url})`);
         if (r.status !== 404) throw lastErr;
@@ -271,16 +373,15 @@ export class BackendApiSource extends DataSource {
     const p = this.fetchImpl(url)
       .then((r) => {
         if (r.status === 404) {
-          return {
-            contract_version: 1,
+          return emptyPointTile({
             year: vars.year,
             mode: vars.mode,
             z: vars.z,
             x: vars.x,
             y: vars.y,
-            tileSize: 256,
-            points: [],
-          };
+            gridZoomMax: this.gridZoomMax,
+            cellZoomExtra: this.cellZoomExtra,
+          });
         }
         if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend point tile (${url})`);
         return r.json();

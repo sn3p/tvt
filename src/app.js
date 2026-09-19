@@ -3,6 +3,8 @@ import {
   BackendApiSource,
   isAbortError,
   lngLatToTileXY,
+  pointTileKind,
+  recordsFromPointTile,
   tilesForBounds,
 } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
@@ -991,8 +993,10 @@ export function initApp() {
           let privateCount = 0;
           let isorgCount = 0;
           for (const marker of markers) {
-            if (marker?.options?.tvtIsorg) isorgCount += 1;
-            else privateCount += 1;
+            const weight = Number(marker?.options?.tvtCount);
+            const n = Number.isFinite(weight) && weight > 0 ? weight : 1;
+            if (marker?.options?.tvtIsorg) isorgCount += n;
+            else privateCount += n;
           }
           const total = privateCount + isorgCount;
           const tone = clusterToneForCounts({ privateCount, isorgCount });
@@ -1737,10 +1741,12 @@ export function initApp() {
 
     for (const r of rendered) {
       if (b && !b.contains(r.latlng)) continue;
-      inViewEntries += 1;
+      const weight = Number(r.count);
+      const n = Number.isFinite(weight) && weight > 0 ? weight : 1;
+      inViewEntries += n;
       inViewBirds += r.birdsTotal;
-      if (r.isPrivate) inViewPrivate += 1;
-      if (r.isIsorg) inViewIsorg += 1;
+      if (r.isPrivate) inViewPrivate += n;
+      if (r.isIsorg) inViewIsorg += n;
     }
 
     hudStats = { entries: inViewEntries, birds: inViewBirds };
@@ -2912,6 +2918,22 @@ export function initApp() {
     return entryHasMode(entry, "isorg");
   }
 
+  function entryWeight(entry) {
+    const n = Number(entry?.count);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+  }
+
+  function isPointEntry(entry) {
+    return entry?.kind !== "cell" && Number.isFinite(Number(entry?.id));
+  }
+
+  function workerFeatureEntryCount(props) {
+    const weighted = Number(props?.count);
+    if (Number.isFinite(weighted) && weighted > 0) return weighted;
+    if (props?.cluster) return Number(props?.point_count) || 0;
+    return 1;
+  }
+
   function pointMarkerIdKey(entry) {
     if (entry?.key != null) return String(entry.key);
     const id = Number(entry?.id);
@@ -2942,8 +2964,18 @@ export function initApp() {
     };
   }
 
-  function setPointMarkerVisual(marker, isorg) {
-    if (pointRenderKind === "clusters") {
+  function setPointMarkerVisual(marker, isorg, { count = 1 } = {}) {
+    const weight = Number.isFinite(count) && count > 0 ? count : 1;
+    marker.options.tvtCount = weight;
+    if (weight > 1) {
+      const icon = weightedClusterIcon({
+        total: weight,
+        isorgCount: isorg ? weight : 0,
+        privateCount: isorg ? 0 : weight,
+      });
+      if (typeof marker.setIcon === "function") marker.setIcon(icon);
+      marker.setZIndexOffset?.(isorg ? 1000 : 0);
+    } else if (pointRenderKind === "clusters") {
       marker.setIcon(pointMarkerIcon(isorg));
       marker.setZIndexOffset(isorg ? 1000 : 0);
     } else if (typeof marker.setStyle === "function") {
@@ -2952,17 +2984,59 @@ export function initApp() {
     marker.options.tvtIsorg = Boolean(isorg);
   }
 
-  function createPointMarker(latlng, isorg) {
+  function weightedClusterIcon({ total, isorgCount, privateCount }) {
+    const tone = clusterToneForCounts({
+      privateCount: Number(privateCount) || 0,
+      isorgCount: Number(isorgCount) || 0,
+    });
+    return globalThis.L.divIcon({
+      className: `tvt-cluster tvt-cluster--${tone}`,
+      html: `<div><span>${total}</span></div>`,
+      iconSize: [42, 42],
+    });
+  }
+
+  function createWeightedClusterMarker(
+    latlng,
+    { total, isorgCount, privateCount },
+  ) {
+    const isorg = Number(isorgCount) > 0 && Number(privateCount) === 0;
+    return globalThis.L.marker(latlng, {
+      icon: weightedClusterIcon({ total, isorgCount, privateCount }),
+      zIndexOffset: isorg ? 1000 : 0,
+      tvtIsorg: isorg,
+      tvtCount: total,
+    });
+  }
+
+  function bindCellZoom(marker, latlng) {
+    marker.on("click", () => {
+      const currentZoom = map.getZoom();
+      map.flyTo(latlng, Math.min(map.getMaxZoom(), currentZoom + 1));
+    });
+  }
+
+  function createPointMarker(latlng, isorg, { count = 1 } = {}) {
+    const weight = Number.isFinite(count) && count > 0 ? count : 1;
+    if (weight > 1) {
+      return createWeightedClusterMarker(latlng, {
+        total: weight,
+        isorgCount: isorg ? weight : 0,
+        privateCount: isorg ? 0 : weight,
+      });
+    }
     if (pointRenderKind === "clusters") {
       return globalThis.L.marker(latlng, {
         icon: pointMarkerIcon(isorg),
         zIndexOffset: isorg ? 1000 : 0,
         tvtIsorg: isorg,
+        tvtCount: 1,
       });
     }
     return globalThis.L.circleMarker(latlng, {
       ...pointMarkerPathStyle(isorg),
       tvtIsorg: isorg,
+      tvtCount: 1,
     });
   }
 
@@ -3003,6 +3077,7 @@ export function initApp() {
     rendered = Array.from(pointMarkerStateById.values()).map((state) => ({
       latlng: state.latlng,
       birdsTotal: 0,
+      count: entryWeight(state.entry),
       isPrivate: !state.isIsorg,
       isIsorg: state.isIsorg,
       birdIds: new Set(),
@@ -3020,15 +3095,9 @@ export function initApp() {
   function upsertPointMarkers(entries) {
     const nextById = new Map();
     for (const entry of entries) {
-      const id = Number(entry?.id);
       const lat = Number(entry?.lat);
       const lng = Number(entry?.lng);
-      if (
-        !Number.isFinite(id) ||
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lng)
-      )
-        continue;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
       nextById.set(pointMarkerIdKey(entry), entry);
     }
 
@@ -3043,52 +3112,77 @@ export function initApp() {
     }
 
     for (const [markerId, entry] of nextById.entries()) {
-      const id = Number(entry.id);
       const latlng = globalThis.L.latLng(Number(entry.lat), Number(entry.lng));
       const existing = pointMarkerStateById.get(markerId);
       const isorg = pointEntryIsorg(entry);
-      const detailKey = pointDetailsKey({
-        year: pointTileYear || Number(yearInput.value || 0) || 0,
-        id,
-      });
-      const cachedBirds = pointEntryDetailsByKey.get(detailKey) || [];
+      const count = entryWeight(entry);
+      const bindPopup = isPointEntry(entry);
+      const id = Number(entry.id);
+      const detailKey = bindPopup
+        ? pointDetailsKey({
+            year: pointTileYear || Number(yearInput.value || 0) || 0,
+            id,
+          })
+        : "";
+      const cachedBirds = bindPopup
+        ? pointEntryDetailsByKey.get(detailKey) || []
+        : [];
 
       if (existing) {
         const moved =
           Math.abs(existing.latlng.lat - latlng.lat) > 1e-9 ||
           Math.abs(existing.latlng.lng - latlng.lng) > 1e-9;
         const modeChanged = existing.isIsorg !== isorg;
-        if (moved || modeChanged) {
-          existing.marker.setLatLng(latlng);
-          setPointMarkerVisual(existing.marker, isorg);
+        const countChanged = entryWeight(existing.entry) !== count;
+        const needsRebuild =
+          countChanged && count > 1 !== entryWeight(existing.entry) > 1;
+        if (!needsRebuild) {
+          if (moved || modeChanged || countChanged) {
+            existing.marker.setLatLng(latlng);
+            setPointMarkerVisual(existing.marker, isorg, { count });
+          }
+          if (bindPopup) {
+            existing.marker.setPopupContent(
+              cachedBirds.length > 0
+                ? popupHtml(entry, cachedBirds)
+                : popupLoadingHtml(entry),
+            );
+            ensurePointPopupToggle(existing.marker);
+          }
+          existing.latlng = latlng;
+          existing.entry =
+            cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
+          existing.isIsorg = isorg;
+          continue;
         }
-        existing.marker.setPopupContent(
-          cachedBirds.length > 0
-            ? popupHtml(entry, cachedBirds)
-            : popupLoadingHtml(entry),
-        );
-        ensurePointPopupToggle(existing.marker);
-        existing.latlng = latlng;
-        existing.entry =
-          cachedBirds.length > 0 ? { ...entry, birds: cachedBirds } : entry;
-        existing.isIsorg = isorg;
-        continue;
+        try {
+          pointsLayer.removeLayer(existing.marker);
+        } catch {
+          // ignore
+        }
+        pointMarkerStateById.delete(markerId);
       }
 
-      const marker = createPointMarker(latlng, isorg)
-        .bindPopup(
-          cachedBirds.length > 0
-            ? popupHtml(entry, cachedBirds)
-            : popupLoadingHtml(entry),
-          {
-            maxWidth: 340,
-            closeOnClick: false,
-            autoClose: true,
-          },
-        )
-        .addTo(pointsLayer);
-      bindPointMarkerPopup(marker, markerId);
-      ensurePointPopupToggle(marker);
+      const marker = createPointMarker(latlng, isorg, { count });
+      if (bindPopup) {
+        marker
+          .bindPopup(
+            cachedBirds.length > 0
+              ? popupHtml(entry, cachedBirds)
+              : popupLoadingHtml(entry),
+            {
+              maxWidth: 340,
+              closeOnClick: false,
+              autoClose: true,
+            },
+          )
+          .addTo(pointsLayer);
+        bindPointMarkerPopup(marker, markerId);
+        ensurePointPopupToggle(marker);
+      } else {
+        marker.addTo(pointsLayer);
+        if (count > 1) bindCellZoom(marker, latlng);
+      }
 
       pointMarkerStateById.set(markerId, {
         marker,
@@ -3108,6 +3202,7 @@ export function initApp() {
   }
 
   function buildPointWorkerFeature(entry) {
+    const id = Number(entry.id);
     return {
       type: "Feature",
       geometry: {
@@ -3115,8 +3210,10 @@ export function initApp() {
         coordinates: [Number(entry.lng), Number(entry.lat)],
       },
       properties: {
-        id: Number(entry.id),
+        ...(Number.isFinite(id) ? { id } : {}),
         isorg: Boolean(pointEntryIsorg(entry)),
+        count: entryWeight(entry),
+        kind: entry?.kind === "cell" ? "cell" : "point",
       },
     };
   }
@@ -3141,9 +3238,18 @@ export function initApp() {
     for (const entry of entries) {
       const id = Number(entry?.id) || 0;
       const isorg = pointEntryIsorg(entry) ? 1 : 0;
+      const count = entryWeight(entry);
+      const latBits = Math.round(Number(entry?.lat) * 1e6) || 0;
+      const lngBits = Math.round(Number(entry?.lng) * 1e6) || 0;
       hash ^= id & 0xff_ff_ff_ff;
       hash = Math.imul(hash, 16777619) >>> 0;
       hash ^= isorg;
+      hash = Math.imul(hash, 16777619) >>> 0;
+      hash ^= count;
+      hash = Math.imul(hash, 16777619) >>> 0;
+      hash ^= latBits;
+      hash = Math.imul(hash, 16777619) >>> 0;
+      hash ^= lngBits;
       hash = Math.imul(hash, 16777619) >>> 0;
     }
     const optRadius = Number(options?.radius) || 0;
@@ -3153,7 +3259,7 @@ export function initApp() {
   }
 
   function pointClusterToneForWorkerFeature(clusterProps) {
-    const total = Number(clusterProps?.point_count) || 0;
+    const total = workerFeatureEntryCount(clusterProps);
     const isorgCount = Number(clusterProps?.isorg_count) || 0;
     const privateCount = Number(clusterProps?.private_count) || 0;
     if (total > 0) {
@@ -3232,7 +3338,7 @@ export function initApp() {
       const props = feature?.properties || {};
       const isCluster = Boolean(props?.cluster);
       if (isCluster) {
-        const total = Number(props?.point_count) || 0;
+        const total = workerFeatureEntryCount(props);
         const isorgCount = Number(props?.isorg_count) || 0;
         const privateCount = Number(props?.private_count) || 0;
         const tone = pointClusterToneForWorkerFeature(props);
@@ -3261,9 +3367,27 @@ export function initApp() {
         continue;
       }
 
-      const id = Number(props?.id);
+      const count = workerFeatureEntryCount(props);
       const isorg = Boolean(props?.isorg);
-      if (!Number.isFinite(id)) continue;
+      const id = Number(props?.id);
+      const canOpenEntry = Number.isFinite(id) && count === 1 && props?.kind !== "cell";
+
+      if (!canOpenEntry) {
+        const marker =
+          count > 1
+            ? createWeightedClusterMarker(latlng, {
+                total: count,
+                isorgCount: isorg ? count : 0,
+                privateCount: isorg ? 0 : count,
+              })
+            : createPointMarker(latlng, isorg, { count: 1 });
+        marker.addTo(pointsWorkerClusterLayer);
+        if (count > 1) bindCellZoom(marker, latlng);
+        inViewEntries += count;
+        if (isorg) inViewIsorg += count;
+        else inViewPrivate += count;
+        continue;
+      }
 
       const markerId = `${isorg ? "isorg" : "private"}:${id}`;
       const entry = pointEntryByKeyForCurrentRender.get(markerId) || {
@@ -3493,41 +3617,29 @@ export function initApp() {
       };
 
       const nextEntriesById = new Map();
+      let mergedEntryCount = 0;
+      let mergedRecordCount = 0;
+      let tileKind = "";
 
       for (const result of tileResults) {
-        const tileJson = result?.json;
-        const points = Array.isArray(tileJson?.points) ? tileJson.points : [];
-        const isorg = result?.mode === "isorg";
-        for (const p of points) {
-          const id = Number(p?.id);
-          const lat = Number(p?.lat);
-          const lng = Number(p?.lng);
-          if (
-            !Number.isFinite(id) ||
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lng)
-          )
-            continue;
-          const pc4Value = String(p?.pc4 ?? "");
-
-          const markerId = `${isorg ? "isorg" : "private"}:${id}`;
-          if (nextEntriesById.has(markerId)) continue;
-
-          nextEntriesById.set(markerId, {
-            id,
-            key: markerId,
-            lat,
-            lng,
-            pc4: pc4Value,
-            isorg,
-            modes: [isorg ? "isorg" : "private"],
-            birds: [],
-          });
+        const records = recordsFromPointTile(result?.json, {
+          mode: result?.mode,
+        });
+        const resultKind =
+          pointTileKind(result?.json) === "cells" ? "cell" : "point";
+        if (!tileKind) tileKind = resultKind;
+        else if (resultKind !== tileKind) tileKind = "mixed";
+        for (const record of records) {
+          if (nextEntriesById.has(record.key)) continue;
+          nextEntriesById.set(record.key, record);
+          mergedRecordCount += 1;
+          mergedEntryCount += entryWeight(record);
         }
       }
 
-      latestPointEntryCount = nextEntriesById.size;
+      latestPointEntryCount = mergedEntryCount;
       isPointCapExceeded =
+        tileKind !== "cell" &&
         hasMaxPointsInViewCap() &&
         latestPointEntryCount > pointsSettings.maxPointsInView;
       updatePointsControlsVisibility();
@@ -3540,7 +3652,11 @@ export function initApp() {
       );
 
       let entriesForRender = Array.from(nextEntriesById.values());
-      if (isPointCapExceeded && hasMaxPointsInViewCap()) {
+      if (
+        tileKind !== "cell" &&
+        isPointCapExceeded &&
+        hasMaxPointsInViewCap()
+      ) {
         entriesForRender = entriesForRender.slice(
           0,
           pointsSettings.maxPointsInView,
@@ -3568,8 +3684,13 @@ export function initApp() {
         tileCount: tiles.length,
         tileRequestCount,
         fetchedModes: fetchModes,
-        mergedPointCount: nextEntriesById.size,
-        renderedPointCount: entriesForRender.length,
+        tileKind: tileKind || "points",
+        mergedRecordCount,
+        mergedPointCount: mergedEntryCount,
+        renderedPointCount: entriesForRender.reduce(
+          (sum, entry) => sum + entryWeight(entry),
+          0,
+        ),
         totalEntries: totals.entries,
       });
 

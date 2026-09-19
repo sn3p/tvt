@@ -57,11 +57,18 @@ function buildIndex(points, options) {
     ...DEFAULT_CLUSTER_OPTIONS,
     ...normalizedOptions,
     // Keep category composition available on cluster features.
-    map: (props) => ({
-      isorg_count: props?.isorg ? 1 : 0,
-      private_count: props?.isorg ? 0 : 1,
-    }),
+    map: (props) => {
+      const raw = Number(props?.count);
+      const count = Number.isFinite(raw) && raw > 0 ? raw : 1;
+      const isorg = Boolean(props?.isorg);
+      return {
+        count,
+        isorg_count: isorg ? count : 0,
+        private_count: isorg ? 0 : count,
+      };
+    },
     reduce: (acc, props) => {
+      acc.count += Number(props?.count || 0);
       acc.isorg_count += Number(props?.isorg_count || 0);
       acc.private_count += Number(props?.private_count || 0);
     },
