@@ -251,7 +251,7 @@ export function initApp() {
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const CELL_TILE_POINTS_HINT =
-    "Op dit zoomniveau zijn er geen individuele punten; de kaart toont clusters. Zoom in voor punten.";
+    "Op dit zoomniveau toont Punten één stip per rastercel. Zoom in voor individuele tellingen.";
   const WORKER_CLUSTER_FALLBACK_HINT =
     "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
@@ -2956,11 +2956,20 @@ export function initApp() {
     });
   }
 
-  function pointMarkerPathStyle(isorg) {
+  function cellDotRadius(count) {
+    const weight = Number.isFinite(count) && count > 0 ? count : 1;
+    return Math.min(5, 3 + Math.log10(weight));
+  }
+
+  function usesWeightedClusterBadge(count) {
+    return pointRenderKind !== "points" && count > 1;
+  }
+
+  function pointMarkerPathStyle(isorg, { count = 1, cell = false } = {}) {
     return {
-      radius: 5,
+      radius: cell ? cellDotRadius(count) : 5,
       color: "rgba(255,255,255,0.92)",
-      weight: 2,
+      weight: cell ? 1 : 2,
       fillColor: isorg ? "#60a5fa" : "#fb923c",
       fillOpacity: 0.9,
       opacity: 1,
@@ -2968,10 +2977,14 @@ export function initApp() {
     };
   }
 
-  function setPointMarkerVisual(marker, isorg, { count = 1 } = {}) {
+  function setPointMarkerVisual(
+    marker,
+    isorg,
+    { count = 1, cell = false } = {},
+  ) {
     const weight = Number.isFinite(count) && count > 0 ? count : 1;
     marker.options.tvtCount = weight;
-    if (weight > 1) {
+    if (usesWeightedClusterBadge(weight)) {
       const icon = weightedClusterIcon({
         total: weight,
         isorgCount: isorg ? weight : 0,
@@ -2983,7 +2996,7 @@ export function initApp() {
       marker.setIcon(pointMarkerIcon(isorg));
       marker.setZIndexOffset(isorg ? 1000 : 0);
     } else if (typeof marker.setStyle === "function") {
-      marker.setStyle(pointMarkerPathStyle(isorg));
+      marker.setStyle(pointMarkerPathStyle(isorg, { count: weight, cell }));
     }
     marker.options.tvtIsorg = Boolean(isorg);
   }
@@ -3020,9 +3033,9 @@ export function initApp() {
     });
   }
 
-  function createPointMarker(latlng, isorg, { count = 1 } = {}) {
+  function createPointMarker(latlng, isorg, { count = 1, cell = false } = {}) {
     const weight = Number.isFinite(count) && count > 0 ? count : 1;
-    if (weight > 1) {
+    if (usesWeightedClusterBadge(weight)) {
       return createWeightedClusterMarker(latlng, {
         total: weight,
         isorgCount: isorg ? weight : 0,
@@ -3038,9 +3051,9 @@ export function initApp() {
       });
     }
     return globalThis.L.circleMarker(latlng, {
-      ...pointMarkerPathStyle(isorg),
+      ...pointMarkerPathStyle(isorg, { count: weight, cell }),
       tvtIsorg: isorg,
-      tvtCount: 1,
+      tvtCount: weight,
     });
   }
 
@@ -3124,6 +3137,7 @@ export function initApp() {
       const isorg = pointEntryIsorg(entry);
       const count = entryWeight(entry);
       const bindPopup = isPointEntry(entry);
+      const isCell = entry?.kind === "cell";
       const id = Number(entry.id);
       const detailKey = bindPopup
         ? pointDetailsKey({
@@ -3141,12 +3155,18 @@ export function initApp() {
           Math.abs(existing.latlng.lng - latlng.lng) > 1e-9;
         const modeChanged = existing.isIsorg !== isorg;
         const countChanged = entryWeight(existing.entry) !== count;
+        const existingBadge = usesWeightedClusterBadge(
+          entryWeight(existing.entry),
+        );
         const needsRebuild =
-          countChanged && count > 1 !== entryWeight(existing.entry) > 1;
+          existingBadge !== usesWeightedClusterBadge(count);
         if (!needsRebuild) {
           if (moved || modeChanged || countChanged) {
             existing.marker.setLatLng(latlng);
-            setPointMarkerVisual(existing.marker, isorg, { count });
+            setPointMarkerVisual(existing.marker, isorg, {
+              count,
+              cell: isCell,
+            });
           }
           if (bindPopup) {
             existing.marker.setPopupContent(
@@ -3170,7 +3190,10 @@ export function initApp() {
         pointMarkerStateById.delete(markerId);
       }
 
-      const marker = createPointMarker(latlng, isorg, { count });
+      const marker = createPointMarker(latlng, isorg, {
+        count,
+        cell: isCell,
+      });
       if (bindPopup) {
         marker
           .bindPopup(
@@ -3188,7 +3211,7 @@ export function initApp() {
         ensurePointPopupToggle(marker);
       } else {
         marker.addTo(pointsLayer);
-        if (count > 1) bindCellZoom(marker, latlng);
+        bindCellZoom(marker, latlng);
       }
 
       pointMarkerStateById.set(markerId, {
@@ -3649,8 +3672,9 @@ export function initApp() {
         tileKind !== "cell" &&
         hasMaxPointsInViewCap() &&
         latestPointEntryCount > pointsSettings.maxPointsInView;
+      const isCellPayload = tileKind === "cell" || tileKind === "mixed";
       forceClustersForCellTiles =
-        tileKind === "cell" || tileKind === "mixed";
+        isCellPayload && pointsSettings.displayMode !== "points";
       updatePointsControlsVisibility();
 
       setPointRenderKind(
@@ -3674,10 +3698,7 @@ export function initApp() {
         setPointsSidebarMessage(
           `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`,
         );
-      } else if (
-        pointsSettings.displayMode === "points" &&
-        forceClustersForCellTiles
-      ) {
+      } else if (pointsSettings.displayMode === "points" && isCellPayload) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       } else if (
         !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
@@ -3698,6 +3719,8 @@ export function initApp() {
         tileRequestCount,
         fetchedModes: fetchModes,
         tileKind: tileKind || "points",
+        displayMode: pointsSettings.displayMode,
+        pointRenderKind,
         mergedRecordCount,
         mergedPointCount: mergedEntryCount,
         renderedPointCount: entriesForRender.reduce(
