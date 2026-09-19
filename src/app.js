@@ -250,6 +250,8 @@ export function initApp() {
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
+  const CELL_TILE_POINTS_HINT =
+    "Op dit zoomniveau zijn er geen individuele punten; de kaart toont clusters. Zoom in voor punten.";
   const WORKER_CLUSTER_FALLBACK_HINT =
     "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
@@ -1085,6 +1087,7 @@ export function initApp() {
   let pointTileYear = 0;
   let latestPointEntryCount = 0;
   let isPointCapExceeded = false;
+  let forceClustersForCellTiles = false;
   const pointMarkerStateById = new Map();
   const pointEntryDetailsPromiseByKey = new Map();
   const pointEntryDetailsByKey = new Map();
@@ -1502,6 +1505,7 @@ export function initApp() {
   }
 
   function effectiveClusterEngine() {
+    if (forceClustersForCellTiles && isWorkerClusterAvailable()) return "worker";
     if (pointsSettings.clusterEngine !== "worker") return "default";
     return isWorkerClusterAvailable() ? "worker" : "default";
   }
@@ -3051,7 +3055,8 @@ export function initApp() {
     );
   }
 
-  function resolvePointRenderKind({ zoom, totalCount }) {
+  function resolvePointRenderKind({ zoom, totalCount, forceClusters = false }) {
+    if (forceClusters) return "clusters";
     const requested =
       pointsSettings.displayMode === "auto"
         ? resolveAutoPointRenderKind({ zoom })
@@ -3085,7 +3090,9 @@ export function initApp() {
       entry: state.entry,
     }));
     totals = {
-      entries: pointTotalsOverride?.totalEntries ?? rendered.length,
+      entries:
+        pointTotalsOverride?.totalEntries ??
+        rendered.reduce((sum, row) => sum + entryWeight(row), 0),
       birds: pointTotalsOverride?.totalBirds ?? 0,
     };
     updateViewportStats();
@@ -3642,12 +3649,15 @@ export function initApp() {
         tileKind !== "cell" &&
         hasMaxPointsInViewCap() &&
         latestPointEntryCount > pointsSettings.maxPointsInView;
+      forceClustersForCellTiles =
+        tileKind === "cell" || tileKind === "mixed";
       updatePointsControlsVisibility();
 
       setPointRenderKind(
         resolvePointRenderKind({
           zoom: map.getZoom(),
           totalCount: latestPointEntryCount,
+          forceClusters: forceClustersForCellTiles,
         }),
       );
 
@@ -3664,12 +3674,15 @@ export function initApp() {
         setPointsSidebarMessage(
           `${POINT_CAP_HINT} (${fmtInt(entriesForRender.length)} / ${fmtInt(latestPointEntryCount)})`,
         );
-      } else {
-        if (
-          !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
-        ) {
-          setPointsSidebarMessage("");
-        }
+      } else if (
+        pointsSettings.displayMode === "points" &&
+        forceClustersForCellTiles
+      ) {
+        setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
+      } else if (
+        !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
+      ) {
+        setPointsSidebarMessage("");
       }
 
       pointEntryByKeyForCurrentRender.clear();
@@ -3696,8 +3709,7 @@ export function initApp() {
 
       const wantsWorkerClusters =
         pointRenderKind === "clusters" &&
-        pointsSettings.clusterEngine === "worker" &&
-        isWorkerClusterAvailable();
+        effectiveClusterEngine() === "worker";
 
       if (wantsWorkerClusters) {
         try {
