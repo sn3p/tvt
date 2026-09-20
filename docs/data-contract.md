@@ -21,8 +21,8 @@ Current fields:
 
 Defaults:
 
-- local dev: `http://localhost:3000/api/v1`
-- non-local: same-origin `/api/v1`
+- local dev: `http://127.0.0.1:3000/api/v1`
+- non-local (GitHub Pages): `https://tvt-api.matthijskuiper.nl/api/v1`
 
 ---
 
