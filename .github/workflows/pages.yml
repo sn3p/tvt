@@ -43,6 +43,10 @@ jobs:
             echo 'README still documents localhost:3000 as an API URL; runtime default is 127.0.0.1' >&2
             exit 1
           fi
+          if grep -nF 'github.com/sn3p/tvt-api' README.md docs/data-contract.md index.html; then
+            echo 'Public files must not link the private tvt-api GitHub repo' >&2
+            exit 1
+          fi
 
       - name: Upload site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

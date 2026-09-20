@@ -347,61 +347,33 @@
   </main>
 
   <footer class="meta-footer muted">
-    <span>Gemaakt door <a href="https://matthijskuiper.nl" target="_blank" rel="noreferrer">Matthijs Kuiper</a></span>
+    <a href="https://github.com/sn3p/tvt" target="_blank" rel="noreferrer">GitHub</a>
     <span class="meta-sep" aria-hidden="true">·</span>
-    <span>Niet-commercieel project</span>
+    <button id="openInfoDialogBtn" class="meta-footer-link-btn" type="button">Over deze kaart</button>
     <span class="meta-sep" aria-hidden="true">·</span>
-    <span>Bron: <a href="https://www.vogelbescherming.nl/" target="_blank" rel="noreferrer">Vogelbescherming</a> (data &
-      beelden)</span>
-    <span class="meta-sep" aria-hidden="true">·</span>
-    <button id="openInfoDialogBtn" class="meta-footer-link-btn" type="button">Meer informatie</button>
+    <span>Bron: <a href="https://www.vogelbescherming.nl/" target="_blank" rel="noreferrer">Vogelbescherming</a></span>
     <button id="themeToggleBtn" class="theme-toggle-btn" type="button" aria-label="Schakel naar licht thema"></button>
   </footer>
 
   <dialog id="infoDialog" class="info-dialog" aria-labelledby="infoDialogTitle">
     <article class="info-dialog-card">
       <header class="info-dialog-header">
-        <h2 id="infoDialogTitle">Meer informatie</h2>
+        <h2 id="infoDialogTitle">Over deze kaart</h2>
         <button id="closeInfoDialogBtn" class="info-dialog-close-btn" type="button"
           aria-label="Sluit informatievenster">×</button>
       </header>
 
       <div class="info-dialog-body">
-        <section>
-          <h3>Doel</h3>
-          <p>Dit project maakt tellingen uit de Nationale Tuinvogeltelling inzichtelijk op een kaart, zodat je patronen
-            per buurt/regio kunt verkennen.</p>
-        </section>
-
-        <section>
-          <h3>Onafhankelijk en niet-commercieel</h3>
-          <p>Dit is een zelfstandig, niet-commercieel project van Matthijs Kuiper. Het is niet officieel verbonden aan
-            Vogelbescherming.</p>
-        </section>
-
-        <section>
-          <h3>Bronvermelding</h3>
-          <p>Data en beelden zijn afkomstig van Vogelbescherming. Rechten blijven bij de oorspronkelijke rechthebbenden.
-          </p>
-        </section>
-
-        <section>
-          <h3>Status</h3>
-          <p>Deze site staat online in afwachting van reactie/afstemming met Vogelbescherming. Als er bezwaren zijn, pas
-            ik het aan of haal ik onderdelen weg.</p>
-        </section>
-
-        <section>
-          <h3>Privacy</h3>
-          <p>De kaart bevat geen persoonsgegevens. Inzendingen zijn anoniem; we tonen informatie primair voor overzicht
-            en vergelijking.</p>
-        </section>
+        <p>Dit is een onofficiële, experimentele, niet-commerciële kaart om patronen per buurt en regio te verkennen.</p>
+        <p>Data en beelden komen van de <a href="https://www.vogelbescherming.nl/tuinvogeltelling" target="_blank"
+            rel="noreferrer">Nationale Tuinvogeltelling</a>. Rechten blijven bij <a
+            href="https://www.vogelbescherming.nl/" target="_blank" rel="noreferrer">Vogelbescherming</a>.</p>
+        <p>Vragen of bezwaren? <a href="mailto:info@matthijskuiper.nl">Mail me</a>. Code op <a
+            href="https://github.com/sn3p/tvt" target="_blank" rel="noreferrer">GitHub</a>.</p>
       </div>
 
       <footer class="info-dialog-actions">
-        <a href="https://www.vogelbescherming.nl/" target="_blank" rel="noreferrer">Vogelbescherming</a>
-        <a href="mailto:info@matthijskuiper.nl">Contact</a>
-        <button id="dismissInfoDialogBtn" type="button">Sluiten</button>
+        <button id="dismissInfoDialogBtn" class="info-dialog-primary-btn" type="button">Begrepen</button>
       </footer>
     </article>
   </dialog>

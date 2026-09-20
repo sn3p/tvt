@@ -452,10 +452,14 @@ export function initApp() {
 
     markInfoDialogSeen();
     const focusables = getDialogFocusableElements(infoDialog);
-    if (focusables.length > 0) {
+    const initial =
+      dismissInfoDialogBtn && focusables.includes(dismissInfoDialogBtn)
+        ? dismissInfoDialogBtn
+        : focusables[0];
+    if (initial) {
       window.requestAnimationFrame(() => {
         try {
-          focusables[0].focus();
+          initial.focus();
         } catch {
           // ignore
         }
