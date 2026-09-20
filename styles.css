@@ -1446,8 +1446,8 @@ body:not([data-theme="light"]) .tvt-hud {
 .info-dialog-close-btn:focus-visible,
 .info-dialog-primary-btn:focus-visible,
 .info-dialog-body a:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-focus);
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .info-dialog-body {
