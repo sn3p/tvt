@@ -42,6 +42,10 @@ Default local API: `http://localhost:3000/api/v1`.
 
 Start daarna de frontend via een simpele lokale webserver vanuit deze repo root. In Conductor, Run serves this repo root over HTTP on `$CONDUCTOR_PORT`; the map still calls `http://localhost:3000/api/v1`, so tvt-api must be running on port 3000 (its own Conductor Run).
 
+### GitHub Pages
+
+Push to `main` deploys the static map to [https://sn3p.github.io/tvt/](https://sn3p.github.io/tvt/) via `.github/workflows/pages.yml`. The published site calls `https://tvt-api.matthijskuiper.nl/api/v1`. Production tvt-api must allow origin `https://sn3p.github.io` in `TVT_ALLOWED_ORIGINS`.
+
 ### Frontend runtime config
 
 Frontend runtime config staat expliciet in `index.html` via:
@@ -51,7 +55,9 @@ Frontend runtime config staat expliciet in `index.html` via:
   const isLocalDev = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
   window.__TVT_CONFIG__ = {
-    backendApiBaseUrl: isLocalDev ? "http://localhost:3000/api/v1" : `${window.location.origin}/api/v1`,
+    backendApiBaseUrl: isLocalDev
+      ? "http://127.0.0.1:3000/api/v1"
+      : "https://tvt-api.matthijskuiper.nl/api/v1",
     enableDiagnostics: isLocalDev
   };
 </script>
@@ -59,8 +65,8 @@ Frontend runtime config staat expliciet in `index.html` via:
 
 Belangrijk:
 
-- lokaal (`localhost` / `127.0.0.1`) gebruikt de app standaard `http://localhost:3000/api/v1`
-- buiten lokaal gebruikt de app standaard hetzelfde origin op `/api/v1`
+- lokaal (`localhost` / `127.0.0.1`) gebruikt de app standaard `http://127.0.0.1:3000/api/v1`
+- buiten lokaal (GitHub Pages) gebruikt de app `https://tvt-api.matthijskuiper.nl/api/v1`
 - de frontend gebruikt alleen de API; er is geen lokale JSON fallback meer
 - `enableDiagnostics` zet startup probes naar `window.__tvtBackendStatusProbe` en `window.__tvtPointTilesProbe` aan of uit
 - voor cross-origin frontend/API deployments moet tvt-api `TVT_ALLOWED_ORIGINS` expliciet toestaan
