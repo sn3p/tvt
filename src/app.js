@@ -968,10 +968,19 @@ export function initApp() {
 
   setStatsLoading("Dataset laden…");
 
+  // Desktop opens at zoom 8 so NL fills the frame; phones fit the full bbox.
+  const NL_CENTER = [52.1326, 5.2913];
+  const NL_BOUNDS = [
+    [50.75, 3.2],
+    [53.7, 7.25],
+  ];
+  const NL_INITIAL_ZOOM = 8;
+
   const map = globalThis.L.map(mapEl, {
     zoomControl: false,
     preferCanvas: true,
-    // minZoom: 8,
+    center: NL_CENTER,
+    zoom: NL_INITIAL_ZOOM,
   });
 
   globalThis.L.control.zoom({ position: "topright" }).addTo(map);
@@ -4194,7 +4203,11 @@ export function initApp() {
       const z = Number(manifest?.defaults?.zoom_min ?? 9) || 9;
 
       // Probe one deterministic NL tile near the country's geographic center.
-      const { x, y } = lngLatToTileXY({ lng: 5.2913, lat: 52.1326, z });
+      const { x, y } = lngLatToTileXY({
+        lng: NL_CENTER[1],
+        lat: NL_CENTER[0],
+        z,
+      });
       const sampleTile = await getPointTile({ year, mode, z, x, y });
 
       globalThis.__tvtPointTilesProbe = {
@@ -4250,14 +4263,15 @@ export function initApp() {
   pointsModePrivateInput.addEventListener("change", onFiltersChanged);
   pointsModeIsorgInput.addEventListener("change", onFiltersChanged);
 
-  // Initial view while loading.
-  map.fitBounds(
-    [
-      [50.75, 3.2],
-      [53.7, 7.25],
-    ],
-    { padding: [20, 20] },
-  );
+  function applyDefaultNlView() {
+    if (initialPc4 || initialStoredLocation) return;
+    if (isMobile()) {
+      map.fitBounds(NL_BOUNDS, { padding: [16, 16], animate: false });
+      return;
+    }
+    map.setView(NL_CENTER, NL_INITIAL_ZOOM, { animate: false });
+  }
+
   updatePointsControlsVisibility();
 
   const onViewportSettled = () => {
@@ -4306,7 +4320,10 @@ export function initApp() {
   map.whenReady(() => {
     invalidate();
     // A second invalidate on next tick tends to fix "size is 0" edge cases.
-    setTimeout(invalidate, 0);
+    setTimeout(() => {
+      invalidate();
+      applyDefaultNlView();
+    }, 0);
     window.requestAnimationFrame(() => {
       if (mode !== "species") return;
       onViewportSettled();
