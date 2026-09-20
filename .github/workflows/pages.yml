@@ -43,6 +43,27 @@ jobs:
             echo 'README still documents localhost:3000 as an API URL; runtime default is 127.0.0.1' >&2
             exit 1
           fi
+          if grep -nF 'github.com/sn3p/tvt-api' README.md docs/data-contract.md index.html; then
+            echo 'Public files must not link the private tvt-api GitHub repo' >&2
+            exit 1
+          fi
+          FOCUS_RULE="$(awk '
+            $0 ~ /^\.info-dialog-close-btn:focus-visible,/ { grab = 1 }
+            grab { print }
+            grab && $0 ~ /^}/ { exit }
+          ' styles.css)"
+          if [ -z "$FOCUS_RULE" ]; then
+            echo 'styles.css is missing the info-dialog :focus-visible rule' >&2
+            exit 1
+          fi
+          if printf '%s\n' "$FOCUS_RULE" | grep -q 'outline: none'; then
+            echo 'info-dialog :focus-visible must not remove the outline' >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$FOCUS_RULE" | grep -Eq 'outline:[[:space:]]*[0-9]+px'; then
+            echo 'info-dialog :focus-visible must set a visible outline width' >&2
+            exit 1
+          fi
 
       - name: Upload site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

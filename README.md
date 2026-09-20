@@ -5,7 +5,7 @@ Lightweight viewer voor resultaten van de Nationale Tuinvogeltelling (Vogelbesch
 ## Repo structuur (2026)
 
 - **Kaart (deze repo)**: root `index.html` + `main.js` + `src/app.js`
-  - Runtime data komt uit de Rails API in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api).
+  - Runtime data komt uit een aparte Rails API (`http://127.0.0.1:3000/api/v1` lokaal, `https://tvt-api.matthijskuiper.nl/api/v1` in productie).
 - **Oude app (live endpoints)**: `old/` (oude `index.html`, `styles.css`, `main.js`, `src/`), bedoeld om werkend te blijven.
 
 ## Features Draft
@@ -20,7 +20,7 @@ Zie DRAFT.md
 
 ### API + Frontend (huidige dev setup)
 
-De app gebruikt de Rails API in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api) voor alle runtime data:
+De app gebruikt een aparte Rails API voor alle runtime data:
 
 - point tiles manifest
 - point tiles
@@ -29,10 +29,9 @@ De app gebruikt de Rails API in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api
 - soortencatalogus (geaggregeerd)
 - soortenraster (geaggregeerd)
 
-Run that API from a `sn3p/tvt-api` checkout. Local database name remains `tvt_backend_development`. See the tvt-api README for Ruby/Postgres setup, import, tests, and [deployment](https://github.com/sn3p/tvt-api/blob/master/docs/deployment.md).
+Run that API locally on port 3000. Local database name remains `tvt_backend_development`.
 
 ```bash
-# in a sn3p/tvt-api checkout
 bundle install
 bin/rails db:prepare
 bin/rails server
@@ -40,11 +39,11 @@ bin/rails server
 
 Default local API: `http://127.0.0.1:3000/api/v1`.
 
-Start daarna de frontend via een simpele lokale webserver vanuit deze repo root. In Conductor, Run serves this repo root over HTTP on `$CONDUCTOR_PORT`; the map still calls `http://127.0.0.1:3000/api/v1`, so tvt-api must be running on port 3000 (its own Conductor Run).
+Start daarna de frontend via een simpele lokale webserver vanuit deze repo root. In Conductor, Run serves this repo root over HTTP on `$CONDUCTOR_PORT`; the map still calls `http://127.0.0.1:3000/api/v1`, so the API must be running on port 3000 (its own Conductor Run).
 
 ### GitHub Pages
 
-Push to `main` deploys the static map to [https://sn3p.github.io/tvt/](https://sn3p.github.io/tvt/) via `.github/workflows/pages.yml`. The published site calls `https://tvt-api.matthijskuiper.nl/api/v1`. Production tvt-api must allow origin `https://sn3p.github.io` in `TVT_ALLOWED_ORIGINS`.
+Push to `main` deploys the static map to [https://sn3p.github.io/tvt/](https://sn3p.github.io/tvt/) via `.github/workflows/pages.yml`. The published site calls `https://tvt-api.matthijskuiper.nl/api/v1`. Production API must allow origin `https://sn3p.github.io` in `TVT_ALLOWED_ORIGINS`.
 
 ### Frontend runtime config
 
@@ -69,8 +68,7 @@ Belangrijk:
 - buiten lokaal (GitHub Pages) gebruikt de app `https://tvt-api.matthijskuiper.nl/api/v1`
 - de frontend gebruikt alleen de API; er is geen lokale JSON fallback meer
 - `enableDiagnostics` zet startup probes naar `window.__tvtBackendStatusProbe` en `window.__tvtPointTilesProbe` aan of uit
-- voor cross-origin frontend/API deployments moet tvt-api `TVT_ALLOWED_ORIGINS` expliciet toestaan
-- zie [tvt-api `docs/deployment.md`](https://github.com/sn3p/tvt-api/blob/master/docs/deployment.md) voor same-origin vs cross-origin deployment
+- voor cross-origin frontend/API deployments moet de API `TVT_ALLOWED_ORIGINS` expliciet toestaan
 - je kunt alle defaults nog steeds overschrijven via `window.__TVT_CONFIG__`
 
 ## Notes: `uuid` → `entry id` (Vogelbescherming resultatenpagina)

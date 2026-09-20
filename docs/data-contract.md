@@ -2,7 +2,7 @@
 
 This document describes the current runtime contract used by the webapp.
 
-The Rails API lives in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api), not in this repository. The frontend is now API-only:
+Runtime data comes from a separate Rails API, not from this repository. The frontend is now API-only:
 
 - no static runtime dataset under `public/data`
 - no frontend fallback to local compiled JSON
@@ -12,7 +12,7 @@ The Rails API lives in [`sn3p/tvt-api`](https://github.com/sn3p/tvt-api), not in
 
 ## Runtime config
 
-Frontend runtime config is provided through `window.__TVT_CONFIG__` in [index.html](/Users/matthijskuiper/git/tvt/index.html).
+Frontend runtime config is provided through `window.__TVT_CONFIG__` in `index.html`.
 
 Current fields:
 
