@@ -285,7 +285,7 @@
             <div class="sidebar-row-full">
               <div class="sidebar-label muted">Max punten in beeld</div>
               <input id="pointsMaxPointsInput" type="number" min="1" max="500000" step="1000" placeholder="Oneindig">
-              <div class="sidebar-hint muted-2">Leeg = alles tonen. Bij te veel punten: zoom in of kies Clusters.</div>
+              <div class="sidebar-hint muted-2">Leeg = alles tonen. Automatisch schakelt naar clusters bij overschrijding; Punten toont een deel.</div>
             </div>
 
             <div class="sidebar-row-full">
@@ -307,10 +307,9 @@
               <div class="sidebar-hint muted-2">Meer buffer = minder pop-in, meer data.</div>
             </div>
 
-            <div id="pointsAutoClusterThresholdRow" class="sidebar-row-full">
+            <div id="pointsAutoClusterThresholdRow" class="sidebar-row-full" hidden>
               <div class="sidebar-label muted">Automatisch: clusters onder zoom</div>
               <input id="pointsAutoClusterThresholdInput" type="number" min="0" max="22" step="1" value="13">
-              <div class="sidebar-hint muted-2">Alleen van toepassing bij weergavemodus Automatisch.</div>
             </div>
 
             <div id="pointsDisableClusteringAtZoomRow" class="sidebar-row-full">

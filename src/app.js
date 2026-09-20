@@ -252,7 +252,7 @@ export function initApp() {
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const CELL_TILE_POINTS_HINT =
-    "Op dit zoomniveau toont Punten één stip per rastercel. Zoom in voor individuele tellingen.";
+    "Op dit zoomniveau toont de kaart één stip per rastercel. Zoom in voor individuele tellingen.";
   const WORKER_CLUSTER_FALLBACK_HINT =
     "Worker-clustering niet beschikbaar. Standaard clustering wordt gebruikt.";
   const WORKER_CLUSTER_RADIUS = 80;
@@ -692,7 +692,6 @@ export function initApp() {
 
   function updatePointsControlsVisibility() {
     const clusterStyleEnabled = pointsSettings.displayMode !== "points";
-    const autoClusterThresholdEnabled = pointsSettings.displayMode === "auto";
     const disableClusteringAtZoomEnabled =
       pointsSettings.displayMode !== "points";
     const clusterEngineEnabled = pointsSettings.displayMode !== "points";
@@ -704,11 +703,8 @@ export function initApp() {
       input.disabled = !clusterStyleEnabled;
     }
 
-    pointsAutoClusterThresholdRow.classList.toggle(
-      "is-disabled",
-      !autoClusterThresholdEnabled,
-    );
-    pointsAutoClusterThresholdInput.disabled = !autoClusterThresholdEnabled;
+    pointsAutoClusterThresholdRow.hidden = true;
+    pointsAutoClusterThresholdInput.disabled = true;
 
     pointsDisableClusteringAtZoomRow.classList.toggle(
       "is-disabled",
@@ -3060,8 +3056,21 @@ export function initApp() {
     });
   }
 
-  function resolveAutoPointRenderKind({ zoom }) {
-    return zoom < pointsSettings.autoClusterThreshold ? "clusters" : "points";
+  function wantsCellDots() {
+    return pointsSettings.displayMode !== "clusters";
+  }
+
+  function isCellTilePayload(tileKind, fallback = false) {
+    if (tileKind === "cell" || tileKind === "mixed") return true;
+    if (tileKind === "point") return false;
+    return fallback;
+  }
+
+  function cellPayloadRenderFlags(isCellPayload) {
+    return {
+      forceClusters: Boolean(isCellPayload) && !wantsCellDots(),
+      preferCellDots: Boolean(isCellPayload) && wantsCellDots(),
+    };
   }
 
   function hasMaxPointsInViewCap() {
@@ -3071,12 +3080,13 @@ export function initApp() {
     );
   }
 
-  function resolvePointRenderKind({ zoom, totalCount, forceClusters = false }) {
+  function resolvePointRenderKind({
+    totalCount,
+    forceClusters = false,
+    preferCellDots = false,
+  }) {
     if (forceClusters) return "clusters";
-    const requested =
-      pointsSettings.displayMode === "auto"
-        ? resolveAutoPointRenderKind({ zoom })
-        : pointsSettings.displayMode;
+    if (preferCellDots) return "points";
     if (
       pointsSettings.displayMode === "auto" &&
       hasMaxPointsInViewCap() &&
@@ -3084,11 +3094,21 @@ export function initApp() {
     ) {
       return "clusters";
     }
-    return requested === "clusters" ? "clusters" : "points";
+    return pointsSettings.displayMode === "clusters" ? "clusters" : "points";
   }
 
   function maybeMessageForPointCap() {
     if (!isPointCapExceeded || !hasMaxPointsInViewCap()) return;
+    if (
+      pointsSettings.displayMode === "auto" &&
+      pointRenderKind === "clusters"
+    ) {
+      setPointsSidebarMessage(
+        `Te veel punten in beeld — Automatisch toont clusters (${fmtInt(latestPointEntryCount)}).`,
+      );
+      return;
+    }
+    if (pointRenderKind !== "points") return;
     setPointsSidebarMessage(
       `${POINT_CAP_HINT} (${fmtInt(Math.min(latestPointEntryCount, pointsSettings.maxPointsInView))} / ${fmtInt(latestPointEntryCount)})`,
     );
@@ -3630,18 +3650,21 @@ export function initApp() {
         (Number.isFinite(gridZoomMax) && gridZoomMax > 0
           ? gridZoomMax
           : GRID_ZOOM_MAX_DEFAULT);
-      forceClustersForCellTiles =
-        expectCells && pointsSettings.displayMode !== "points";
+      let { forceClusters, preferCellDots } =
+        cellPayloadRenderFlags(expectCells);
+      forceClustersForCellTiles = forceClusters;
       updatePointsControlsVisibility();
       setPointRenderKind(
         resolvePointRenderKind({
-          zoom: map.getZoom(),
           totalCount: latestPointEntryCount,
-          forceClusters: forceClustersForCellTiles,
+          forceClusters,
+          preferCellDots,
         }),
       );
-      const paintProgressively = pointRenderKind === "points";
-      if (pointsSettings.displayMode === "points" && expectCells) {
+      const paintProgressively =
+        pointRenderKind === "points" &&
+        (pointsSettings.displayMode === "points" || !hasMaxPointsInViewCap());
+      if (preferCellDots) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       }
 
@@ -3682,6 +3705,7 @@ export function initApp() {
         const isCellPayload = tileKind === "cell" || tileKind === "mixed";
         let entries = Array.from(nextEntriesById.values());
         if (
+          pointsSettings.displayMode === "points" &&
           pointRenderKind === "points" &&
           tileKind !== "cell" &&
           isPointCapExceeded &&
@@ -3691,7 +3715,15 @@ export function initApp() {
           setPointsSidebarMessage(
             `${POINT_CAP_HINT} (${fmtInt(entries.length)} / ${fmtInt(latestPointEntryCount)})`,
           );
-        } else if (pointsSettings.displayMode === "points" && isCellPayload) {
+        } else if (
+          pointsSettings.displayMode === "auto" &&
+          pointRenderKind === "clusters" &&
+          isPointCapExceeded
+        ) {
+          setPointsSidebarMessage(
+            `Te veel punten in beeld — Automatisch toont clusters (${fmtInt(latestPointEntryCount)}).`,
+          );
+        } else if (wantsCellDots() && isCellPayload) {
           setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
         } else if (
           !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
@@ -3741,11 +3773,15 @@ export function initApp() {
 
       if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
+      ({ forceClusters, preferCellDots } = cellPayloadRenderFlags(
+        isCellTilePayload(tileKind, expectCells),
+      ));
+      forceClustersForCellTiles = forceClusters;
       setPointRenderKind(
         resolvePointRenderKind({
-          zoom: map.getZoom(),
           totalCount: mergedEntryCount,
-          forceClusters: forceClustersForCellTiles,
+          forceClusters,
+          preferCellDots,
         }),
       );
       const entriesForRender = entriesForCurrentMerge();
