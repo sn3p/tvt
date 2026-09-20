@@ -3663,9 +3663,7 @@ export function initApp() {
       );
       const paintProgressively =
         pointRenderKind === "points" &&
-        (preferCellDots ||
-          pointsSettings.displayMode === "points" ||
-          !hasMaxPointsInViewCap());
+        (pointsSettings.displayMode === "points" || !hasMaxPointsInViewCap());
       if (preferCellDots) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       }
