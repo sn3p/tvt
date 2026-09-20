@@ -3060,6 +3060,19 @@ export function initApp() {
     return pointsSettings.displayMode !== "clusters";
   }
 
+  function isCellTilePayload(tileKind, fallback = false) {
+    if (tileKind === "cell" || tileKind === "mixed") return true;
+    if (tileKind === "point") return false;
+    return fallback;
+  }
+
+  function cellPayloadRenderFlags(isCellPayload) {
+    return {
+      forceClusters: Boolean(isCellPayload) && !wantsCellDots(),
+      preferCellDots: Boolean(isCellPayload) && wantsCellDots(),
+    };
+  }
+
   function hasMaxPointsInViewCap() {
     return (
       Number.isFinite(pointsSettings.maxPointsInView) &&
@@ -3637,13 +3650,14 @@ export function initApp() {
         (Number.isFinite(gridZoomMax) && gridZoomMax > 0
           ? gridZoomMax
           : GRID_ZOOM_MAX_DEFAULT);
-      forceClustersForCellTiles = expectCells && !wantsCellDots();
-      const preferCellDots = expectCells && wantsCellDots();
+      let { forceClusters, preferCellDots } =
+        cellPayloadRenderFlags(expectCells);
+      forceClustersForCellTiles = forceClusters;
       updatePointsControlsVisibility();
       setPointRenderKind(
         resolvePointRenderKind({
           totalCount: latestPointEntryCount,
-          forceClusters: forceClustersForCellTiles,
+          forceClusters,
           preferCellDots,
         }),
       );
@@ -3761,10 +3775,14 @@ export function initApp() {
 
       if (seq !== pointTileFetchSeq || mode !== "points" || controller.signal.aborted) return;
 
+      ({ forceClusters, preferCellDots } = cellPayloadRenderFlags(
+        isCellTilePayload(tileKind, expectCells),
+      ));
+      forceClustersForCellTiles = forceClusters;
       setPointRenderKind(
         resolvePointRenderKind({
           totalCount: mergedEntryCount,
-          forceClusters: forceClustersForCellTiles,
+          forceClusters,
           preferCellDots,
         }),
       );
