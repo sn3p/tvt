@@ -510,9 +510,9 @@ export class BackendApiSource extends DataSource {
     };
     let { r, url } = await request();
     if (!r.ok && includeZeros && r.status === 422 && params.has("include_zeros")) {
-      this.includeZerosSupported = false;
       params.delete("include_zeros");
       ({ r, url } = await request());
+      if (r.ok) this.includeZerosSupported = false;
     }
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species grid (${url})`);
     return r.json();
