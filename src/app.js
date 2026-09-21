@@ -2452,6 +2452,7 @@ export function initApp() {
         saved = readSavedSidebarOpen(window.localStorage, {
           isMobile: nextIsMobile,
           preferMode: mode,
+          allowLegacy: !breakpointChanged,
         });
       } catch {
         saved = null;

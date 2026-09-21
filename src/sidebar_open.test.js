@@ -101,6 +101,43 @@ describe("shared sidebar storage", () => {
       false,
     );
   });
+
+  it("ignores legacy keys when migrating is disabled", () => {
+    const storage = memoryStorage({
+      [legacySpeciesSidebarStorageKey(true)]: "open",
+      [LEGACY_POINTS_SIDEBAR_STORAGE_KEY]: "closed",
+    });
+    assert.equal(
+      readSavedSidebarOpen(storage, {
+        isMobile: true,
+        preferMode: "species",
+        allowLegacy: false,
+      }),
+      null,
+    );
+    assert.equal(
+      readSavedSidebarOpen(storage, {
+        isMobile: false,
+        preferMode: "points",
+        allowLegacy: false,
+      }),
+      null,
+    );
+  });
+
+  it("still reads the shared key when migrating is disabled", () => {
+    const storage = memoryStorage({
+      [sidebarOpenStorageKey(true)]: "closed",
+      [legacySpeciesSidebarStorageKey(true)]: "open",
+    });
+    assert.equal(
+      readSavedSidebarOpen(storage, {
+        isMobile: true,
+        allowLegacy: false,
+      }),
+      false,
+    );
+  });
 });
 
 describe("resolveSidebarOpenOnModeEnter", () => {

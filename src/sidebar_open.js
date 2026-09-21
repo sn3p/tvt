@@ -27,12 +27,13 @@ export function defaultSidebarOpen({
 
 export function readSavedSidebarOpen(
   storage,
-  { isMobile = false, preferMode = "points" } = {},
+  { isMobile = false, preferMode = "points", allowLegacy = true } = {},
 ) {
   if (!storage || typeof storage.getItem !== "function") return null;
 
   const sharedRaw = storage.getItem(sidebarOpenStorageKey(isMobile));
   if (sharedRaw != null) return parseSidebarOpenStoredValue(sharedRaw);
+  if (!allowLegacy) return null;
 
   const speciesRaw = storage.getItem(legacySpeciesSidebarStorageKey(isMobile));
   const pointsRaw = storage.getItem(LEGACY_POINTS_SIDEBAR_STORAGE_KEY);
