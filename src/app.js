@@ -46,12 +46,15 @@ import {
   clusterControlsEnabled,
   createEffortHeatLayer,
   effortHeatLatLngs,
+  effortHeatLayerHasMap,
   effortHeatLayerOptions,
   effortHeatMax,
   isHeatmapDisplayMode,
   parsePointsDisplayMode,
   pointsDisplayModeFromRadios,
   resolvePointsDisplayRenderKind,
+  setEffortHeatLatLngs,
+  setEffortHeatOptions,
   shouldSlicePointsForCap,
 } from "./effort_heatmap.mjs";
 
@@ -843,6 +846,7 @@ export function initApp() {
     }
 
     if (mode === "points") {
+      abortPointTileFetchCycle();
       setPointRenderKind(
         resolvePointRenderKind({
           totalCount: latestPointEntryCount,
@@ -2044,11 +2048,13 @@ export function initApp() {
       return;
     const previousLayer = pointsLayer;
     const wasVisible = map.hasLayer(previousLayer);
+    if (previousLayer === pointsHeatLayer) {
+      setEffortHeatLatLngs(previousLayer, []);
+    }
     if (wasVisible) map.removeLayer(previousLayer);
-    if (typeof previousLayer.clearLayers === "function")
+    if (typeof previousLayer.clearLayers === "function") {
       previousLayer.clearLayers();
-    else if (typeof previousLayer.setLatLngs === "function")
-      previousLayer.setLatLngs([]);
+    }
     if (resolved !== "heatmap") clearEffortHeat();
     pointRenderKind = resolved;
     pointsLayer = nextLayer;
@@ -2982,6 +2988,7 @@ export function initApp() {
     }
     updatePointsControlsVisibility();
     if (mode !== "points") return;
+    abortPointTileFetchCycle();
     if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
       setPointRenderKind("heatmap");
     } else if (pointRenderKind === "heatmap") {
@@ -3279,9 +3286,7 @@ export function initApp() {
   }
 
   function clearEffortHeat() {
-    if (typeof pointsHeatLayer.setLatLngs === "function") {
-      pointsHeatLayer.setLatLngs([]);
-    }
+    setEffortHeatLatLngs(pointsHeatLayer, []);
   }
 
   function refreshRenderedPointStatsFromEntries(entries) {
@@ -3324,18 +3329,31 @@ export function initApp() {
       refreshRenderedPointStatsFromEntries(entries);
       return;
     }
+    if (!isHeatmapDisplayMode(pointsSettings.displayMode)) {
+      refreshRenderedPointStatsFromEntries(entries);
+      return;
+    }
+    if (
+      mode === "points" &&
+      !effortHeatLayerHasMap(pointsHeatLayer) &&
+      typeof pointsHeatLayer.addTo === "function"
+    ) {
+      pointsHeatLayer.addTo(map);
+    }
     const latlngs = effortHeatLatLngs(entries);
-    pointsHeatLayer.setOptions(
+    setEffortHeatOptions(
+      pointsHeatLayer,
       effortHeatLayerOptions(map.getZoom(), {
         max: effortHeatMax(latlngs.map((row) => row[2])),
       }),
     );
-    pointsHeatLayer.setLatLngs(latlngs);
+    setEffortHeatLatLngs(pointsHeatLayer, latlngs);
     refreshRenderedPointStatsFromEntries(entries);
   }
 
   function syncEffortHeatStyle() {
     if (pointRenderKind !== "heatmap") return;
+    if (!isHeatmapDisplayMode(pointsSettings.displayMode)) return;
     if (
       !heatLayerAvailable ||
       typeof pointsHeatLayer.setOptions !== "function"
@@ -3345,7 +3363,8 @@ export function initApp() {
     const latlngs = effortHeatLatLngs(
       Array.from(pointEntryByKeyForCurrentRender.values()),
     );
-    pointsHeatLayer.setOptions(
+    setEffortHeatOptions(
+      pointsHeatLayer,
       effortHeatLayerOptions(map.getZoom(), {
         max: effortHeatMax(latlngs.map((row) => row[2])),
       }),
@@ -4215,7 +4234,10 @@ export function initApp() {
         for (const entry of entriesForRender) {
           pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
         }
-        if (pointRenderKind === "heatmap") {
+        if (
+          pointRenderKind === "heatmap" &&
+          isHeatmapDisplayMode(pointsSettings.displayMode)
+        ) {
           paintEffortHeat(entriesForRender);
           lastPaintedMapZoomFloor = z;
           return;

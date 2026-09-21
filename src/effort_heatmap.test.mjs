@@ -12,6 +12,7 @@ import {
   clusterControlsEnabled,
   createEffortHeatLayer,
   effortHeatLatLngs,
+  effortHeatLayerHasMap,
   effortHeatLayerOptions,
   effortHeatMax,
   effortIntensityForEntry,
@@ -19,6 +20,8 @@ import {
   parsePointsDisplayMode,
   pointsDisplayModeFromRadios,
   resolvePointsDisplayRenderKind,
+  setEffortHeatLatLngs,
+  setEffortHeatOptions,
   shouldSlicePointsForCap,
 } from "./effort_heatmap.mjs";
 
@@ -173,5 +176,51 @@ describe("effort heat options and legend", () => {
     assert.equal(created.length, 1);
     assert.deepEqual(created[0].latlngs, []);
     assert.equal(layer.options.maxZoom, 8);
+  });
+
+  it("does not call leaflet.heat redraw after the layer is removed", () => {
+    const detachedCalls = [];
+    const detached = {
+      _map: null,
+      _latlngs: [[52, 5, 1]],
+      options: { max: 1 },
+      setLatLngs(latlngs) {
+        detachedCalls.push("setLatLngs");
+        if (!this._map) throw new TypeError("Cannot read properties of null (reading '_animating')");
+        this._latlngs = latlngs;
+      },
+      setOptions(options) {
+        detachedCalls.push("setOptions");
+        if (!this._map) throw new TypeError("Cannot read properties of null (reading '_animating')");
+        this.options = options;
+      },
+    };
+    assert.equal(effortHeatLayerHasMap(detached), false);
+    assert.doesNotThrow(() => setEffortHeatLatLngs(detached, []));
+    assert.doesNotThrow(() => setEffortHeatOptions(detached, { max: 4 }));
+    assert.deepEqual(detachedCalls, []);
+    assert.deepEqual(detached._latlngs, []);
+    assert.equal(detached.options.max, 4);
+
+    const attachedCalls = [];
+    const map = { _animating: false };
+    const attached = {
+      _map: map,
+      _latlngs: [],
+      setLatLngs(latlngs) {
+        attachedCalls.push("setLatLngs");
+        this._latlngs = latlngs;
+        return this;
+      },
+      setOptions(options) {
+        attachedCalls.push("setOptions");
+        this.options = options;
+        return this;
+      },
+    };
+    setEffortHeatOptions(attached, { radius: 16 });
+    setEffortHeatLatLngs(attached, [[52.1, 5.1, 1]]);
+    assert.deepEqual(attachedCalls, ["setOptions", "setLatLngs"]);
+    assert.deepEqual(attached._latlngs, [[52.1, 5.1, 1]]);
   });
 });

@@ -162,3 +162,32 @@ export function createEffortHeatLayer(L, zoom = EFFORT_HEAT_INTENSITY_ZOOM) {
   if (!canCreateEffortHeatLayer(L)) return null;
   return L.heatLayer([], effortHeatLayerOptions(zoom));
 }
+
+export function effortHeatLayerHasMap(layer) {
+  return Boolean(layer && layer._map);
+}
+
+/**
+ * leaflet.heat@0.2.0 redraw() reads `this._map._animating` with no null check.
+ * Never call setLatLngs/setOptions after the layer is removed from the map.
+ */
+export function setEffortHeatLatLngs(layer, latlngs) {
+  const next = Array.isArray(latlngs) ? latlngs : [];
+  if (!layer) return layer;
+  if (typeof layer.setLatLngs === "function" && effortHeatLayerHasMap(layer)) {
+    return layer.setLatLngs(next);
+  }
+  layer._latlngs = next;
+  return layer;
+}
+
+export function setEffortHeatOptions(layer, options) {
+  if (!layer) return layer;
+  if (typeof layer.setOptions === "function" && effortHeatLayerHasMap(layer)) {
+    return layer.setOptions(options);
+  }
+  if (options && typeof options === "object") {
+    layer.options = { ...(layer.options || {}), ...options };
+  }
+  return layer;
+}
