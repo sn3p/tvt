@@ -2391,6 +2391,14 @@ export function initApp() {
     const resolved =
       next === SPECIES_VIZ_RELATIEF ? SPECIES_VIZ_RELATIEF : SPECIES_VIZ_ABSOLUUT;
     speciesViz = resolved;
+    if (resolved === SPECIES_VIZ_RELATIEF) {
+      metricPresence.checked = true;
+      metricAvg.checked = false;
+      metricSum.checked = false;
+      metricRelatief.checked = true;
+      metricAbsoluut.checked = false;
+      metric = "presence";
+    }
     if (persistUrl) syncVizToUrl(resolved);
     applySpeciesVizUi();
     updateHud();
@@ -2415,13 +2423,13 @@ export function initApp() {
 
   // React to back/forward navigation if mode or postcode changes in URL.
   window.addEventListener("popstate", () => {
-    const m = modeFromUrl();
-    if (m !== mode) setMode(m);
-
     const nextViz = vizFromUrl();
     if (nextViz !== speciesViz) {
       setSpeciesViz(nextViz, { persistUrl: false });
     }
+
+    const m = modeFromUrl();
+    if (m !== mode) setMode(m);
 
     const nextPc4 = pc4FromUrl();
     const currentPc4 = normalizePc4(pc4Input.value);

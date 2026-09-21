@@ -318,6 +318,7 @@ export class BackendApiSource extends DataSource {
     this.baseUrlCandidates = [this.baseUrl];
     this.gridZoomMax = GRID_ZOOM_MAX_DEFAULT;
     this.cellZoomExtra = CELL_ZOOM_EXTRA_DEFAULT;
+    this.includeZerosSupported = true;
   }
 
   async getManifest() {
@@ -496,7 +497,9 @@ export class BackendApiSource extends DataSource {
     params.set("include_private", includePrivate ? "1" : "0");
     params.set("include_isorg", includeIsorg ? "1" : "0");
     appendIfPresent(params, "bbox", bboxToParam(bbox));
-    if (includeZeros) params.set("include_zeros", "1");
+    if (includeZeros && this.includeZerosSupported) {
+      params.set("include_zeros", "1");
+    }
     const path = safeArea
       ? `areas/${encodeURIComponent(safeArea)}/species_grid`
       : "species_grid";
@@ -506,7 +509,8 @@ export class BackendApiSource extends DataSource {
       return { r, url };
     };
     let { r, url } = await request();
-    if (!r.ok && includeZeros && r.status === 422) {
+    if (!r.ok && includeZeros && r.status === 422 && params.has("include_zeros")) {
+      this.includeZerosSupported = false;
       params.delete("include_zeros");
       ({ r, url } = await request());
     }
