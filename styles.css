@@ -163,6 +163,12 @@ input {
   width: 70px;
 }
 
+input[type="radio"],
+input[type="checkbox"] {
+  width: auto;
+  height: auto;
+}
+
 /* 1Password: hide injected fill/save chrome if the extension still attaches. */
 com-1password-button,
 com-1password-menu,
@@ -1069,12 +1075,43 @@ body[data-theme="light"] #pointsModeIsorgInput {
   position: relative;
 }
 
-.leaflet-tile-pane {
-  /* opacity: 0.85; */
-  /* filter: grayscale(100%); */
-  /* filter: saturate(0) contrast(1.05) brightness(1.05); */
-  /* filter: saturate(0.85) contrast(0.95) brightness(1.05); */
-  /* filter: saturate(0.9) contrast(0.95) brightness(1.05); */
+.leaflet-control-layers {
+  background: var(--leaflet-panel-bg) !important;
+  border: 1px solid var(--leaflet-panel-border) !important;
+  border-radius: 8px !important;
+  color: var(--leaflet-panel-text);
+  box-shadow: none !important;
+}
+
+.leaflet-control-layers-expanded {
+  padding: 4px 8px 4px 6px !important;
+  background: var(--leaflet-panel-bg) !important;
+  color: var(--leaflet-panel-text);
+  border-radius: 8px !important;
+  line-height: 1.2;
+}
+
+.leaflet-control-layers-base label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--leaflet-panel-text);
+}
+
+.leaflet-control-layers input.leaflet-control-layers-selector {
+  width: 14px !important;
+  height: 14px !important;
+  margin: 0 !important;
+  flex: none;
+}
+
+.leaflet-container .maplibregl-ctrl-attrib {
+  display: none;
 }
 
 .leaflet-control-attribution {

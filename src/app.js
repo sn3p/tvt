@@ -21,6 +21,12 @@ import {
 } from "./sidebar_open.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 import {
+  BASEMAPS,
+  DEFAULT_BASEMAP,
+  canCreateBasemapLayer,
+  createBasemapLayer,
+} from "./basemap.mjs";
+import {
   SPECIES_VIZ_ABSOLUUT,
   SPECIES_VIZ_RELATIEF,
   cellOccupancy,
@@ -30,6 +36,11 @@ import {
   parseSpeciesViz,
   summaryOccupancy,
 } from "./species_lift.mjs";
+import {
+  applyHighEndGamma,
+  colorFromSequentialRamp,
+  occupancySequentialColor,
+} from "./species_sequential.mjs";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
@@ -1015,14 +1026,33 @@ export function initApp() {
   // Grid cell size controls (auto/manual) depend on the map instance.
   initGridCellControls(map);
 
-  // const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-  const tileUrl = "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png";
+  function tileLayerFromBasemap(spec) {
+    return createBasemapLayer(spec, globalThis.L);
+  }
 
-  globalThis.L.tileLayer(tileUrl, {
-    maxZoom: 19,
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).addTo(map);
+  const baseLayers = {};
+  let defaultBasemapLayer = null;
+  for (const spec of BASEMAPS) {
+    if (!canCreateBasemapLayer(spec, globalThis.L)) continue;
+    const layer = tileLayerFromBasemap(spec);
+    baseLayers[spec.label] = layer;
+    if (spec === DEFAULT_BASEMAP) defaultBasemapLayer = layer;
+  }
+  const initialBasemap =
+    defaultBasemapLayer || Object.values(baseLayers)[0];
+  if (initialBasemap) initialBasemap.addTo(map);
+  const basemapControl = globalThis.L.control.layers(baseLayers, {}, {
+    position: "bottomleft",
+    collapsed: true,
+  });
+  basemapControl.addTo(map);
+  const basemapToggle = basemapControl
+    .getContainer?.()
+    ?.querySelector(".leaflet-control-layers-toggle");
+  if (basemapToggle) {
+    basemapToggle.setAttribute("aria-label", "Basiskaart");
+    basemapToggle.setAttribute("title", "Basiskaart");
+  }
 
   function clusterToneForCounts({ privateCount, isorgCount }) {
     if (isorgCount === 0) return "private";
@@ -1415,7 +1445,10 @@ export function initApp() {
       const nScale = Math.min(1, Math.sqrt(total) / 3);
       const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
       const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
-      const fillColor = colorFromBluesRamp(applyHighEndGamma(vNorm));
+      const fillColor =
+        metric === "presence"
+          ? occupancySequentialColor(value)
+          : colorFromSequentialRamp(applyHighEndGamma(vNorm));
 
       const ix = Number(cell?.ix ?? 0) || 0;
       const iy = Number(cell?.iy ?? 0) || 0;
@@ -1984,51 +2017,10 @@ export function initApp() {
     if (wasVisible && mode === "points") pointsLayer.addTo(map);
   }
 
-  // Grid/heatmap legend for species mode (sequential, luminance ramp + gamma).
-  const GRID_COLORMAP_GAMMA = 0.6;
-  // ColorBrewer "Blues" ramp (light -> dark), sampled densely for smooth interpolation.
-  const GRID_COLORMAP_BLUES = [
-    [247, 251, 255],
-    [222, 235, 247],
-    [198, 219, 239],
-    [158, 202, 225],
-    [107, 174, 214],
-    [66, 146, 198],
-    [33, 113, 181],
-    [8, 81, 156],
-    [8, 48, 107],
-  ];
-
   function clamp01(x) {
     const n = Number(x);
     if (!Number.isFinite(n)) return 0;
     return Math.min(1, Math.max(0, n));
-  }
-
-  // Gamma mapping that increases contrast near the high end.
-  function applyHighEndGamma(t, gamma = GRID_COLORMAP_GAMMA) {
-    const x = clamp01(t);
-    const g = Number(gamma);
-    if (!Number.isFinite(g) || g <= 0) return x;
-    return 1 - Math.pow(1 - x, g);
-  }
-
-  function colorFromBluesRamp(t) {
-    const x = clamp01(t);
-    const n = GRID_COLORMAP_BLUES.length;
-    if (n <= 1) {
-      const c = GRID_COLORMAP_BLUES[0] || [125, 211, 252];
-      return `rgb(${c[0]},${c[1]},${c[2]})`;
-    }
-    const f = x * (n - 1);
-    const i = Math.floor(f);
-    const w = f - i;
-    const c0 = GRID_COLORMAP_BLUES[Math.min(n - 1, Math.max(0, i))];
-    const c1 = GRID_COLORMAP_BLUES[Math.min(n - 1, Math.max(0, i + 1))];
-    const r = Math.round(c0[0] + (c1[0] - c0[0]) * w);
-    const g = Math.round(c0[1] + (c1[1] - c0[1]) * w);
-    const b = Math.round(c0[2] + (c1[2] - c0[2]) * w);
-    return `rgb(${r},${g},${b})`;
   }
 
   function metricLabelNl(m) {
@@ -2138,7 +2130,10 @@ export function initApp() {
     for (const s of stops) {
       const sw = document.createElement("span");
       sw.className = "tvt-grid-legend-swatch";
-      sw.style.background = colorFromBluesRamp(applyHighEndGamma(s));
+      sw.style.background =
+        m === "presence"
+          ? occupancySequentialColor(s)
+          : colorFromSequentialRamp(applyHighEndGamma(s));
       gridLegendScaleEl.appendChild(sw);
     }
 
