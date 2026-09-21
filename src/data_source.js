@@ -318,6 +318,7 @@ export class BackendApiSource extends DataSource {
     this.baseUrlCandidates = [this.baseUrl];
     this.gridZoomMax = GRID_ZOOM_MAX_DEFAULT;
     this.cellZoomExtra = CELL_ZOOM_EXTRA_DEFAULT;
+    this.includeZerosSupported = true;
   }
 
   async getManifest() {
@@ -481,7 +482,7 @@ export class BackendApiSource extends DataSource {
     return r.json();
   }
 
-  async getSpeciesGrid({ year, area, birdId, metric, cellSizeM, minN = 1, pc4, includePrivate = true, includeIsorg = true, bbox, signal } = {}) {
+  async getSpeciesGrid({ year, area, birdId, metric, cellSizeM, minN = 1, pc4, includePrivate = true, includeIsorg = true, includeZeros = false, bbox, signal } = {}) {
     const safeYear = toSafeInt(year, "year");
     const safeBirdId = toSafeInt(birdId, "birdId");
     const safeArea = String(area || "").trim();
@@ -496,11 +497,23 @@ export class BackendApiSource extends DataSource {
     params.set("include_private", includePrivate ? "1" : "0");
     params.set("include_isorg", includeIsorg ? "1" : "0");
     appendIfPresent(params, "bbox", bboxToParam(bbox));
+    if (includeZeros && this.includeZerosSupported) {
+      params.set("include_zeros", "1");
+    }
     const path = safeArea
       ? `areas/${encodeURIComponent(safeArea)}/species_grid`
       : "species_grid";
-    const url = joinUrl(this.baseUrl, `${path}?${params.toString()}`);
-    const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+    const request = async () => {
+      const url = joinUrl(this.baseUrl, `${path}?${params.toString()}`);
+      const r = await this.fetchImpl(url, signal ? { signal } : undefined);
+      return { r, url };
+    };
+    let { r, url } = await request();
+    if (!r.ok && includeZeros && r.status === 422 && params.has("include_zeros")) {
+      params.delete("include_zeros");
+      ({ r, url } = await request());
+      if (r.ok) this.includeZerosSupported = false;
+    }
     if (!r.ok) throw new Error(`HTTP ${r.status} while loading backend species grid (${url})`);
     return r.json();
   }
