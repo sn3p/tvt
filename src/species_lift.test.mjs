@@ -13,17 +13,17 @@ import {
 } from "./species_lift.mjs";
 
 describe("parseSpeciesViz", () => {
-  it("defaults to absoluut", () => {
+  it("defaults unknown values to absoluut", () => {
     assert.equal(parseSpeciesViz(null), SPECIES_VIZ_ABSOLUUT);
     assert.equal(parseSpeciesViz(""), SPECIES_VIZ_ABSOLUUT);
-    assert.equal(parseSpeciesViz("grid"), SPECIES_VIZ_ABSOLUUT);
-    assert.equal(parseSpeciesViz("classic"), SPECIES_VIZ_ABSOLUUT);
     assert.equal(parseSpeciesViz("absoluut"), SPECIES_VIZ_ABSOLUUT);
+    assert.equal(parseSpeciesViz("lift"), SPECIES_VIZ_ABSOLUUT);
+    assert.equal(parseSpeciesViz("classic"), SPECIES_VIZ_ABSOLUUT);
+    assert.equal(parseSpeciesViz("grid"), SPECIES_VIZ_ABSOLUUT);
   });
 
-  it("accepts relatief aliases", () => {
+  it("accepts relatief", () => {
     assert.equal(parseSpeciesViz("relatief"), SPECIES_VIZ_RELATIEF);
-    assert.equal(parseSpeciesViz("lift"), SPECIES_VIZ_RELATIEF);
     assert.equal(parseSpeciesViz(" Relatief "), SPECIES_VIZ_RELATIEF);
   });
 });

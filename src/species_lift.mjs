@@ -13,7 +13,7 @@ export function parseSpeciesViz(raw) {
   const value = String(raw || "")
     .trim()
     .toLowerCase();
-  if (value === "relatief" || value === "lift") return SPECIES_VIZ_RELATIEF;
+  if (value === "relatief") return SPECIES_VIZ_RELATIEF;
   return SPECIES_VIZ_ABSOLUUT;
 }
 
