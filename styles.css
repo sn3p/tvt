@@ -882,6 +882,31 @@ body[data-theme="light"] #pointsModeIsorgInput {
   opacity: 0.55;
 }
 
+#speciesPresenceModeRow.is-disabled {
+  opacity: 1;
+}
+
+#speciesPresenceModeRow.is-disabled .segmented {
+  opacity: 0.55;
+}
+
+.sidebar-row[hidden],
+.sidebar-row-full[hidden] {
+  display: none !important;
+}
+
+#sidebarPanelView > .sidebar-advanced {
+  border-top: 0;
+}
+
+#sidebarPanelView > .sidebar-advanced > .sidebar-row-full:first-of-type {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.leaflet-interactive.tvt-species-lift-absent {
+  stroke: #64748b;
+}
+
 .sidebar-actions {
   display: flex;
   justify-content: flex-end;

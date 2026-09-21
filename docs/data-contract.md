@@ -131,6 +131,7 @@ Query params:
 - optional `pc4`
 - `include_private=0|1`
 - `include_isorg=0|1`
+- optional `include_zeros=0|1` (default `0`; omit cells with metric value 0)
 - required `bbox=west,south,east,north`
 
 Response fields used by the frontend:

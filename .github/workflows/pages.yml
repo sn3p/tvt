@@ -36,6 +36,7 @@ jobs:
           test -f _site/index.html
           test -f _site/main.js
           test -d _site/src
+          node --test src/species_lift.test.mjs
           grep -q 'https://tvt-api.matthijskuiper.nl/api/v1' _site/index.html
           grep -F 'http://127.0.0.1:3000/api/v1' index.html
           grep -F 'http://127.0.0.1:3000/api/v1' README.md

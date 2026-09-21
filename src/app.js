@@ -11,6 +11,16 @@ import {
 import { formatNumber } from "./helpers.js";
 import tippy from "./lib/tippy.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
+import {
+  SPECIES_VIZ_ABSOLUUT,
+  SPECIES_VIZ_RELATIEF,
+  cellOccupancy,
+  colorForLiftCell,
+  liftLegendStops,
+  occupancyLift,
+  parseSpeciesViz,
+  summaryOccupancy,
+} from "./species_lift.mjs";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
@@ -47,7 +57,6 @@ export function initApp() {
   const metricPresence = document.querySelector("#metricPresence");
   const metricAvg = document.querySelector("#metricAvg");
   const metricSum = document.querySelector("#metricSum");
-  const styleAuto = document.querySelector("#styleAuto");
   const styleGrid = document.querySelector("#styleGrid");
   const styleHeatmap = document.querySelector("#styleHeatmap");
   const minNSlider = document.querySelector("#minNSlider");
@@ -96,6 +105,12 @@ export function initApp() {
   );
   const pointsSidebarMessage = document.querySelector("#pointsSidebarMessage");
   const speciesViewResetBtn = document.querySelector("#speciesViewResetBtn");
+  const metricAbsoluut = document.querySelector("#metricAbsoluut");
+  const metricRelatief = document.querySelector("#metricRelatief");
+  const speciesPresenceModeRow = document.querySelector(
+    "#speciesPresenceModeRow",
+  );
+  const speciesPresenceHint = document.querySelector("#speciesPresenceHint");
   const pointsResetBtn = document.querySelector("#pointsResetBtn");
   const themeToggleBtn = document.querySelector("#themeToggleBtn");
   const openInfoDialogBtn = document.querySelector("#openInfoDialogBtn");
@@ -137,7 +152,6 @@ export function initApp() {
     !metricPresence ||
     !metricAvg ||
     !metricSum ||
-    !styleAuto ||
     !styleGrid ||
     !styleHeatmap ||
     !minNSlider ||
@@ -162,6 +176,10 @@ export function initApp() {
     !pointsUpdateOnMoveInput ||
     !pointsSidebarMessage ||
     !speciesViewResetBtn ||
+    !metricAbsoluut ||
+    !metricRelatief ||
+    !speciesPresenceModeRow ||
+    !speciesPresenceHint ||
     !pointsResetBtn
   ) {
     return;
@@ -1066,13 +1084,22 @@ export function initApp() {
   let loadSeq = 0;
   let mode = "points"; // "points" | "species"
   let selectedSpecies = null; // { id?: number|null, name: string }
+  let speciesViz = SPECIES_VIZ_RELATIEF;
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("viz")) {
+      speciesViz = parseSpeciesViz(url.searchParams.get("viz"));
+    }
+  } catch {
+    speciesViz = SPECIES_VIZ_RELATIEF;
+  }
   let locateMePending = false;
   const SELECTED_SPECIES_LS_KEY = "tvt:selectedSpecies";
   let computeTimer = 0;
   let speciesScope = "viewport"; // "viewport" | "all"
   let speciesSort = "most"; // "most" | "az"
   let metric = "presence"; // "presence" | "avg" | "sum"
-  let style = "auto"; // "auto" | "grid" | "heatmap"
+  let style = "grid"; // "grid" | "heatmap"
 
   // Min. inzendingen per vak.
   let minN = Number(minNSlider?.value || 3);
@@ -1083,11 +1110,7 @@ export function initApp() {
       : metricAvg.defaultChecked
         ? "avg"
         : "presence",
-    style: styleHeatmap.defaultChecked
-      ? "heatmap"
-      : styleGrid.defaultChecked
-        ? "grid"
-        : "auto",
+    style: styleHeatmap.defaultChecked ? "heatmap" : "grid",
     minN: Math.max(
       1,
       Number(minNSlider?.defaultValue || minNSlider?.value || 1),
@@ -1341,22 +1364,24 @@ export function initApp() {
     };
   }
 
+  function effectiveSpeciesStyle() {
+    return style === "heatmap" ? "heatmap" : "grid";
+  }
+
   function renderBackendSpeciesGrid(json) {
     const cells = Array.isArray(json?.cells) ? json.cells : [];
     if (!cells.length) {
       updateGridLegend({
         metric,
         maxMetric: 0,
-        effectiveStyle:
-          style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style,
+        effectiveStyle: effectiveSpeciesStyle(),
       });
       setComputing(false);
       updateHud();
       return;
     }
 
-    const effectiveStyle =
-      style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const effectiveStyle = effectiveSpeciesStyle();
     const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
     let maxMetric = 0;
     for (const cell of cells) {
@@ -1451,6 +1476,93 @@ export function initApp() {
     }
   }
 
+  function formatLiftMultiplier(liftValue) {
+    if (liftValue === Number.POSITIVE_INFINITY) return "veel hoger";
+    if (!(liftValue > 0) || !Number.isFinite(liftValue)) return "0×";
+    const formatted = formatNumber(liftValue, { maxDecimals: 2 });
+    return `${formatted}×`;
+  }
+
+  function renderLiftSpeciesGrid(json) {
+    const cells = Array.isArray(json?.cells) ? json.cells : [];
+    const baseline = summaryOccupancy(json?.summary);
+    const effectiveStyle = effectiveSpeciesStyle();
+    updateLiftLegend({ baseline, effectiveStyle });
+
+    if (!cells.length) {
+      setComputing(false);
+      updateHud();
+      return;
+    }
+
+    const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
+    const crs = map.options.crs;
+    const baselinePct = formatNumber(baseline * 100, { maxDecimals: 0 });
+
+    for (const cell of cells) {
+      const total = Number(cell?.entry_count ?? 0) || 0;
+      const withN = Number(cell?.with_count ?? 0) || 0;
+      if (total <= 0) continue;
+
+      const occupancy = cellOccupancy(cell);
+      const lift = occupancyLift(occupancy, baseline);
+      const fillColor = colorForLiftCell({ occupancy, lift });
+      if (!fillColor) continue;
+
+      const isAbsent = occupancy <= 0;
+      const ix = Number(cell?.ix ?? 0) || 0;
+      const iy = Number(cell?.iy ?? 0) || 0;
+      const x0m = ix * cellSizeM;
+      const y0m = iy * cellSizeM;
+      const x1m = x0m + cellSizeM;
+      const y1m = y0m + cellSizeM;
+      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
+      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
+      const bb = globalThis.L.latLngBounds(sw, ne);
+
+      const pct = formatNumber(occupancy * 100, { maxDecimals: 1 });
+      let tooltip = `<b>${selectedSpecies?.name || "Soort"}</b> — `;
+      if (isAbsent) {
+        tooltip += `geteld, soort afwezig (${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} inzendingen)`;
+      } else {
+        tooltip += `${formatLiftMultiplier(lift)} t.o.v. ${baselinePct}% in beeld · aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} (${pct}%)`;
+      }
+
+      const className = isAbsent
+        ? "tvt-species-grid-cell tvt-species-lift-absent"
+        : "tvt-species-grid-cell";
+      const layerOptions = {
+        stroke: isAbsent,
+        color: "#64748b",
+        weight: isAbsent ? 1 : 0,
+        opacity: isAbsent ? 0.45 : 0,
+        fillColor,
+        fillOpacity: isAbsent ? 0.4 : 0.72,
+        interactive: true,
+        bubblingMouseEvents: false,
+        renderer: gridSvgRenderer || undefined,
+        className,
+      };
+      const shape =
+        effectiveStyle === "heatmap"
+          ? globalThis.L.circle(
+              crs.unproject(
+                globalThis.L.point(x0m + cellSizeM / 2, y0m + cellSizeM / 2),
+              ),
+              {
+                ...layerOptions,
+                radius: Math.max(30, cellSizeM * 0.6),
+                stroke: false,
+                weight: 0,
+                opacity: 0,
+              },
+            )
+          : globalThis.L.rectangle(bb, layerOptions);
+      shape.bindTooltip(tooltip, { sticky: false });
+      shape.addTo(gridLayer);
+    }
+  }
+
   async function computeBackendSpeciesGrid() {
     gridLayer.clearLayers();
     if (!selectedSpecies) {
@@ -1481,27 +1593,31 @@ export function initApp() {
 
     try {
       const { includePrivate, includeIsorg } = getFilters();
+      const useRelatief = speciesViz === SPECIES_VIZ_RELATIEF;
       const json = await speciesSource.getSpeciesGrid({
         year,
         birdId: selectedSpecies.id,
-        metric,
+        metric: useRelatief ? "presence" : metric,
         cellSizeM: gridCellM,
         minN,
         includePrivate,
         includeIsorg,
+        includeZeros: useRelatief,
         bbox: bounds,
         signal: controller.signal,
       });
       if (seq !== speciesGridSeq || mode !== "species") return;
 
       speciesGridSummary = speciesSummaryFromGridResponse(json);
-      renderBackendSpeciesGrid(json);
+      if (useRelatief) renderLiftSpeciesGrid(json);
+      else renderBackendSpeciesGrid(json);
       setComputing(false);
       recordDiagnostic("speciesGrid", {
         durationMs: Number((nowMs() - startedAtMs).toFixed(1)),
         year,
         birdId: selectedSpecies.id,
-        metric,
+        metric: useRelatief ? "presence" : metric,
+        viz: speciesViz,
         cellSizeM: gridCellM,
         cellCount: Array.isArray(json?.cells) ? json.cells.length : 0,
         entryCount: speciesGridSummary.total,
@@ -2057,6 +2173,51 @@ export function initApp() {
       minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
   }
 
+  function updateLiftLegend({ baseline, effectiveStyle } = {}) {
+    if (
+      !gridLegendTitleEl ||
+      !gridLegendScaleEl ||
+      !gridLegendLabelsEl ||
+      !gridLegendNoteEl
+    )
+      return;
+
+    const baselinePct = Number.isFinite(baseline)
+      ? Math.round(Math.max(0, baseline) * 100)
+      : 0;
+    const styleNl = effectiveStyle === "heatmap" ? "Heatmap" : "Raster";
+    gridLegendTitleEl.textContent = `Relatief • ${styleNl}`;
+
+    const stops = liftLegendStops();
+    gridLegendScaleEl.replaceChildren();
+    for (const stop of stops) {
+      const sw = document.createElement("span");
+      sw.className = "tvt-grid-legend-swatch";
+      sw.style.background = stop.color;
+      gridLegendScaleEl.appendChild(sw);
+    }
+
+    const labels = ["lager", "", "gelijk", "", "hoger"];
+    gridLegendLabelsEl.replaceChildren();
+    for (const text of labels) {
+      const el = document.createElement("span");
+      el.textContent = text;
+      gridLegendLabelsEl.appendChild(el);
+    }
+
+    const tooltipText = [
+      `<b>Kleur:</b> lager of hoger dan aanwezigheid in beeld (nu ${baselinePct}%)`,
+      "<b>Grijs:</b> inzendingen zonder deze soort",
+      "<b>Leeg:</b> geen inzendingen",
+    ].join(" • ");
+    gridLegendTooltipEl.setAttribute("data-tooltip-content-value", tooltipText);
+
+    const notes = [];
+    if (minN > 1) notes.push(`Min. inzendingen per vak: ${minN}`);
+    notes.push("Grijs = geteld, soort afwezig");
+    gridLegendNoteEl.textContent = notes.join(" · ");
+  }
+
   function setMode(nextMode, { skipRender = false } = {}) {
     const prevMode = mode;
     mode = nextMode === "species" ? "species" : "points";
@@ -2150,6 +2311,52 @@ export function initApp() {
     window.history.replaceState(null, "", url);
   }
 
+  function vizFromUrl() {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("viz")) return SPECIES_VIZ_RELATIEF;
+      return parseSpeciesViz(url.searchParams.get("viz"));
+    } catch {
+      return SPECIES_VIZ_RELATIEF;
+    }
+  }
+
+  function syncVizToUrl(next) {
+    const url = new URL(window.location.href);
+    if (next === SPECIES_VIZ_RELATIEF) url.searchParams.set("viz", "relatief");
+    else url.searchParams.set("viz", "absoluut");
+    window.history.replaceState(null, "", url);
+  }
+
+  function applySpeciesVizUi() {
+    const presenceApplies = metricPresence.checked;
+    speciesPresenceModeRow.classList.toggle("is-disabled", !presenceApplies);
+    for (const input of speciesPresenceModeRow.querySelectorAll("input")) {
+      input.disabled = !presenceApplies;
+    }
+    const isRelatief = speciesViz === SPECIES_VIZ_RELATIEF;
+    if (presenceApplies) {
+      metricRelatief.checked = isRelatief;
+      metricAbsoluut.checked = !isRelatief;
+      speciesPresenceHint.textContent = isRelatief
+        ? "Aandeel in het vak t.o.v. het gebied in beeld."
+        : "Aandeel inzendingen in het vak (0–100%).";
+    } else {
+      speciesPresenceHint.textContent =
+        "Alleen van toepassing bij Metriek: Aanwezigheid.";
+    }
+  }
+
+  function setSpeciesViz(next, { persistUrl = true } = {}) {
+    const resolved =
+      next === SPECIES_VIZ_RELATIEF ? SPECIES_VIZ_RELATIEF : SPECIES_VIZ_ABSOLUUT;
+    speciesViz = resolved;
+    if (persistUrl) syncVizToUrl(resolved);
+    applySpeciesVizUi();
+    updateHud();
+    if (mode === "species") schedulePresenceGridCompute();
+  }
+
   function syncPc4ToUrl(next) {
     const pc4Value = normalizePc4(next);
     const url = new URL(window.location.href);
@@ -2163,12 +2370,19 @@ export function initApp() {
   if (initialPc4) pc4Input.value = initialPc4;
 
   // Initial mode: URL is source of truth.
+  applySpeciesVizUi();
+  if (modeFromUrl() === "species") syncVizToUrl(speciesViz);
   setMode(modeFromUrl(), { skipRender: true });
 
   // React to back/forward navigation if mode or postcode changes in URL.
   window.addEventListener("popstate", () => {
     const m = modeFromUrl();
     if (m !== mode) setMode(m);
+
+    const nextViz = vizFromUrl();
+    if (nextViz !== speciesViz) {
+      setSpeciesViz(nextViz, { persistUrl: false });
+    }
 
     const nextPc4 = pc4FromUrl();
     const currentPc4 = normalizePc4(pc4Input.value);
@@ -2358,8 +2572,7 @@ export function initApp() {
       return;
     }
 
-    const effectiveStyleRaw =
-      style === "auto" ? (metric === "sum" ? "heatmap" : "grid") : style;
+    const effectiveStyleRaw = effectiveSpeciesStyle();
     const styleNl = effectiveStyleRaw === "heatmap" ? "heatmap" : "raster";
     const suffixMinN = minN > 1 ? ` · min‑N ${minN}` : "";
 
@@ -2376,7 +2589,13 @@ export function initApp() {
       hudMetric = "Klik om de zijbalk te openen";
     } else {
       hudName = selectedSpecies.name;
-      hudStyle = `${styleNl}${suffixMinN}`.trim();
+      if (speciesViz === SPECIES_VIZ_RELATIEF) {
+        hudStyle = `relatief · ${styleNl}${suffixMinN}`;
+      } else if (metric === "presence") {
+        hudStyle = `absoluut · ${styleNl}${suffixMinN}`;
+      } else {
+        hudStyle = `${styleNl}${suffixMinN}`.trim();
+      }
 
       if (isComputing) {
         hudMetric = "Bezig met berekenen…";
@@ -2575,11 +2794,11 @@ export function initApp() {
     speciesScope = speciesScopeAll.checked ? "all" : "viewport";
     speciesSort = speciesSortAZ.checked ? "az" : "most";
     metric = metricAvg.checked ? "avg" : metricSum.checked ? "sum" : "presence";
-    style = styleHeatmap.checked
-      ? "heatmap"
-      : styleGrid.checked
-        ? "grid"
-        : "auto";
+    speciesViz =
+      metric === "presence" && metricRelatief.checked
+        ? SPECIES_VIZ_RELATIEF
+        : SPECIES_VIZ_ABSOLUUT;
+    style = styleHeatmap.checked ? "heatmap" : "grid";
     minN = Number(minNSlider.value || 0) || 0;
     minNValue.textContent = String(minN);
   }
@@ -2588,9 +2807,10 @@ export function initApp() {
     metricPresence.checked = SPECIES_VIEW_DEFAULTS.metric === "presence";
     metricAvg.checked = SPECIES_VIEW_DEFAULTS.metric === "avg";
     metricSum.checked = SPECIES_VIEW_DEFAULTS.metric === "sum";
+    metricAbsoluut.checked = false;
+    metricRelatief.checked = true;
 
-    styleAuto.checked = SPECIES_VIEW_DEFAULTS.style === "auto";
-    styleGrid.checked = SPECIES_VIEW_DEFAULTS.style === "grid";
+    styleGrid.checked = SPECIES_VIEW_DEFAULTS.style !== "heatmap";
     styleHeatmap.checked = SPECIES_VIEW_DEFAULTS.style === "heatmap";
 
     minNSlider.value = String(SPECIES_VIEW_DEFAULTS.minN);
@@ -2602,11 +2822,16 @@ export function initApp() {
     updateGridCellUI(gridCellM);
 
     removeStorageKeys([GRID_CELL_M_LS_KEY, GRID_CELL_AUTO_LS_KEY]);
+    speciesViz = SPECIES_VIZ_RELATIEF;
+    syncVizToUrl(SPECIES_VIZ_RELATIEF);
+    applySpeciesVizUi();
     onSpeciesControlsChanged();
   }
 
   function onSpeciesControlsChanged() {
     readControls();
+    syncVizToUrl(speciesViz);
+    applySpeciesVizUi();
     scheduleSpeciesCatalogFetch({ immediate: true });
     renderSpeciesList({ query: speciesSearchInput.value });
     schedulePresenceGridCompute();
@@ -2616,10 +2841,18 @@ export function initApp() {
   speciesScopeAll.addEventListener("change", onSpeciesControlsChanged);
   speciesSortMost.addEventListener("change", onSpeciesControlsChanged);
   speciesSortAZ.addEventListener("change", onSpeciesControlsChanged);
+  function onPresenceModeChanged() {
+    metricPresence.checked = true;
+    metricAvg.checked = false;
+    metricSum.checked = false;
+    onSpeciesControlsChanged();
+  }
+
   metricPresence.addEventListener("change", onSpeciesControlsChanged);
   metricAvg.addEventListener("change", onSpeciesControlsChanged);
   metricSum.addEventListener("change", onSpeciesControlsChanged);
-  styleAuto.addEventListener("change", onSpeciesControlsChanged);
+  metricAbsoluut.addEventListener("change", onPresenceModeChanged);
+  metricRelatief.addEventListener("change", onPresenceModeChanged);
   styleGrid.addEventListener("change", onSpeciesControlsChanged);
   styleHeatmap.addEventListener("change", onSpeciesControlsChanged);
   minNSlider.addEventListener("input", onSpeciesControlsChanged);

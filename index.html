@@ -150,33 +150,34 @@
 
       <div id="sidebarPanelView" class="sidebar-panel" hidden>
 
-        <div class="sidebar-row-full">
-          <div class="sidebar-label muted">Metriek</div>
-          <div class="segmented" role="group" aria-label="Metriek">
+        <div id="speciesPresenceModeRow" class="sidebar-row-full">
+          <div class="sidebar-label muted">
+            Vergelijking
+            <span class="help-icon" data-controller="tooltip"
+              data-tooltip-content-value="Absoluut: aandeel inzendingen in het vak (0–100%). Relatief: aandeel in het vak t.o.v. het gebied in beeld.">?</span>
+          </div>
+          <div class="segmented" role="group" aria-label="Vergelijking">
             <label class="seg">
-              <input id="metricPresence" type="radio" name="metric" value="presence" checked>
-              <span>Aanwezigheid</span>
+              <input id="metricAbsoluut" type="radio" name="presenceMode" value="absolute">
+              <span>Absoluut</span>
             </label>
             <label class="seg">
-              <input id="metricAvg" type="radio" name="metric" value="avg">
-              <span>Gemiddeld</span>
-            </label>
-            <label class="seg">
-              <input id="metricSum" type="radio" name="metric" value="sum">
-              <span>Totaal</span>
+              <input id="metricRelatief" type="radio" name="presenceMode" value="relatief" checked>
+              <span>Relatief</span>
             </label>
           </div>
+          <div id="speciesPresenceHint" class="sidebar-hint muted-2">Aandeel in het vak t.o.v. het gebied in beeld.</div>
         </div>
 
-        <div class="sidebar-row-full">
-          <div class="sidebar-label muted">Weergave</div>
+        <div id="speciesStyleRow" class="sidebar-row-full">
+          <div class="sidebar-label muted">
+            Weergave
+            <span class="help-icon" data-controller="tooltip"
+              data-tooltip-content-value="Raster: aggregatie per vak. Heatmap: voorlopig cirkels; later een density map.">?</span>
+          </div>
           <div class="segmented" role="group" aria-label="Weergave">
             <label class="seg">
-              <input id="styleAuto" type="radio" name="style" value="auto" checked>
-              <span>Auto</span>
-            </label>
-            <label class="seg">
-              <input id="styleGrid" type="radio" name="style" value="grid">
+              <input id="styleGrid" type="radio" name="style" value="grid" checked>
               <span>Raster</span>
             </label>
             <label class="seg">
@@ -186,33 +187,59 @@
           </div>
         </div>
 
-        <div class="sidebar-row-full">
-          <div class="sidebar-label muted">
-            Rastergrootte:
-            <span id="gridCellValue"></span>
-          </div>
-          <div class="tvt-grid-size-controls">
-            <label class="check seg">
-              <input id="gridCellAuto" type="checkbox" checked>
-              <span>Auto</span>
-            </label>
-            <input id="gridCellSlider" type="range" min="200" max="2500" step="50" value="1000">
-          </div>
-          <div class="sidebar-hint muted-2">Kleiner = meer detail, groter = minder ruis.</div>
-        </div>
+        <details class="sidebar-advanced">
+          <summary>Geavanceerd</summary>
 
-        <div class="sidebar-row-full">
-          <div class="sidebar-label muted">
-            Min. aantal inzendingen per vak
-            <span class="help-icon"
-              data-tippy-content="<code>N</code> = aantal inzendingen in een vak. min-N filtert vakken met <code>N < drempel</code>. Transparantie schaalt met <code>√N</code>.">?</span>
+          <div id="speciesMetricRow" class="sidebar-row-full">
+            <div class="sidebar-label muted">
+              Metriek
+              <span class="help-icon" data-controller="tooltip"
+                data-tooltip-content-value="Aanwezigheid: in hoeveel inzendingen de soort zit. Gemiddeld: aantal per inzending (inclusief nullen). Totaal: som van alle getelde vogels.">?</span>
+            </div>
+            <div class="segmented" role="group" aria-label="Metriek">
+              <label class="seg">
+                <input id="metricPresence" type="radio" name="metric" value="presence" checked>
+                <span>Aanwezigheid</span>
+              </label>
+              <label class="seg">
+                <input id="metricAvg" type="radio" name="metric" value="avg">
+                <span>Gemiddeld</span>
+              </label>
+              <label class="seg">
+                <input id="metricSum" type="radio" name="metric" value="sum">
+                <span>Totaal</span>
+              </label>
+            </div>
           </div>
-          <div class="slider">
-            <input id="minNSlider" type="range" min="1" max="50" step="1" value="1">
-            <div id="minNValue" class="muted slider-value"></div>
+
+          <div class="sidebar-row-full">
+            <div class="sidebar-label muted">
+              Rastergrootte:
+              <span id="gridCellValue"></span>
+            </div>
+            <div class="tvt-grid-size-controls">
+              <label class="check seg">
+                <input id="gridCellAuto" type="checkbox" checked>
+                <span>Auto</span>
+              </label>
+              <input id="gridCellSlider" type="range" min="200" max="2500" step="50" value="1000">
+            </div>
+            <div class="sidebar-hint muted-2">Kleiner = meer detail, groter = minder ruis.</div>
           </div>
-          <div class="sidebar-hint muted-2">Lager = meer detail, hoger = minder ruis.</div>
-        </div>
+
+          <div class="sidebar-row-full">
+            <div class="sidebar-label muted">
+              Min. aantal inzendingen per vak
+              <span class="help-icon"
+                data-tippy-content="<code>N</code> = aantal inzendingen in een vak. min-N filtert vakken met <code>N < drempel</code>. Transparantie schaalt met <code>√N</code>.">?</span>
+            </div>
+            <div class="slider">
+              <input id="minNSlider" type="range" min="1" max="50" step="1" value="1">
+              <div id="minNValue" class="muted slider-value"></div>
+            </div>
+            <div class="sidebar-hint muted-2">Lager = meer detail, hoger = minder ruis.</div>
+          </div>
+        </details>
 
         <div class="sidebar-row-full sidebar-actions">
           <button id="speciesViewResetBtn" class="sidebar-reset-btn" type="button"
