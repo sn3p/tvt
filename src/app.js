@@ -10,6 +10,10 @@ import {
 } from "./data_source.js";
 import { formatNumber } from "./helpers.js";
 import tippy from "./lib/tippy.js";
+import {
+  createTellingPopupMapClickGuard,
+  isOutsideTellingPopupTarget,
+} from "./popup_outside_click.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 
 export function initApp() {
@@ -2800,6 +2804,20 @@ export function initApp() {
     });
   }
 
+  const POINT_POPUP_OPTIONS = {
+    maxWidth: 340,
+    // Leaflet closeOnClick uses map `preclick`, which fires before marker
+    // click and would re-open the same telling. Keep it false and close on
+    // map `click` plus chrome outside the map instead.
+    closeOnClick: false,
+    autoClose: true,
+  };
+  const tellingPopupMapClickGuard = createTellingPopupMapClickGuard();
+
+  function closeOpenPointPopup() {
+    map.closePopup();
+  }
+
   function ensurePointPopupToggle(marker) {
     if (!marker || marker.__tvtPopupToggleBound) return;
 
@@ -2809,6 +2827,7 @@ export function initApp() {
     }
 
     marker.on("click", () => {
+      tellingPopupMapClickGuard.notePointMarkerClick();
       if (typeof marker.isPopupOpen === "function" && marker.isPopupOpen()) {
         marker.closePopup();
         return;
@@ -2818,6 +2837,15 @@ export function initApp() {
 
     marker.__tvtPopupToggleBound = true;
   }
+
+  map.on("click", () => {
+    if (!tellingPopupMapClickGuard.shouldCloseOnMapClick()) return;
+    closeOpenPointPopup();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!isOutsideTellingPopupTarget(event.target, { mapRoot: mapEl })) return;
+    closeOpenPointPopup();
+  });
 
   function birdImageHtml(name) {
     const filename = guessImageFilename(name);
@@ -3238,11 +3266,7 @@ export function initApp() {
             cachedBirds.length > 0
               ? popupHtml(entry, cachedBirds)
               : popupLoadingHtml(entry),
-            {
-              maxWidth: 340,
-              closeOnClick: false,
-              autoClose: true,
-            },
+            POINT_POPUP_OPTIONS,
           )
           .addTo(pointsLayer);
         bindPointMarkerPopup(marker, markerId);
@@ -3479,11 +3503,7 @@ export function initApp() {
           cachedBirds.length > 0
             ? popupHtml(entry, cachedBirds)
             : popupLoadingHtml(entry),
-          {
-            maxWidth: 340,
-            closeOnClick: false,
-            autoClose: true,
-          },
+          POINT_POPUP_OPTIONS,
         )
         .addTo(pointsWorkerClusterLayer);
       bindPointMarkerPopup(marker, markerId);
