@@ -1069,12 +1069,22 @@ body[data-theme="light"] #pointsModeIsorgInput {
   position: relative;
 }
 
-.leaflet-tile-pane {
-  /* opacity: 0.85; */
-  /* filter: grayscale(100%); */
-  /* filter: saturate(0) contrast(1.05) brightness(1.05); */
-  /* filter: saturate(0.85) contrast(0.95) brightness(1.05); */
-  /* filter: saturate(0.9) contrast(0.95) brightness(1.05); */
+.leaflet-control-layers {
+  background: var(--leaflet-panel-bg) !important;
+  border: 1px solid var(--leaflet-panel-border) !important;
+  border-radius: 10px !important;
+  color: var(--leaflet-panel-text);
+  box-shadow: none !important;
+}
+
+.leaflet-control-layers-expanded {
+  background: var(--leaflet-panel-bg) !important;
+  color: var(--leaflet-panel-text);
+  border-radius: 10px !important;
+}
+
+.leaflet-control-layers label {
+  color: var(--leaflet-panel-text);
 }
 
 .leaflet-control-attribution {

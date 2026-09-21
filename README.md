@@ -133,10 +133,10 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
   - per `(year,id)` entry-top-birds cachen (bijv. memory/IndexedDB later)
   - popup toont direct data als al gecached.
 
-### OSM attribution (verplicht)
-- Zorg dat de Leaflet tile layer zichtbaar attribution toont:
-  - `© OpenStreetMap contributors`
-- Let op: default OSM tiles zijn niet bedoeld voor heavy production use; later evt. eigen tile provider.
+### Kaarttegels en attribution
+- Standaard: Carto Positron (`light_all`). Attribution: © OpenStreetMap contributors © CARTO.
+- OSM HOT blijft beschikbaar via de basiskaart-wisselaar (linksonder).
+- Attribution moet zichtbaar blijven op de Leaflet control.
 
 ## Entries sidebar controls (Tellingen)
 
