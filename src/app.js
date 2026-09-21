@@ -1378,7 +1378,6 @@ export function initApp() {
       updateGridLegend({
         metric,
         maxMetric: 0,
-        effectiveStyle: effectiveSpeciesStyle(),
       });
       setComputing(false);
       updateHud();
@@ -1392,7 +1391,7 @@ export function initApp() {
       const value = Number(cell?.value ?? 0) || 0;
       if (value > maxMetric) maxMetric = value;
     }
-    updateGridLegend({ metric, maxMetric, effectiveStyle });
+    updateGridLegend({ metric, maxMetric });
 
     const crs = map.options.crs;
     for (const cell of cells) {
@@ -1491,7 +1490,7 @@ export function initApp() {
     const cells = Array.isArray(json?.cells) ? json.cells : [];
     const baseline = summaryOccupancy(json?.summary);
     const effectiveStyle = effectiveSpeciesStyle();
-    updateLiftLegend({ baseline, effectiveStyle });
+    updateLiftLegend({ baseline });
 
     if (!cells.length) {
       setComputing(false);
@@ -2034,6 +2033,27 @@ export function initApp() {
     return "Aanwezigheid";
   }
 
+  function speciesHudModeLabel() {
+    if (speciesViz === SPECIES_VIZ_RELATIEF) return "Relatief";
+    if (metric === "sum") return "Totaal";
+    if (metric === "avg") return "Gemiddeld";
+    return "Absoluut";
+  }
+
+  function legendScaleNote(m, maxOk) {
+    if (m === "avg") {
+      return maxOk
+        ? `Gemiddeld per inzending (max in beeld: ${fmtAvg(maxOk)})`
+        : "Gemiddeld per inzending";
+    }
+    if (m === "sum") {
+      return maxOk
+        ? `Som in het vak (max in beeld: ${fmtInt(maxOk)})`
+        : "Som in het vak";
+    }
+    return "Aandeel inzendingen in het vak";
+  }
+
   let gridLegendTitleEl = null;
   let gridLegendScaleEl = null;
   let gridLegendLabelsEl = null;
@@ -2083,7 +2103,6 @@ export function initApp() {
     updateGridLegend({
       metric: "presence",
       maxMetric: 1,
-      effectiveStyle: "grid",
     });
     return div;
   };
@@ -2099,7 +2118,7 @@ export function initApp() {
   // Default mode is "points".
   setGridLegendVisible(false);
 
-  function updateGridLegend({ metric, maxMetric, effectiveStyle }) {
+  function updateGridLegend({ metric, maxMetric }) {
     if (
       !gridLegendTitleEl ||
       !gridLegendScaleEl ||
@@ -2113,7 +2132,7 @@ export function initApp() {
     const maxV = Number(maxMetric);
     const maxOk = Number.isFinite(maxV) && maxV > 0 ? maxV : 0;
 
-    gridLegendTitleEl.textContent = `${metricLabelNl(m)} • ${effectiveStyle === "heatmap" ? "Heatmap" : "Raster"}`;
+    gridLegendTitleEl.textContent = m === "presence" ? "Absoluut" : metricLabelNl(m);
 
     // Swatches
     gridLegendScaleEl.replaceChildren();
@@ -2172,12 +2191,12 @@ export function initApp() {
       .join(" • ");
     gridLegendTooltipEl.setAttribute("data-tooltip-content-value", tooltipText);
 
-    // Min-N only when it actually filters something.
-    gridLegendNoteEl.innerHTML =
-      minN > 1 ? `Min. inzendingen per vak: ${minN}` : "";
+    const notes = [legendScaleNote(m, maxOk)];
+    if (minN > 1) notes.push(`Min. inzendingen per vak: ${minN}`);
+    gridLegendNoteEl.textContent = notes.join(" · ");
   }
 
-  function updateLiftLegend({ baseline, effectiveStyle } = {}) {
+  function updateLiftLegend({ baseline } = {}) {
     if (
       !gridLegendTitleEl ||
       !gridLegendScaleEl ||
@@ -2189,8 +2208,7 @@ export function initApp() {
     const baselinePct = Number.isFinite(baseline)
       ? Math.round(Math.max(0, baseline) * 100)
       : 0;
-    const styleNl = effectiveStyle === "heatmap" ? "Heatmap" : "Raster";
-    gridLegendTitleEl.textContent = `Relatief • ${styleNl}`;
+    gridLegendTitleEl.textContent = "Relatief";
 
     const stops = liftLegendStops();
     gridLegendScaleEl.replaceChildren();
@@ -2216,7 +2234,9 @@ export function initApp() {
     ].join(" • ");
     gridLegendTooltipEl.setAttribute("data-tooltip-content-value", tooltipText);
 
-    const notes = [];
+    const notes = [
+      `t.o.v. aanwezigheid in beeld (nu ${baselinePct}%)`,
+    ];
     if (minN > 1) notes.push(`Min. inzendingen per vak: ${minN}`);
     notes.push("Grijs = geteld, soort afwezig");
     gridLegendNoteEl.textContent = notes.join(" · ");
@@ -2576,11 +2596,6 @@ export function initApp() {
       return;
     }
 
-    const effectiveStyleRaw = effectiveSpeciesStyle();
-    const styleNl = effectiveStyleRaw === "heatmap" ? "heatmap" : "raster";
-    const suffixMinN = minN > 1 ? ` · min‑N ${minN}` : "";
-
-    // Compute metric sentence using current viewport.
     const summary = computeSelectedSpeciesViewportSummary();
 
     let hudName = "";
@@ -2593,13 +2608,7 @@ export function initApp() {
       hudMetric = "Klik om de zijbalk te openen";
     } else {
       hudName = selectedSpecies.name;
-      if (speciesViz === SPECIES_VIZ_RELATIEF) {
-        hudStyle = `relatief · ${styleNl}${suffixMinN}`;
-      } else if (metric === "presence") {
-        hudStyle = `absoluut · ${styleNl}${suffixMinN}`;
-      } else {
-        hudStyle = `${styleNl}${suffixMinN}`.trim();
-      }
+      hudStyle = sidebarOpen ? "" : speciesHudModeLabel();
 
       if (isComputing) {
         hudMetric = "Bezig met berekenen…";
