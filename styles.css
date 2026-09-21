@@ -903,10 +903,6 @@ body[data-theme="light"] #pointsModeIsorgInput {
   border-top: 1px solid var(--border-subtle);
 }
 
-.leaflet-interactive.tvt-species-lift-absent {
-  stroke: #64748b;
-}
-
 .sidebar-actions {
   display: flex;
   justify-content: flex-end;

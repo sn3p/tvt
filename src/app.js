@@ -1571,6 +1571,7 @@ export function initApp() {
     if (!selectedSpecies) {
       speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
       setComputing(false);
+      refreshSpeciesLegend();
       updateHud();
       return;
     }
@@ -2099,21 +2100,16 @@ export function initApp() {
     globalThis.L.DomEvent.disableClickPropagation(div);
     globalThis.L.DomEvent.disableScrollPropagation(div);
 
-    // Populate with a sensible default so it never renders "empty".
-    updateGridLegend({
-      metric: "presence",
-      maxMetric: 1,
-    });
+    // Seed from the current vergelijking (Relatief is default), not Absoluut.
+    refreshSpeciesLegend();
     return div;
   };
   gridLegend.addTo(map);
 
   function setGridLegendVisible(show) {
-    if (show) {
-      if (!gridLegend._map) gridLegend.addTo(map);
-    } else {
-      if (gridLegend._map) gridLegend.remove();
-    }
+    if (show && !gridLegend._map) gridLegend.addTo(map);
+    const el = gridLegend.getContainer?.() ?? gridLegend._container;
+    if (el) el.style.display = show ? "" : "none";
   }
   // Default mode is "points".
   setGridLegendVisible(false);
@@ -2240,6 +2236,23 @@ export function initApp() {
     if (minN > 1) notes.push(`Min. inzendingen per vak: ${minN}`);
     notes.push("Grijs = geteld, soort afwezig");
     gridLegendNoteEl.textContent = notes.join(" · ");
+  }
+
+  function refreshSpeciesLegend({ baseline, maxMetric } = {}) {
+    if (speciesViz === SPECIES_VIZ_RELATIEF) {
+      const fromSummary = summaryOccupancy({
+        entry_count: speciesGridSummary.total,
+        with_count: speciesGridSummary.with,
+      });
+      updateLiftLegend({
+        baseline: Number.isFinite(baseline) ? baseline : fromSummary,
+      });
+      return;
+    }
+    updateGridLegend({
+      metric,
+      maxMetric: Number.isFinite(maxMetric) ? maxMetric : 0,
+    });
   }
 
   function setMode(nextMode, { skipRender = false } = {}) {
