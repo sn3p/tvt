@@ -2289,6 +2289,7 @@ export function initApp() {
       if (!map.hasLayer(gridLayer)) gridLayer.addTo(map);
       setLegendVisible(false);
       setGridLegendVisible(true);
+      syncVizToUrl(speciesViz);
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
@@ -2358,11 +2359,13 @@ export function initApp() {
     }
   }
 
-  function syncVizToUrl(next) {
+  function syncVizToUrl(next, { push = false } = {}) {
     const url = new URL(window.location.href);
-    if (next === SPECIES_VIZ_RELATIEF) url.searchParams.set("viz", "relatief");
-    else url.searchParams.set("viz", "absoluut");
-    window.history.replaceState(null, "", url);
+    const value = next === SPECIES_VIZ_RELATIEF ? "relatief" : "absoluut";
+    if (url.searchParams.get("viz") === value) return;
+    url.searchParams.set("viz", value);
+    if (push) window.history.pushState(null, "", url);
+    else window.history.replaceState(null, "", url);
   }
 
   function applySpeciesVizUi() {
@@ -2406,9 +2409,8 @@ export function initApp() {
   const initialStoredLocation = initialPc4 ? null : readLocationFromStorage();
   if (initialPc4) pc4Input.value = initialPc4;
 
-  // Initial mode: URL is source of truth.
+  // Initial mode: URL is source of truth. setMode writes viz when entering Soorten.
   applySpeciesVizUi();
-  if (modeFromUrl() === "species") syncVizToUrl(speciesViz);
   setMode(modeFromUrl(), { skipRender: true });
 
   // React to back/forward navigation if mode or postcode changes in URL.
@@ -2854,9 +2856,9 @@ export function initApp() {
     onSpeciesControlsChanged();
   }
 
-  function onSpeciesControlsChanged() {
+  function onSpeciesControlsChanged({ pushViz = false } = {}) {
     readControls();
-    syncVizToUrl(speciesViz);
+    syncVizToUrl(speciesViz, { push: pushViz });
     applySpeciesVizUi();
     scheduleSpeciesCatalogFetch({ immediate: true });
     renderSpeciesList({ query: speciesSearchInput.value });
@@ -2871,7 +2873,7 @@ export function initApp() {
     metricPresence.checked = true;
     metricAvg.checked = false;
     metricSum.checked = false;
-    onSpeciesControlsChanged();
+    onSpeciesControlsChanged({ pushViz: true });
   }
 
   metricPresence.addEventListener("change", onSpeciesControlsChanged);
