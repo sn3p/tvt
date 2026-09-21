@@ -14,6 +14,11 @@ import {
   createTellingPopupMapClickGuard,
   isOutsideTellingPopupTarget,
 } from "./popup_outside_click.js";
+import {
+  readSavedSidebarOpen,
+  resolveSidebarOpenOnModeEnter,
+  writeSidebarOpen,
+} from "./sidebar_open.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 import {
   SPECIES_VIZ_ABSOLUUT,
@@ -268,10 +273,10 @@ export function initApp() {
   const THEME_STORAGE_KEY = "tvt:theme";
   const INFO_DIALOG_SEEN_KEY = "tvt:ui:infoDialogSeen";
   const LOCATION_ONBOARDING_SEEN_KEY = "tvt:ui:locationOnboardingSeen";
-  const POINTS_SIDEBAR_STORAGE_KEY = "tvt:pointsSidebarOpen";
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
+  const SIDEBAR_MOBILE_MQ = "(max-width: 880px)";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const CELL_TILE_POINTS_HINT =
     "Op dit zoomniveau toont de kaart één stip per rastercel. Zoom in voor individuele tellingen.";
@@ -803,11 +808,7 @@ export function initApp() {
     applyPointsSettingsToUI();
     setPointsSidebarMessage("");
 
-    removeStorageKeys([
-      POINT_MODE_FILTERS_LS_KEY,
-      POINTS_SETTINGS_STORAGE_KEY,
-      POINTS_SIDEBAR_STORAGE_KEY,
-    ]);
+    removeStorageKeys([POINT_MODE_FILTERS_LS_KEY, POINTS_SETTINGS_STORAGE_KEY]);
 
     if (pointsClusterLayer?.options) {
       pointsClusterLayer.options.disableClusteringAtZoom =
@@ -1128,6 +1129,8 @@ export function initApp() {
   };
 
   let sidebarOpen = true;
+  let sidebarOpenInitialized = false;
+  let sidebarOpenIsMobile = null;
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
   let sidebarToggleControl = null;
@@ -2272,11 +2275,7 @@ export function initApp() {
     // Allow mode-based styling without touching JS again.
     document.body.dataset.mode = mode;
 
-    if (mode === "species") {
-      initSidebarOpenOnEnterSpeciesMode();
-    } else {
-      initSidebarOpenOnEnterPointsMode();
-    }
+    applySidebarOpenForMode();
 
     updateSidebarToggleControl();
 
@@ -2440,36 +2439,51 @@ export function initApp() {
   });
 
   function isMobile() {
-    return window.matchMedia && window.matchMedia("(max-width: 880px)").matches;
+    return window.matchMedia && window.matchMedia(SIDEBAR_MOBILE_MQ).matches;
   }
 
-  function sidebarStorageKeyForMode(targetMode) {
-    if (targetMode === "points") return POINTS_SIDEBAR_STORAGE_KEY;
-    return `tvt:speciesSidebarOpen:${isMobile() ? "mobile" : "desktop"}`;
+  function applySidebarOpenForMode() {
+    const nextIsMobile = isMobile();
+    const breakpointChanged =
+      sidebarOpenInitialized && sidebarOpenIsMobile !== nextIsMobile;
+    let saved = null;
+    if (!sidebarOpenInitialized || breakpointChanged) {
+      try {
+        saved = readSavedSidebarOpen(window.localStorage, {
+          isMobile: nextIsMobile,
+          preferMode: mode,
+          allowLegacy: !breakpointChanged,
+        });
+      } catch {
+        saved = null;
+      }
+    }
+    sidebarOpen = resolveSidebarOpenOnModeEnter({
+      initialized: sidebarOpenInitialized,
+      breakpointChanged,
+      currentOpen: sidebarOpen,
+      savedOpen: saved,
+      mode,
+      isMobile: nextIsMobile,
+      hasSelectedSpecies: Boolean(selectedSpecies),
+    });
+    sidebarOpenInitialized = true;
+    sidebarOpenIsMobile = nextIsMobile;
+    setSidebarOpen(sidebarOpen, { persist: false, reason: "mode-sync" });
   }
 
-  function getSavedSidebarOpen(targetMode) {
-    try {
-      const v = window.localStorage.getItem(
-        sidebarStorageKeyForMode(targetMode),
-      );
-      if (v == null) return null;
-      return v === "1" || v === "true" || v === "open";
-    } catch {
-      return null;
+  function watchSidebarBreakpoint() {
+    if (!window.matchMedia) return;
+    const mql = window.matchMedia(SIDEBAR_MOBILE_MQ);
+    const onChange = () => applySidebarOpenForMode();
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", onChange);
+    } else if (typeof mql.addListener === "function") {
+      mql.addListener(onChange);
     }
   }
 
-  function saveSidebarOpenForMode(targetMode, open) {
-    try {
-      window.localStorage.setItem(
-        sidebarStorageKeyForMode(targetMode),
-        open ? "open" : "closed",
-      );
-    } catch {
-      // ignore
-    }
-  }
+  watchSidebarBreakpoint();
 
   function setSidebarOpen(open, { persist = true, reason = "" } = {}) {
     sidebarOpen = Boolean(open);
@@ -2505,37 +2519,17 @@ export function initApp() {
       }, 0);
     }
 
-    if (persist) saveSidebarOpenForMode(mode, sidebarOpen);
+    if (persist) {
+      try {
+        writeSidebarOpen(window.localStorage, sidebarOpen, {
+          isMobile: isMobile(),
+        });
+      } catch {
+        // ignore
+      }
+    }
     updateHud();
     if (mode === "species" && !sidebarOpen) schedulePresenceGridCompute();
-  }
-
-  function initSidebarOpenOnEnterSpeciesMode() {
-    const saved = getSavedSidebarOpen("species");
-    if (saved == null) {
-      // First time: open sidebar (friendly), except on mobile with species selected.
-      if (isMobile() && selectedSpecies)
-        setSidebarOpen(false, {
-          persist: false,
-          reason: "mobile-default-closed",
-        });
-      else setSidebarOpen(true, { persist: false, reason: "first-time-open" });
-      return;
-    }
-    setSidebarOpen(saved, { persist: false, reason: "restore" });
-  }
-
-  function initSidebarOpenOnEnterPointsMode() {
-    const saved = getSavedSidebarOpen("points");
-    if (saved == null) {
-      // Points sidebar starts collapsed by default on desktop and mobile.
-      setSidebarOpen(false, {
-        persist: false,
-        reason: "points-default-collapsed",
-      });
-      return;
-    }
-    setSidebarOpen(saved, { persist: false, reason: "restore" });
   }
 
   sidebarSpeciesCloseBtn.addEventListener("click", () => {
