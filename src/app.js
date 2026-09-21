@@ -21,8 +21,8 @@ import {
 } from "./sidebar_open.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 import {
+  BASEMAP_ESRI_GRAY,
   BASEMAP_OSM_HOT,
-  BASEMAP_POSITRON,
 } from "./basemap.mjs";
 import {
   SPECIES_VIZ_ABSOLUUT,
@@ -1028,21 +1028,24 @@ export function initApp() {
     return globalThis.L.tileLayer(spec.url, spec.options);
   }
 
-  const positronLayer = tileLayerFromBasemap(BASEMAP_POSITRON);
+  const lightGrayLayer = tileLayerFromBasemap(BASEMAP_ESRI_GRAY);
   const osmHotLayer = tileLayerFromBasemap(BASEMAP_OSM_HOT);
-  positronLayer.addTo(map);
+  lightGrayLayer.addTo(map);
   const basemapControl = globalThis.L.control.layers(
     {
-      [BASEMAP_POSITRON.label]: positronLayer,
+      [BASEMAP_ESRI_GRAY.label]: lightGrayLayer,
       [BASEMAP_OSM_HOT.label]: osmHotLayer,
     },
     {},
     { position: "bottomleft", collapsed: true },
   );
   basemapControl.addTo(map);
-  const basemapControlEl = basemapControl.getContainer?.();
-  if (basemapControlEl) {
-    basemapControlEl.setAttribute("aria-label", "Basiskaart");
+  const basemapToggle = basemapControl
+    .getContainer?.()
+    ?.querySelector(".leaflet-control-layers-toggle");
+  if (basemapToggle) {
+    basemapToggle.setAttribute("aria-label", "Basiskaart");
+    basemapToggle.setAttribute("title", "Basiskaart");
   }
 
   function clusterToneForCounts({ privateCount, isorgCount }) {

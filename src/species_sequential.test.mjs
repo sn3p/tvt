@@ -44,11 +44,11 @@ describe("YlOrRd sequential ramp", () => {
 
   it("maps occupancy on a fixed 0–100% domain", () => {
     const common = occupancySequentialColor(0.8);
-    const ifStretchedToView = colorFromSequentialRamp(applyHighEndGamma(0));
+    const ifStretchedToViewMax = colorFromSequentialRamp(applyHighEndGamma(1));
     assert.equal(occupancySequentialColor(0), colorFromSequentialRamp(0));
     assert.equal(occupancySequentialColor(1), colorFromSequentialRamp(1));
     assert.equal(common, colorFromSequentialRamp(applyHighEndGamma(0.8)));
-    assert.notEqual(common, ifStretchedToView);
+    assert.notEqual(common, ifStretchedToViewMax);
     assert.notEqual(occupancySequentialColor(0.7), occupancySequentialColor(0.9));
   });
 

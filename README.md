@@ -134,7 +134,7 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
   - popup toont direct data als al gecached.
 
 ### Kaarttegels en attribution
-- Standaard: Carto Positron (`light_all`). Attribution: © OpenStreetMap contributors © CARTO.
+- Standaard: Esri World Light Gray Canvas (geen API-sleutel). Attribution: Tiles © Esri.
 - OSM HOT blijft beschikbaar via de basiskaart-wisselaar (linksonder).
 - Attribution moet zichtbaar blijven op de Leaflet control.
 

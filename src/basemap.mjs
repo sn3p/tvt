@@ -1,12 +1,12 @@
-export const BASEMAP_POSITRON = {
-  id: "positron",
-  label: "Carto Positron",
-  url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+export const BASEMAP_ESRI_GRAY = {
+  id: "esri-gray",
+  label: "Lichtgrijs",
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   options: {
-    maxZoom: 20,
-    subdomains: "abcd",
+    maxNativeZoom: 16,
+    maxZoom: 19,
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
   },
 };
 
@@ -21,11 +21,11 @@ export const BASEMAP_OSM_HOT = {
   },
 };
 
-export const DEFAULT_BASEMAP = BASEMAP_POSITRON;
+export const DEFAULT_BASEMAP = BASEMAP_ESRI_GRAY;
 
 export function leafletBaseLayers() {
   return {
-    [BASEMAP_POSITRON.label]: BASEMAP_POSITRON,
+    [BASEMAP_ESRI_GRAY.label]: BASEMAP_ESRI_GRAY,
     [BASEMAP_OSM_HOT.label]: BASEMAP_OSM_HOT,
   };
 }
