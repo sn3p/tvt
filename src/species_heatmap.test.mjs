@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { effortHeatRadiusForZoom } from "./effort_heatmap.mjs";
 import {
   colorForLiftCell,
+  divergingTFromLift,
   occupancyLift,
 } from "./species_lift.mjs";
 import { occupancySequentialColor } from "./species_sequential.mjs";
@@ -14,11 +15,12 @@ import {
   detachSpeciesHeatLayer,
   occupancyHeatIntensity,
   occupancyHeatKernel,
+  paintSpeciesHeatField,
   parseCssRgb,
   speciesCellCenterLatLng,
-  speciesHeatCompositeForViz,
   speciesHeatKernelsFromCells,
   speciesHeatRadiusForZoom,
+  speciesHeatRadiusPx,
 } from "./species_heatmap.mjs";
 
 const unproject = (x, y) => ({ lat: y / 1000, lng: x / 1000 });
@@ -102,8 +104,9 @@ describe("occupancy-masked species heat", () => {
         lift: occupancyLift(1, 0.5),
       }),
     );
-    assert.equal(speciesHeatCompositeForViz("relatief"), "source-over");
-    assert.equal(speciesHeatCompositeForViz("absoluut"), "lighter");
+    assert.equal(kernels[0].isAbsent, true);
+    assert.equal(kernels[1].isAbsent, false);
+    assert.equal(kernels[1].amount, divergingTFromLift(occupancyLift(1, 0.5)));
   });
 
   it("does not turn Relatief into sequential occupancy density", () => {
@@ -142,6 +145,14 @@ describe("species heat geometry and glow", () => {
     assert.ok(speciesHeatRadiusForZoom(8) >= 28);
   });
 
+  it("grows with cell size when zoomed in so city view is not dots", () => {
+    const country = speciesHeatRadiusPx(8, { cellSizeM: 2500, lat: 52.1 });
+    const city = speciesHeatRadiusPx(15, { cellSizeM: 200, lat: 53.2 });
+    assert.ok(city > country);
+    assert.ok(city >= 40);
+    assert.ok(country >= 8);
+  });
+
   it("converts rgb fills to rgba for the kernel gradient", () => {
     assert.deepEqual(parseCssRgb("rgb(15,118,110)"), { r: 15, g: 118, b: 110 });
     assert.equal(colorWithAlpha("rgb(15,118,110)", 0.5), "rgba(15,118,110,0.5)");
@@ -175,17 +186,19 @@ describe("species heat layer detach", () => {
           return {
             className,
             style: {},
-            width: 0,
-            height: 0,
+            width: 300,
+            height: 150,
             parentNode: { removeChild() {} },
             getContext: () => ({
               clearRect() {},
-              save() {},
-              restore() {},
-              beginPath() {},
-              arc() {},
-              fill() {},
-              createRadialGradient: () => ({ addColorStop() {} }),
+              createImageData(w, h) {
+                return {
+                  data: new Uint8ClampedArray(w * h * 4),
+                  width: w,
+                  height: h,
+                };
+              },
+              putImageData() {},
             }),
           };
         },
@@ -203,11 +216,12 @@ describe("species heat layer detach", () => {
     };
     const layer = createSpeciesHeatLayer(L);
     const map = {
-      createPane: () => ({ style: {}, appendChild() {} }),
+      getPanes: () => ({ overlayPane: { appendChild() {} } }),
       getPane: () => null,
       on() {},
       off() {},
       getSize: () => ({ x: 8, y: 8 }),
+      getCenter: () => ({ lat: 52.1, lng: 5.2 }),
       containerPointToLayerPoint: () => ({ x: 0, y: 0 }),
       latLngToContainerPoint: () => ({ x: 1, y: 1 }),
       getZoom: () => 8,
@@ -217,6 +231,8 @@ describe("species heat layer detach", () => {
       },
     };
     layer.onAdd(map);
+    assert.equal(layer._canvas.width, 8);
+    assert.equal(layer._canvas.height, 8);
     assert.match(String(layer._canvas.className), new RegExp(SPECIES_HEAT_LAYER_CLASS));
     let redraws = 0;
     const originalRedraw = layer._redraw.bind(layer);
@@ -240,5 +256,105 @@ describe("species heat layer detach", () => {
       layer.setKernels([{ lat: 52, lng: 5, color: "rgb(1,2,3)", alpha: 1 }]),
     );
     assert.equal(redraws, 0);
+  });
+
+  it("rewrites canvas bitmap size after detach so zoom is not a 300x150 tile", () => {
+    const L = {
+      setOptions(obj, options) {
+        obj.options = options || {};
+      },
+      DomUtil: {
+        create(_tag, className) {
+          return {
+            className,
+            style: {},
+            width: 300,
+            height: 150,
+            parentNode: { removeChild() {} },
+            getContext: () => ({
+              clearRect() {},
+              createImageData(w, h) {
+                return {
+                  data: new Uint8ClampedArray(w * h * 4),
+                  width: w,
+                  height: h,
+                };
+              },
+              putImageData() {},
+            }),
+          };
+        },
+        setPosition() {},
+      },
+      Layer: {
+        extend(proto) {
+          function Ctor(options) {
+            proto.initialize.call(this, options);
+          }
+          Object.assign(Ctor.prototype, proto);
+          return Ctor;
+        },
+      },
+    };
+    const layer = createSpeciesHeatLayer(L);
+    const map = {
+      getPanes: () => ({ overlayPane: { appendChild() {} } }),
+      on() {},
+      off() {},
+      getSize: () => ({ x: 12, y: 9 }),
+      getCenter: () => ({ lat: 52.1, lng: 5.2 }),
+      containerPointToLayerPoint: () => ({ x: 0, y: 0 }),
+      latLngToContainerPoint: () => ({ x: 2, y: 2 }),
+      getZoom: () => 10,
+      hasLayer: () => true,
+      removeLayer(next) {
+        next.onRemove(map);
+      },
+    };
+    layer.onAdd(map);
+    assert.equal(layer._canvas.width, 12);
+    detachSpeciesHeatLayer(layer, map, L);
+    layer.onAdd(map);
+    assert.equal(layer._canvas.width, 12);
+    assert.equal(layer._canvas.height, 9);
+    assert.notEqual(layer._canvas.width, 300);
+  });
+});
+
+describe("species heat field", () => {
+  it("leaves empty land transparent and averages lift instead of last-colour-wins", () => {
+    const width = 21;
+    const height = 21;
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    const ctx = {
+      createImageData: (w, h) => ({ data: pixels, width: w, height: h }),
+      putImageData() {},
+    };
+    paintSpeciesHeatField(ctx, width, height, [], {
+      viz: "relatief",
+      radius: 4,
+    });
+    assert.ok(pixels.every((n) => n === 0));
+
+    paintSpeciesHeatField(
+      ctx,
+      width,
+      height,
+      [
+        { x: 4, y: 10, amount: -1, isAbsent: false },
+        { x: 16, y: 10, amount: 1, isAbsent: false },
+      ],
+      { viz: "relatief", radius: 8 },
+    );
+    const mid = (10 * width + 10) * 4;
+    const left = (10 * width + 4) * 4;
+    const right = (10 * width + 16) * 4;
+    assert.ok(pixels[left + 3] > 0);
+    assert.ok(pixels[right + 3] > 0);
+    assert.ok(pixels[mid + 3] > 0);
+    assert.ok(pixels[right] < pixels[left]);
+    assert.ok(pixels[right + 2] > pixels[left + 2]);
+    assert.notEqual(pixels[mid], pixels[left]);
+    assert.notEqual(pixels[mid], pixels[right]);
   });
 });

@@ -26,7 +26,7 @@ export function applyHighEndGamma(t, gamma = SEQUENTIAL_COLORMAP_GAMMA) {
   return 1 - Math.pow(1 - x, g);
 }
 
-export function colorFromSequentialRamp(
+export function rgbFromSequentialRamp(
   t,
   stops = SEQUENTIAL_COLORMAP_YLORRD,
 ) {
@@ -35,20 +35,34 @@ export function colorFromSequentialRamp(
   const n = ramp.length;
   if (n <= 1) {
     const c = ramp[0] || SEQUENTIAL_COLORMAP_YLORRD[0];
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
+    return [c[0], c[1], c[2]];
   }
   const f = x * (n - 1);
   const i = Math.floor(f);
   const w = f - i;
   const c0 = ramp[Math.min(n - 1, Math.max(0, i))];
   const c1 = ramp[Math.min(n - 1, Math.max(0, i + 1))];
-  const r = Math.round(c0[0] + (c1[0] - c0[0]) * w);
-  const g = Math.round(c0[1] + (c1[1] - c0[1]) * w);
-  const b = Math.round(c0[2] + (c1[2] - c0[2]) * w);
-  return `rgb(${r},${g},${b})`;
+  return [
+    Math.round(c0[0] + (c1[0] - c0[0]) * w),
+    Math.round(c0[1] + (c1[1] - c0[1]) * w),
+    Math.round(c0[2] + (c1[2] - c0[2]) * w),
+  ];
+}
+
+export function colorFromSequentialRamp(
+  t,
+  stops = SEQUENTIAL_COLORMAP_YLORRD,
+) {
+  const c = rgbFromSequentialRamp(t, stops);
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
 /** Occupancy fill on a fixed 0–100% domain. Do not pass viewport-stretched values. */
+export function occupancySequentialRgb(occupancy) {
+  return rgbFromSequentialRamp(applyHighEndGamma(clamp01(occupancy)));
+}
+
 export function occupancySequentialColor(occupancy) {
-  return colorFromSequentialRamp(applyHighEndGamma(clamp01(occupancy)));
+  const c = occupancySequentialRgb(occupancy);
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
 }

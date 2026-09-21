@@ -44,7 +44,7 @@ import {
 import {
   createSpeciesHeatLayer,
   detachSpeciesHeatLayer,
-  speciesHeatCompositeForViz,
+  resetSpeciesHeatKernels,
   speciesHeatKernelsFromCells,
 } from "./species_heatmap.mjs";
 import {
@@ -1163,7 +1163,7 @@ export function initApp() {
     detachSpeciesHeatLayer(speciesHeatLayer, map, globalThis.L);
   }
 
-  function paintSpeciesHeatKernels(kernels, viz) {
+  function paintSpeciesHeatKernels(kernels, viz, { cellSizeM } = {}) {
     if (
       !speciesHeatLayer ||
       typeof speciesHeatLayer.setKernels !== "function"
@@ -1178,9 +1178,7 @@ export function initApp() {
     ) {
       speciesHeatLayer.addTo(map);
     }
-    speciesHeatLayer.setKernels(kernels, {
-      composite: speciesHeatCompositeForViz(viz),
-    });
+    speciesHeatLayer.setKernels(kernels, { viz, cellSizeM });
     return true;
   }
 
@@ -1569,6 +1567,7 @@ export function initApp() {
           unproject: speciesCellUnproject,
         }),
         SPECIES_VIZ_ABSOLUUT,
+        { cellSizeM },
       );
 
     for (const cell of cells) {
@@ -1662,6 +1661,7 @@ export function initApp() {
           unproject: speciesCellUnproject,
         }),
         SPECIES_VIZ_RELATIEF,
+        { cellSizeM },
       );
 
     for (const cell of cells) {
@@ -1704,9 +1704,26 @@ export function initApp() {
     }
   }
 
+  function prepareSpeciesHeatForCompute() {
+    if (effectiveSpeciesStyle() !== "heatmap") {
+      clearSpeciesHeat();
+      return;
+    }
+    if (
+      speciesHeatLayer &&
+      speciesHeatLayer._map &&
+      typeof speciesHeatLayer.setKernels === "function"
+    ) {
+      resetSpeciesHeatKernels(speciesHeatLayer, globalThis.L);
+      speciesHeatLayer.setKernels([]);
+      return;
+    }
+    clearSpeciesHeat();
+  }
+
   async function computeBackendSpeciesGrid() {
     gridLayer.clearLayers();
-    clearSpeciesHeat();
+    prepareSpeciesHeatForCompute();
     if (!selectedSpecies) {
       speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
       setComputing(false);
