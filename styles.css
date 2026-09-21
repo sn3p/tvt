@@ -1110,6 +1110,10 @@ body[data-theme="light"] #pointsModeIsorgInput {
   flex: none;
 }
 
+.leaflet-container .maplibregl-ctrl-attrib {
+  display: none;
+}
+
 .leaflet-control-attribution {
   background: transparent !important;
   color: inherit !important;

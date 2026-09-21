@@ -21,8 +21,10 @@ import {
 } from "./sidebar_open.js";
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 import {
-  BASEMAP_ESRI_GRAY,
-  BASEMAP_OSM_HOT,
+  BASEMAPS,
+  DEFAULT_BASEMAP,
+  canCreateBasemapLayer,
+  createBasemapLayer,
 } from "./basemap.mjs";
 import {
   SPECIES_VIZ_ABSOLUUT,
@@ -1025,20 +1027,24 @@ export function initApp() {
   initGridCellControls(map);
 
   function tileLayerFromBasemap(spec) {
-    return globalThis.L.tileLayer(spec.url, spec.options);
+    return createBasemapLayer(spec, globalThis.L);
   }
 
-  const lightGrayLayer = tileLayerFromBasemap(BASEMAP_ESRI_GRAY);
-  const osmHotLayer = tileLayerFromBasemap(BASEMAP_OSM_HOT);
-  lightGrayLayer.addTo(map);
-  const basemapControl = globalThis.L.control.layers(
-    {
-      [BASEMAP_ESRI_GRAY.label]: lightGrayLayer,
-      [BASEMAP_OSM_HOT.label]: osmHotLayer,
-    },
-    {},
-    { position: "bottomleft", collapsed: true },
-  );
+  const baseLayers = {};
+  let defaultBasemapLayer = null;
+  for (const spec of BASEMAPS) {
+    if (!canCreateBasemapLayer(spec, globalThis.L)) continue;
+    const layer = tileLayerFromBasemap(spec);
+    baseLayers[spec.label] = layer;
+    if (spec === DEFAULT_BASEMAP) defaultBasemapLayer = layer;
+  }
+  const initialBasemap =
+    defaultBasemapLayer || Object.values(baseLayers)[0];
+  if (initialBasemap) initialBasemap.addTo(map);
+  const basemapControl = globalThis.L.control.layers(baseLayers, {}, {
+    position: "bottomleft",
+    collapsed: true,
+  });
   basemapControl.addTo(map);
   const basemapToggle = basemapControl
     .getContainer?.()
