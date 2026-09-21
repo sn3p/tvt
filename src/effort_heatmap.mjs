@@ -158,9 +158,50 @@ export function canCreateEffortHeatLayer(L) {
   return typeof L?.heatLayer === "function";
 }
 
+export function cancelEffortHeatRedraw(layer, L) {
+  if (!layer) return layer;
+  const frame = layer._frame;
+  if (frame != null) {
+    const cancel = L?.Util?.cancelAnimFrame;
+    if (typeof cancel === "function") cancel(frame);
+    layer._frame = null;
+  }
+  return layer;
+}
+
+export function resetEffortHeatData(layer, L) {
+  cancelEffortHeatRedraw(layer, L);
+  if (layer) layer._latlngs = [];
+  return layer;
+}
+
+export function detachEffortHeatLayer(layer, map, L) {
+  if (!layer) return layer;
+  resetEffortHeatData(layer, L);
+  if (map && typeof map.hasLayer === "function" && map.hasLayer(layer)) {
+    map.removeLayer(layer);
+  } else if (
+    effortHeatLayerHasMap(layer) &&
+    map &&
+    typeof map.removeLayer === "function"
+  ) {
+    map.removeLayer(layer);
+  }
+  return layer;
+}
+
 export function createEffortHeatLayer(L, zoom = EFFORT_HEAT_INTENSITY_ZOOM) {
   if (!canCreateEffortHeatLayer(L)) return null;
-  return L.heatLayer([], effortHeatLayerOptions(zoom));
+  const layer = L.heatLayer([], effortHeatLayerOptions(zoom));
+  const originalOnRemove = layer.onRemove;
+  layer.onRemove = function onRemoveEffortHeat(removedMap) {
+    cancelEffortHeatRedraw(this, L);
+    if (typeof originalOnRemove === "function") {
+      return originalOnRemove.call(this, removedMap);
+    }
+    return this;
+  };
+  return layer;
 }
 
 export function effortHeatLayerHasMap(layer) {

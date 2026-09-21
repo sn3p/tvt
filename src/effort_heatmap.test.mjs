@@ -11,6 +11,7 @@ import {
   canCreateEffortHeatLayer,
   clusterControlsEnabled,
   createEffortHeatLayer,
+  detachEffortHeatLayer,
   effortHeatLatLngs,
   effortHeatLayerHasMap,
   effortHeatLayerOptions,
@@ -19,6 +20,7 @@ import {
   isHeatmapDisplayMode,
   parsePointsDisplayMode,
   pointsDisplayModeFromRadios,
+  resetEffortHeatData,
   resolvePointsDisplayRenderKind,
   setEffortHeatLatLngs,
   setEffortHeatOptions,
@@ -222,5 +224,81 @@ describe("effort heat options and legend", () => {
     setEffortHeatLatLngs(attached, [[52.1, 5.1, 1]]);
     assert.deepEqual(attachedCalls, ["setOptions", "setLatLngs"]);
     assert.deepEqual(attached._latlngs, [[52.1, 5.1, 1]]);
+  });
+
+  it("cancels a pending _redraw before Heatmap is detached", () => {
+    const cancelled = [];
+    const L = {
+      Util: {
+        cancelAnimFrame(id) {
+          cancelled.push(id);
+        },
+      },
+    };
+    const map = {
+      hasLayer: () => true,
+      removeLayer(layer) {
+        layer._map = null;
+      },
+    };
+    const layer = {
+      _map: map,
+      _frame: 77,
+      _latlngs: [[52, 5, 1]],
+      setLatLngs() {
+        throw new TypeError("Cannot read properties of null (reading 'getSize')");
+      },
+    };
+    assert.doesNotThrow(() => detachEffortHeatLayer(layer, map, L));
+    assert.deepEqual(cancelled, [77]);
+    assert.equal(layer._frame, null);
+    assert.equal(layer._map, null);
+    assert.deepEqual(layer._latlngs, []);
+  });
+
+  it("does not schedule leaflet.heat redraw when clearing attached heat data", () => {
+    let setLatLngsCalls = 0;
+    const layer = {
+      _map: { getSize() { throw new TypeError("Cannot read properties of null (reading 'getSize')"); } },
+      _frame: 3,
+      _latlngs: [[52, 5, 1]],
+      setLatLngs() {
+        setLatLngsCalls += 1;
+        this._frame = 4;
+      },
+    };
+    const cancelled = [];
+    resetEffortHeatData(layer, {
+      Util: { cancelAnimFrame(id) { cancelled.push(id); } },
+    });
+    assert.deepEqual(cancelled, [3]);
+    assert.equal(setLatLngsCalls, 0);
+    assert.equal(layer._frame, null);
+    assert.deepEqual(layer._latlngs, []);
+  });
+
+  it("cancels pending redraw from heat layer onRemove", () => {
+    const cancelled = [];
+    const originalRemoves = [];
+    const L = {
+      heatLayer() {
+        return {
+          onRemove(map) {
+            originalRemoves.push(map);
+          },
+        };
+      },
+      Util: {
+        cancelAnimFrame(id) {
+          cancelled.push(id);
+        },
+      },
+    };
+    const layer = createEffortHeatLayer(L, 8);
+    layer._frame = 9;
+    layer.onRemove({ id: "map" });
+    assert.deepEqual(cancelled, [9]);
+    assert.equal(layer._frame, null);
+    assert.deepEqual(originalRemoves, [{ id: "map" }]);
   });
 });

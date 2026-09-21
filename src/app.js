@@ -45,6 +45,7 @@ import {
   EFFORT_HEAT_LEGEND,
   clusterControlsEnabled,
   createEffortHeatLayer,
+  detachEffortHeatLayer,
   effortHeatLatLngs,
   effortHeatLayerHasMap,
   effortHeatLayerOptions,
@@ -52,6 +53,7 @@ import {
   isHeatmapDisplayMode,
   parsePointsDisplayMode,
   pointsDisplayModeFromRadios,
+  resetEffortHeatData,
   resolvePointsDisplayRenderKind,
   setEffortHeatLatLngs,
   setEffortHeatOptions,
@@ -2049,11 +2051,12 @@ export function initApp() {
     const previousLayer = pointsLayer;
     const wasVisible = map.hasLayer(previousLayer);
     if (previousLayer === pointsHeatLayer) {
-      setEffortHeatLatLngs(previousLayer, []);
-    }
-    if (wasVisible) map.removeLayer(previousLayer);
-    if (typeof previousLayer.clearLayers === "function") {
-      previousLayer.clearLayers();
+      detachEffortHeatLayer(previousLayer, map, globalThis.L);
+    } else {
+      if (wasVisible) map.removeLayer(previousLayer);
+      if (typeof previousLayer.clearLayers === "function") {
+        previousLayer.clearLayers();
+      }
     }
     if (resolved !== "heatmap") clearEffortHeat();
     pointRenderKind = resolved;
@@ -3286,7 +3289,7 @@ export function initApp() {
   }
 
   function clearEffortHeat() {
-    setEffortHeatLatLngs(pointsHeatLayer, []);
+    resetEffortHeatData(pointsHeatLayer, globalThis.L);
   }
 
   function refreshRenderedPointStatsFromEntries(entries) {
