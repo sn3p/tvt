@@ -29,6 +29,9 @@ jobs:
       - name: Assemble static runtime files
         run: |
           set -euo pipefail
+          node --check src/app.js
+          node --check src/popup_outside_click.js
+          node --test src/popup_outside_click.test.js
           mkdir -p _site
           cp index.html main.js styles.css _site/
           cp -R src img old _site/
