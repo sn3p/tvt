@@ -24,7 +24,7 @@ describe("basemap tile set", () => {
 
   it("keeps OSM HOT as a second base layer", () => {
     const layers = leafletBaseLayers();
-    assert.equal(layers.Lichtgrijs, BASEMAP_ESRI_GRAY);
+    assert.equal(layers["Esri World Light Gray Canvas"], BASEMAP_ESRI_GRAY);
     assert.equal(layers["OSM HOT"], BASEMAP_OSM_HOT);
     assert.match(BASEMAP_OSM_HOT.url, /tile\.openstreetmap\.fr\/hot/);
     assert.match(

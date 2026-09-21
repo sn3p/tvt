@@ -1,6 +1,6 @@
 export const BASEMAP_ESRI_GRAY = {
   id: "esri-gray",
-  label: "Lichtgrijs",
+  label: "Esri World Light Gray Canvas",
   url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   options: {
     maxNativeZoom: 16,
