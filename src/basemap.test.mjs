@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import {
   BASEMAP_BRT_GRIJS,
   BASEMAP_ESRI_GRAY,
-  BASEMAP_ESRI_IMAGERY,
   BASEMAP_OPENFREEMAP_POSITRON,
   BASEMAP_OSM_HOT,
   BASEMAPS,
@@ -30,14 +29,33 @@ describe("basemap tile set", () => {
     assert.equal(layers["OpenFreeMap Positron"], BASEMAP_OPENFREEMAP_POSITRON);
     assert.equal(layers["BRT Achtergrondkaart grijs"], BASEMAP_BRT_GRIJS);
     assert.equal(layers["OSM HOT"], BASEMAP_OSM_HOT);
-    assert.equal(layers["Esri World Imagery"], BASEMAP_ESRI_IMAGERY);
-    assert.equal(BASEMAPS.length, 5);
+    assert.equal(BASEMAPS.length, 4);
+    assert.equal(layers["Esri World Imagery"], undefined);
+  });
+
+  it("keeps attribution as short as the old OSM-only line", () => {
+    for (const spec of BASEMAPS) {
+      const credit = spec.options.attribution;
+      assert.ok(credit.length < 90, credit);
+      assert.doesNotMatch(
+        credit,
+        /i-cubed|DeLorme|GIS User Community|OpenMapTiles|Humanitarian|Kaartgegevens/,
+      );
+    }
+    assert.match(BASEMAP_ESRI_GRAY.options.attribution, /Esri/);
+    assert.match(BASEMAP_OSM_HOT.options.attribution, /openstreetmap\.org\/copyright/);
+    assert.match(
+      BASEMAP_OPENFREEMAP_POSITRON.options.attribution,
+      /openstreetmap\.org\/copyright/,
+    );
+    assert.match(BASEMAP_BRT_GRIJS.options.attribution, /Kadaster/);
   });
 
   it("does not use osm.org Mapnik or Stadia/Stamen", () => {
     const blob = JSON.stringify(BASEMAPS);
     assert.doesNotMatch(blob, /tile\.openstreetmap\.org/);
     assert.doesNotMatch(blob, /stadiamaps|stamen-tiles|stamen\.com/i);
+    assert.doesNotMatch(blob, /World_Imagery/);
   });
 
   it("uses OpenFreeMap vector Positron, not Carto raster", () => {
@@ -46,10 +64,7 @@ describe("basemap tile set", () => {
       BASEMAP_OPENFREEMAP_POSITRON.styleUrl,
       "https://tiles.openfreemap.org/styles/positron",
     );
-    assert.match(BASEMAP_OPENFREEMAP_POSITRON.options.attribution, /OpenFreeMap/);
     assert.match(BASEMAP_BRT_GRIJS.url, /brt\/achtergrondkaart.+grijs/);
-    assert.match(BASEMAP_BRT_GRIJS.options.attribution, /Kadaster/);
-    assert.match(BASEMAP_ESRI_IMAGERY.url, /World_Imagery\/MapServer\/tile/);
   });
 
   it("skips MapLibre Positron when the plugin is missing", () => {
@@ -58,8 +73,12 @@ describe("basemap tile set", () => {
     };
     assert.equal(canCreateBasemapLayer(BASEMAP_ESRI_GRAY, L), true);
     assert.equal(canCreateBasemapLayer(BASEMAP_OPENFREEMAP_POSITRON, L), false);
-    L.maplibreGL = () => "gl";
+    L.maplibreGL = (opts) => opts;
     assert.equal(canCreateBasemapLayer(BASEMAP_OPENFREEMAP_POSITRON, L), true);
-    assert.equal(createBasemapLayer(BASEMAP_OPENFREEMAP_POSITRON, L), "gl");
+    const gl = createBasemapLayer(BASEMAP_OPENFREEMAP_POSITRON, L);
+    assert.equal(
+      gl.attributionControl.customAttribution,
+      BASEMAP_OPENFREEMAP_POSITRON.options.attribution,
+    );
   });
 });

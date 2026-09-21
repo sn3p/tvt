@@ -134,12 +134,11 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
   - popup toont direct data als al gecached.
 
 ### Kaarttegels en attribution
-- Wisselaar linksonder (geen Carto-sleutel, geen osm.org-default, geen Stadia/Stamen):
-  - **Esri World Light Gray Canvas** (standaard) — geen API-sleutel; Esri-gebruiksvoorwaarden, geen open data. Attribution: Tiles © Esri.
-  - **OpenFreeMap Positron** — gratis, geen sleutel; OSM/OpenMapTiles. MapLibre-plugin in Leaflet.
-  - **BRT Achtergrondkaart grijs** — Kadaster/PDOK, CC BY; zwak buiten NL.
-  - **OSM HOT** — OSM-data (ODbL), tegels van OpenStreetMap France (niet tile.openstreetmap.org).
-  - **Esri World Imagery** — geen API-sleutel; Esri-gebruiksvoorwaarden, geen open data.
+- Wisselaar linksonder (geen Carto-sleutel, geen osm.org-default, geen Stadia/Stamen, geen Esri Imagery):
+  - **Esri World Light Gray Canvas** (standaard) — `Tiles © Esri`
+  - **OpenFreeMap Positron** — `© OpenStreetMap` (MapLibre-plugin; OSM/OpenMapTiles)
+  - **BRT Achtergrondkaart grijs** — `© Kadaster`
+  - **OSM HOT** — `© OpenStreetMap` (tegelhost OpenStreetMap France)
 - Attribution moet zichtbaar blijven op de Leaflet control.
 
 ## Entries sidebar controls (Tellingen)
