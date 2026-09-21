@@ -135,10 +135,10 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
 
 ### Kaarttegels en attribution
 - Wisselaar linksonder (geen Carto-sleutel, geen osm.org-default, geen Stadia/Stamen, geen Esri Imagery):
-  - **Esri World Light Gray Canvas** (standaard) — `Tiles © Esri`
+  - **OSM HOT** (standaard) — `© OpenStreetMap` (tegelhost OpenStreetMap France)
+  - **Esri World Light Gray Canvas** — `Tiles © Esri`
   - **OpenFreeMap Positron** — `© OpenStreetMap` (MapLibre-plugin; OSM/OpenMapTiles)
   - **BRT Achtergrondkaart grijs** — `© Kadaster`
-  - **OSM HOT** — `© OpenStreetMap` (tegelhost OpenStreetMap France)
 - Attribution moet zichtbaar blijven op de Leaflet control.
 
 ## Entries sidebar controls (Tellingen)

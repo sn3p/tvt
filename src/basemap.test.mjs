@@ -14,21 +14,25 @@ import {
 } from "./basemap.mjs";
 
 describe("basemap tile set", () => {
-  it("defaults to Esri Light Gray without a Carto API key", () => {
-    assert.equal(DEFAULT_BASEMAP, BASEMAP_ESRI_GRAY);
-    assert.match(
-      DEFAULT_BASEMAP.url,
-      /World_Light_Gray_Base\/MapServer\/tile/,
-    );
+  it("defaults to OSM HOT without a Carto API key", () => {
+    assert.equal(DEFAULT_BASEMAP, BASEMAP_OSM_HOT);
+    assert.equal(BASEMAPS[0], BASEMAP_OSM_HOT);
+    assert.match(DEFAULT_BASEMAP.url, /tile\.openstreetmap\.fr\/hot/);
     assert.doesNotMatch(DEFAULT_BASEMAP.url, /cartocdn|carto\.com|\?key=/);
   });
 
-  it("offers the try-out layers with full titles", () => {
+  it("lists OSM HOT first, then the other try-out layers", () => {
     const layers = leafletBaseLayers();
+    assert.deepEqual(Object.keys(layers), [
+      "OSM HOT",
+      "Esri World Light Gray Canvas",
+      "OpenFreeMap Positron",
+      "BRT Achtergrondkaart grijs",
+    ]);
+    assert.equal(layers["OSM HOT"], BASEMAP_OSM_HOT);
     assert.equal(layers["Esri World Light Gray Canvas"], BASEMAP_ESRI_GRAY);
     assert.equal(layers["OpenFreeMap Positron"], BASEMAP_OPENFREEMAP_POSITRON);
     assert.equal(layers["BRT Achtergrondkaart grijs"], BASEMAP_BRT_GRIJS);
-    assert.equal(layers["OSM HOT"], BASEMAP_OSM_HOT);
     assert.equal(BASEMAPS.length, 4);
     assert.equal(layers["Esri World Imagery"], undefined);
   });

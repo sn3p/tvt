@@ -48,13 +48,13 @@ export const BASEMAP_OSM_HOT = {
 };
 
 export const BASEMAPS = [
+  BASEMAP_OSM_HOT,
   BASEMAP_ESRI_GRAY,
   BASEMAP_OPENFREEMAP_POSITRON,
   BASEMAP_BRT_GRIJS,
-  BASEMAP_OSM_HOT,
 ];
 
-export const DEFAULT_BASEMAP = BASEMAP_ESRI_GRAY;
+export const DEFAULT_BASEMAP = BASEMAP_OSM_HOT;
 
 export function leafletBaseLayers() {
   return Object.fromEntries(BASEMAPS.map((spec) => [spec.label, spec]));
