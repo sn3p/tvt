@@ -1744,6 +1744,11 @@ body:not([data-theme="light"]) .tvt-legend {
   display: none;
 }
 
-.leaflet-heatmap-layer {
+.leaflet-heatmap-layer,
+.tvt-species-heat-layer {
   pointer-events: none;
+}
+
+.tvt-species-heat-hit {
+  pointer-events: all;
 }

@@ -42,6 +42,12 @@ import {
   occupancySequentialColor,
 } from "./species_sequential.mjs";
 import {
+  createSpeciesHeatLayer,
+  detachSpeciesHeatLayer,
+  speciesHeatCompositeForViz,
+  speciesHeatKernelsFromCells,
+} from "./species_heatmap.mjs";
+import {
   EFFORT_HEAT_LEGEND,
   clusterControlsEnabled,
   createEffortHeatLayer,
@@ -1147,6 +1153,98 @@ export function initApp() {
     typeof globalThis.L?.featureGroup === "function"
       ? globalThis.L.featureGroup()
       : globalThis.L.layerGroup();
+  const speciesHeatLayer = createSpeciesHeatLayer(globalThis.L);
+
+  function speciesCellUnproject(x, y) {
+    return map.options.crs.unproject(globalThis.L.point(x, y));
+  }
+
+  function clearSpeciesHeat() {
+    detachSpeciesHeatLayer(speciesHeatLayer, map, globalThis.L);
+  }
+
+  function paintSpeciesHeatKernels(kernels, viz) {
+    if (
+      !speciesHeatLayer ||
+      typeof speciesHeatLayer.setKernels !== "function"
+    ) {
+      return false;
+    }
+    if (
+      mode === "species" &&
+      typeof map.hasLayer === "function" &&
+      !map.hasLayer(speciesHeatLayer) &&
+      typeof speciesHeatLayer.addTo === "function"
+    ) {
+      speciesHeatLayer.addTo(map);
+    }
+    speciesHeatLayer.setKernels(kernels, {
+      composite: speciesHeatCompositeForViz(viz),
+    });
+    return true;
+  }
+
+  function speciesCellGeometry(cell, cellSizeM) {
+    const crs = map.options.crs;
+    const ix = Number(cell?.ix ?? 0) || 0;
+    const iy = Number(cell?.iy ?? 0) || 0;
+    const x0m = ix * cellSizeM;
+    const y0m = iy * cellSizeM;
+    const sw = crs.unproject(globalThis.L.point(x0m, y0m));
+    const ne = crs.unproject(
+      globalThis.L.point(x0m + cellSizeM, y0m + cellSizeM),
+    );
+    return {
+      bounds: globalThis.L.latLngBounds(sw, ne),
+      center: crs.unproject(
+        globalThis.L.point(x0m + cellSizeM / 2, y0m + cellSizeM / 2),
+      ),
+    };
+  }
+
+  function addSpeciesCellOverlay({
+    heatmap,
+    canvasHeat,
+    geometry,
+    cellSizeM,
+    fillColor,
+    fillOpacity,
+    tooltip,
+    className,
+    rectangleOptions = {},
+  }) {
+    if (heatmap) {
+      const circle = globalThis.L.circle(geometry.center, {
+        radius: Math.max(30, cellSizeM * 0.6),
+        stroke: false,
+        weight: 0,
+        opacity: 0,
+        fillColor,
+        fillOpacity: canvasHeat ? 0.01 : fillOpacity,
+        interactive: true,
+        bubblingMouseEvents: false,
+        renderer: gridSvgRenderer || undefined,
+        className: canvasHeat
+          ? `${className} tvt-species-heat-hit`.trim()
+          : className,
+      });
+      circle.bindTooltip(tooltip, { sticky: false });
+      circle.addTo(gridLayer);
+      return;
+    }
+    const rect = globalThis.L.rectangle(geometry.bounds, {
+      stroke: false,
+      fillColor,
+      fillOpacity,
+      interactive: true,
+      bubblingMouseEvents: false,
+      renderer: gridSvgRenderer || undefined,
+      className,
+      ...rectangleOptions,
+    });
+    rect.bindTooltip(tooltip, { sticky: false });
+    rect.addTo(gridLayer);
+  }
 
   let rendered = [];
   let totals = { entries: 0, birds: 0 };
@@ -1451,7 +1549,7 @@ export function initApp() {
       return;
     }
 
-    const effectiveStyle = effectiveSpeciesStyle();
+    const heatmap = effectiveSpeciesStyle() === "heatmap";
     const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
     let maxMetric = 0;
     for (const cell of cells) {
@@ -1460,7 +1558,19 @@ export function initApp() {
     }
     updateGridLegend({ metric, maxMetric });
 
-    const crs = map.options.crs;
+    const canvasHeat =
+      heatmap &&
+      paintSpeciesHeatKernels(
+        speciesHeatKernelsFromCells(cells, {
+          viz: SPECIES_VIZ_ABSOLUUT,
+          metric,
+          maxMetric,
+          cellSizeM,
+          unproject: speciesCellUnproject,
+        }),
+        SPECIES_VIZ_ABSOLUUT,
+      );
+
     for (const cell of cells) {
       const total = Number(cell?.entry_count ?? 0) || 0;
       const withN = Number(cell?.with_count ?? 0) || 0;
@@ -1477,22 +1587,12 @@ export function initApp() {
       if (!vNorm) continue;
 
       const nScale = Math.min(1, Math.sqrt(total) / 3);
-      const baseOpacity = effectiveStyle === "heatmap" ? 0.55 : 0.75;
+      const baseOpacity = heatmap ? 0.55 : 0.75;
       const fillOpacity = Math.min(0.95, baseOpacity * (0.25 + 0.75 * nScale));
       const fillColor =
         metric === "presence"
           ? occupancySequentialColor(value)
           : colorFromSequentialRamp(applyHighEndGamma(vNorm));
-
-      const ix = Number(cell?.ix ?? 0) || 0;
-      const iy = Number(cell?.iy ?? 0) || 0;
-      const x0m = ix * cellSizeM;
-      const y0m = iy * cellSizeM;
-      const x1m = x0m + cellSizeM;
-      const y1m = y0m + cellSizeM;
-      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
-      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
-      const bb = globalThis.L.latLngBounds(sw, ne);
 
       let tooltip = `<b>${selectedSpecies?.name || "Soort"}</b> — `;
       switch (metric) {
@@ -1517,35 +1617,16 @@ export function initApp() {
         }
       }
 
-      if (effectiveStyle === "heatmap") {
-        const cxm = x0m + cellSizeM / 2;
-        const cym = y0m + cellSizeM / 2;
-        const center = crs.unproject(globalThis.L.point(cxm, cym));
-        const circle = globalThis.L.circle(center, {
-          radius: Math.max(30, cellSizeM * 0.6),
-          stroke: false,
-          fillColor,
-          fillOpacity,
-          interactive: true,
-          bubblingMouseEvents: false,
-          renderer: gridSvgRenderer || undefined,
-          className: "tvt-species-grid-cell",
-        });
-        circle.bindTooltip(tooltip, { sticky: false });
-        circle.addTo(gridLayer);
-      } else {
-        const rect = globalThis.L.rectangle(bb, {
-          stroke: false,
-          fillColor,
-          fillOpacity,
-          interactive: true,
-          bubblingMouseEvents: false,
-          renderer: gridSvgRenderer || undefined,
-          className: "tvt-species-grid-cell",
-        });
-        rect.bindTooltip(tooltip, { sticky: false });
-        rect.addTo(gridLayer);
-      }
+      addSpeciesCellOverlay({
+        heatmap,
+        canvasHeat,
+        geometry: speciesCellGeometry(cell, cellSizeM),
+        cellSizeM,
+        fillColor,
+        fillOpacity,
+        tooltip,
+        className: "tvt-species-grid-cell",
+      });
     }
   }
 
@@ -1568,9 +1649,20 @@ export function initApp() {
       return;
     }
 
+    const heatmap = effectiveStyle === "heatmap";
     const cellSizeM = Number(json?.cell_size_m ?? gridCellM) || gridCellM;
-    const crs = map.options.crs;
     const baselinePct = formatNumber(baseline * 100, { maxDecimals: 0 });
+    const canvasHeat =
+      heatmap &&
+      paintSpeciesHeatKernels(
+        speciesHeatKernelsFromCells(cells, {
+          viz: SPECIES_VIZ_RELATIEF,
+          baseline,
+          cellSizeM,
+          unproject: speciesCellUnproject,
+        }),
+        SPECIES_VIZ_RELATIEF,
+      );
 
     for (const cell of cells) {
       const total = Number(cell?.entry_count ?? 0) || 0;
@@ -1583,16 +1675,6 @@ export function initApp() {
       if (!fillColor) continue;
 
       const isAbsent = occupancy <= 0;
-      const ix = Number(cell?.ix ?? 0) || 0;
-      const iy = Number(cell?.iy ?? 0) || 0;
-      const x0m = ix * cellSizeM;
-      const y0m = iy * cellSizeM;
-      const x1m = x0m + cellSizeM;
-      const y1m = y0m + cellSizeM;
-      const sw = crs.unproject(globalThis.L.point(x0m, y0m));
-      const ne = crs.unproject(globalThis.L.point(x1m, y1m));
-      const bb = globalThis.L.latLngBounds(sw, ne);
-
       const pct = formatNumber(occupancy * 100, { maxDecimals: 1 });
       let tooltip = `<b>${selectedSpecies?.name || "Soort"}</b> — `;
       if (isAbsent) {
@@ -1601,43 +1683,30 @@ export function initApp() {
         tooltip += `${formatLiftMultiplier(lift)} t.o.v. ${baselinePct}% in beeld · aanwezig in ${formatNumber(withN, { maxDecimals: 0 })}/${formatNumber(total, { maxDecimals: 0 })} (${pct}%)`;
       }
 
-      const className = isAbsent
-        ? "tvt-species-grid-cell tvt-species-lift-absent"
-        : "tvt-species-grid-cell";
-      const layerOptions = {
-        stroke: isAbsent,
-        color: "#64748b",
-        weight: isAbsent ? 1 : 0,
-        opacity: isAbsent ? 0.45 : 0,
+      addSpeciesCellOverlay({
+        heatmap,
+        canvasHeat,
+        geometry: speciesCellGeometry(cell, cellSizeM),
+        cellSizeM,
         fillColor,
         fillOpacity: isAbsent ? 0.4 : 0.72,
-        interactive: true,
-        bubblingMouseEvents: false,
-        renderer: gridSvgRenderer || undefined,
-        className,
-      };
-      const shape =
-        effectiveStyle === "heatmap"
-          ? globalThis.L.circle(
-              crs.unproject(
-                globalThis.L.point(x0m + cellSizeM / 2, y0m + cellSizeM / 2),
-              ),
-              {
-                ...layerOptions,
-                radius: Math.max(30, cellSizeM * 0.6),
-                stroke: false,
-                weight: 0,
-                opacity: 0,
-              },
-            )
-          : globalThis.L.rectangle(bb, layerOptions);
-      shape.bindTooltip(tooltip, { sticky: false });
-      shape.addTo(gridLayer);
+        tooltip,
+        className: isAbsent
+          ? "tvt-species-grid-cell tvt-species-lift-absent"
+          : "tvt-species-grid-cell",
+        rectangleOptions: {
+          stroke: isAbsent,
+          color: "#64748b",
+          weight: isAbsent ? 1 : 0,
+          opacity: isAbsent ? 0.45 : 0,
+        },
+      });
     }
   }
 
   async function computeBackendSpeciesGrid() {
     gridLayer.clearLayers();
+    clearSpeciesHeat();
     if (!selectedSpecies) {
       speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
       setComputing(false);
@@ -1699,6 +1768,7 @@ export function initApp() {
     } catch (err) {
       if (isAbortError(err)) return;
       gridLayer.clearLayers();
+      clearSpeciesHeat();
       setComputing(false);
       setStatsPlainText(
         `Soortenraster laden mislukt: ${err?.message || String(err)}`,
@@ -2380,6 +2450,7 @@ export function initApp() {
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
+      clearSpeciesHeat();
       if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
         setPointRenderKind("heatmap");
       }
@@ -4653,6 +4724,7 @@ export function initApp() {
         speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
         speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
         gridLayer.clearLayers();
+        clearSpeciesHeat();
         setComputing(false);
         renderSpeciesList({ query: speciesSearchInput.value });
         updateViewportStats();

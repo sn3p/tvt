@@ -158,6 +158,7 @@ Why canvas is default:
 - `Points` rendering uses canvas-first `circleMarker` drawing to reduce DOM pressure.
 - Markercluster (DOM-based) is only used when explicitly selected (`Clusters`) or when `Auto` chooses clustering for readability/performance.
 - `Heatmap` is an explicit weergave: a canvas KDE of telling locations (N inzendingen), not bird totals. Automatisch never selects it.
+- Soorten `Heatmap` uses the same canvas glow, masked by occupancy/lift (no-data where `entry_count` is 0). Relatief keeps lift colours; Absoluut keeps YlOrRd occupancy. Raster is unchanged.
 
 ### Later (out of scope MVP)
 - Alle PC4 gebieden / heel NL (mogelijk scraping + eigen DB).
