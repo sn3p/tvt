@@ -53,15 +53,22 @@ export function writeSidebarOpen(storage, open, { isMobile = false } = {}) {
 /**
  * Tellingen and Soorten share one expand/collapse value. Restore or default
  * only on the first mode enter; later switches keep the current value.
+ * Crossing the mobile/desktop breakpoint reloads that breakpoint's saved
+ * value so a later toggle cannot overwrite the other viewport's preference.
  */
 export function resolveSidebarOpenOnModeEnter({
   initialized = false,
+  breakpointChanged = false,
   currentOpen = true,
   savedOpen = null,
   mode = "points",
   isMobile = false,
   hasSelectedSpecies = false,
 } = {}) {
+  if (breakpointChanged) {
+    if (savedOpen != null) return Boolean(savedOpen);
+    return Boolean(currentOpen);
+  }
   if (initialized) return Boolean(currentOpen);
   if (savedOpen != null) return Boolean(savedOpen);
   return defaultSidebarOpen({ mode, isMobile, hasSelectedSpecies });

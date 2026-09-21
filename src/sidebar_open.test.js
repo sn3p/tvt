@@ -155,4 +155,43 @@ describe("resolveSidebarOpenOnModeEnter", () => {
       true,
     );
   });
+
+  it("reloads the saved value when the breakpoint changes", () => {
+    assert.equal(
+      resolveSidebarOpenOnModeEnter({
+        initialized: true,
+        breakpointChanged: true,
+        currentOpen: true,
+        savedOpen: false,
+        mode: "points",
+        isMobile: true,
+      }),
+      false,
+    );
+    assert.equal(
+      resolveSidebarOpenOnModeEnter({
+        initialized: true,
+        breakpointChanged: true,
+        currentOpen: false,
+        savedOpen: true,
+        mode: "species",
+        isMobile: false,
+      }),
+      true,
+    );
+  });
+
+  it("keeps the current value when the new breakpoint has nothing saved", () => {
+    assert.equal(
+      resolveSidebarOpenOnModeEnter({
+        initialized: true,
+        breakpointChanged: true,
+        currentOpen: true,
+        savedOpen: null,
+        mode: "points",
+        isMobile: true,
+      }),
+      true,
+    );
+  });
 });

@@ -276,6 +276,7 @@ export function initApp() {
   const POINTS_SETTINGS_STORAGE_KEY = "tvt:pointsSettings";
   const GRID_CELL_M_LS_KEY = "tvt:GridCellM";
   const GRID_CELL_AUTO_LS_KEY = "tvt:GridCellAuto";
+  const SIDEBAR_MOBILE_MQ = "(max-width: 880px)";
   const POINT_CAP_HINT = "Te veel punten in beeld — zoom in of kies Clusters.";
   const CELL_TILE_POINTS_HINT =
     "Op dit zoomniveau toont de kaart één stip per rastercel. Zoom in voor individuele tellingen.";
@@ -1129,6 +1130,7 @@ export function initApp() {
 
   let sidebarOpen = true;
   let sidebarOpenInitialized = false;
+  let sidebarOpenIsMobile = null;
   let hudStats = { entries: 0, birds: 0 };
   let hudControl = null;
   let sidebarToggleControl = null;
@@ -2437,15 +2439,18 @@ export function initApp() {
   });
 
   function isMobile() {
-    return window.matchMedia && window.matchMedia("(max-width: 880px)").matches;
+    return window.matchMedia && window.matchMedia(SIDEBAR_MOBILE_MQ).matches;
   }
 
   function applySidebarOpenForMode() {
+    const nextIsMobile = isMobile();
+    const breakpointChanged =
+      sidebarOpenInitialized && sidebarOpenIsMobile !== nextIsMobile;
     let saved = null;
-    if (!sidebarOpenInitialized) {
+    if (!sidebarOpenInitialized || breakpointChanged) {
       try {
         saved = readSavedSidebarOpen(window.localStorage, {
-          isMobile: isMobile(),
+          isMobile: nextIsMobile,
           preferMode: mode,
         });
       } catch {
@@ -2454,15 +2459,30 @@ export function initApp() {
     }
     sidebarOpen = resolveSidebarOpenOnModeEnter({
       initialized: sidebarOpenInitialized,
+      breakpointChanged,
       currentOpen: sidebarOpen,
       savedOpen: saved,
       mode,
-      isMobile: isMobile(),
+      isMobile: nextIsMobile,
       hasSelectedSpecies: Boolean(selectedSpecies),
     });
     sidebarOpenInitialized = true;
+    sidebarOpenIsMobile = nextIsMobile;
     setSidebarOpen(sidebarOpen, { persist: false, reason: "mode-sync" });
   }
+
+  function watchSidebarBreakpoint() {
+    if (!window.matchMedia) return;
+    const mql = window.matchMedia(SIDEBAR_MOBILE_MQ);
+    const onChange = () => applySidebarOpenForMode();
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", onChange);
+    } else if (typeof mql.addListener === "function") {
+      mql.addListener(onChange);
+    }
+  }
+
+  watchSidebarBreakpoint();
 
   function setSidebarOpen(open, { persist = true, reason = "" } = {}) {
     sidebarOpen = Boolean(open);
