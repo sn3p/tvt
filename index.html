@@ -18,6 +18,7 @@
     crossorigin=""></script>
   <script defer src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
     crossorigin=""></script>
+  <script defer src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" crossorigin=""></script>
   <script type="importmap">
     {
       "imports": {
@@ -265,8 +266,12 @@
         <fieldset class="sidebar-fieldset">
 
           <div class="sidebar-row-full">
-            <div class="sidebar-label muted">Weergavemodus</div>
-            <div class="segmented" role="group" aria-label="Weergavemodus">
+            <div class="sidebar-label muted">
+              Weergave
+              <span class="help-icon" data-controller="tooltip"
+                data-tooltip-content-value="Automatisch: punten of clusters. Heatmap: tel-inspanning (waar is geteld), niet aantallen vogels.">?</span>
+            </div>
+            <div class="segmented" role="group" aria-label="Weergave">
               <label class="seg">
                 <input id="pointsDisplayAuto" type="radio" name="pointsDisplayMode" value="auto" checked>
                 <span>Automatisch</span>
@@ -279,7 +284,12 @@
                 <input id="pointsDisplayClusters" type="radio" name="pointsDisplayMode" value="clusters">
                 <span>Clusters</span>
               </label>
+              <label class="seg">
+                <input id="pointsDisplayHeatmap" type="radio" name="pointsDisplayMode" value="heatmap">
+                <span>Heatmap</span>
+              </label>
             </div>
+            <div class="sidebar-hint muted-2">Heatmap toont waar is geteld (N tellingen), niet occupancy of vogelsommen.</div>
           </div>
 
           <div id="pointsClusterStyleRow" class="sidebar-row-full" hidden>

@@ -41,6 +41,19 @@ import {
   colorFromSequentialRamp,
   occupancySequentialColor,
 } from "./species_sequential.mjs";
+import {
+  EFFORT_HEAT_LEGEND,
+  clusterControlsEnabled,
+  createEffortHeatLayer,
+  effortHeatLatLngs,
+  effortHeatLayerOptions,
+  effortHeatMax,
+  isHeatmapDisplayMode,
+  parsePointsDisplayMode,
+  pointsDisplayModeFromRadios,
+  resolvePointsDisplayRenderKind,
+  shouldSlicePointsForCap,
+} from "./effort_heatmap.mjs";
 
 export function initApp() {
   const mapEl = document.querySelector("#map");
@@ -86,6 +99,7 @@ export function initApp() {
   const pointsDisplayClusters = document.querySelector(
     "#pointsDisplayClusters",
   );
+  const pointsDisplayHeatmap = document.querySelector("#pointsDisplayHeatmap");
   const pointsClusterStyleRow = document.querySelector(
     "#pointsClusterStyleRow",
   );
@@ -179,6 +193,7 @@ export function initApp() {
     !pointsDisplayAuto ||
     !pointsDisplayPoints ||
     !pointsDisplayClusters ||
+    !pointsDisplayHeatmap ||
     !pointsClusterStyleRow ||
     !pointsClusterStyleBlended ||
     !pointsClusterStyleMixed ||
@@ -585,11 +600,11 @@ export function initApp() {
   }
 
   const POINTS_SETTINGS_DEFAULTS = {
-    displayMode: pointsDisplayClusters.checked
-      ? "clusters"
-      : pointsDisplayPoints.checked
-        ? "points"
-        : "auto",
+    displayMode: pointsDisplayModeFromRadios({
+      heatmap: pointsDisplayHeatmap.checked,
+      clusters: pointsDisplayClusters.checked,
+      points: pointsDisplayPoints.checked,
+    }),
     clusterEngine: "worker",
     clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
     maxPointsInView: normalizeOptionalMaxPointsInView(
@@ -623,11 +638,10 @@ export function initApp() {
   }
 
   function normalizePointsSettings(raw) {
-    const displayMode = ["auto", "points", "clusters"].includes(
+    const displayMode = parsePointsDisplayMode(
       raw?.displayMode,
-    )
-      ? raw.displayMode
-      : POINTS_SETTINGS_DEFAULTS.displayMode;
+      POINTS_SETTINGS_DEFAULTS.displayMode,
+    );
     const clusterEngine = ["default", "worker"].includes(raw?.clusterEngine)
       ? raw.clusterEngine
       : POINTS_SETTINGS_DEFAULTS.clusterEngine;
@@ -733,10 +747,11 @@ export function initApp() {
   }
 
   function updatePointsControlsVisibility() {
-    const clusterStyleEnabled = pointsSettings.displayMode !== "points";
-    const disableClusteringAtZoomEnabled =
-      pointsSettings.displayMode !== "points";
-    const clusterEngineEnabled = pointsSettings.displayMode !== "points";
+    const clusterStyleEnabled = clusterControlsEnabled(
+      pointsSettings.displayMode,
+    );
+    const disableClusteringAtZoomEnabled = clusterStyleEnabled;
+    const clusterEngineEnabled = clusterStyleEnabled;
     const workerAvailable = isWorkerClusterAvailable();
 
     pointsClusterStyleRow.hidden = false;
@@ -771,6 +786,7 @@ export function initApp() {
     pointsDisplayAuto.checked = pointsSettings.displayMode === "auto";
     pointsDisplayPoints.checked = pointsSettings.displayMode === "points";
     pointsDisplayClusters.checked = pointsSettings.displayMode === "clusters";
+    pointsDisplayHeatmap.checked = pointsSettings.displayMode === "heatmap";
     pointsClusterEngineDefault.checked =
       pointsSettings.clusterEngine === "default";
     pointsClusterEngineWorker.checked =
@@ -826,16 +842,24 @@ export function initApp() {
         pointsSettings.disableClusteringAtZoom;
     }
 
-    if (mode === "points") schedulePointTileFetch({ immediate: true });
+    if (mode === "points") {
+      setPointRenderKind(
+        resolvePointRenderKind({
+          totalCount: latestPointEntryCount,
+          forceClusters: forceClustersForCellTiles,
+        }),
+      );
+      schedulePointTileFetch({ immediate: true });
+    }
   }
 
   function readPointsSettingsFromUI() {
     const next = normalizePointsSettings({
-      displayMode: pointsDisplayClusters.checked
-        ? "clusters"
-        : pointsDisplayPoints.checked
-          ? "points"
-          : "auto",
+      displayMode: pointsDisplayModeFromRadios({
+        heatmap: pointsDisplayHeatmap.checked,
+        clusters: pointsDisplayClusters.checked,
+        points: pointsDisplayPoints.checked,
+      }),
       clusterEngine: pointsClusterEngineWorker.checked ? "worker" : "default",
       clusterStyle: pointsClusterStyleMixed.checked ? "split" : "blended",
       maxPointsInView: pointsMaxPointsInput.value,
@@ -1105,7 +1129,11 @@ export function initApp() {
   const pointsClusterLayer = createPointsClusterLayer();
   const pointsWorkerClusterLayer = globalThis.L.layerGroup();
   const pointsCanvasLayer = globalThis.L.layerGroup();
-  let pointRenderKind = "points"; // points | clusters
+  const heatLayerAvailable = typeof globalThis.L?.heatLayer === "function";
+  const pointsHeatLayer =
+    createEffortHeatLayer(globalThis.L, NL_INITIAL_ZOOM) ||
+    globalThis.L.layerGroup();
+  let pointRenderKind = "points"; // points | clusters | heatmap
   let pointsLayer = pointsCanvasLayer;
   pointsLayer.addTo(map);
 
@@ -2000,9 +2028,18 @@ export function initApp() {
   }
 
   function setPointRenderKind(nextKind, { force = false } = {}) {
-    const resolved = nextKind === "clusters" ? "clusters" : "points";
+    const resolved =
+      nextKind === "heatmap"
+        ? "heatmap"
+        : nextKind === "clusters"
+          ? "clusters"
+          : "points";
     const nextLayer =
-      resolved === "clusters" ? resolveClusterLayer() : pointsCanvasLayer;
+      resolved === "heatmap"
+        ? pointsHeatLayer
+        : resolved === "clusters"
+          ? resolveClusterLayer()
+          : pointsCanvasLayer;
     if (!force && resolved === pointRenderKind && pointsLayer === nextLayer)
       return;
     const previousLayer = pointsLayer;
@@ -2010,11 +2047,15 @@ export function initApp() {
     if (wasVisible) map.removeLayer(previousLayer);
     if (typeof previousLayer.clearLayers === "function")
       previousLayer.clearLayers();
+    else if (typeof previousLayer.setLatLngs === "function")
+      previousLayer.setLatLngs([]);
+    if (resolved !== "heatmap") clearEffortHeat();
     pointRenderKind = resolved;
     pointsLayer = nextLayer;
     pointMarkerStateById.clear();
     refreshRenderedPointStats();
     if (wasVisible && mode === "points") pointsLayer.addTo(map);
+    syncTellingenOverlayChrome();
   }
 
   function clamp01(x) {
@@ -2108,6 +2149,49 @@ export function initApp() {
   }
   // Default mode is "points".
   setGridLegendVisible(false);
+
+  function updateEffortLegend() {
+    if (
+      !gridLegendTitleEl ||
+      !gridLegendScaleEl ||
+      !gridLegendLabelsEl ||
+      !gridLegendNoteEl
+    )
+      return;
+
+    gridLegendTitleEl.textContent = EFFORT_HEAT_LEGEND.title;
+    gridLegendScaleEl.replaceChildren();
+    for (const color of EFFORT_HEAT_LEGEND.colors) {
+      const sw = document.createElement("span");
+      sw.className = "tvt-grid-legend-swatch";
+      sw.style.background = color;
+      gridLegendScaleEl.appendChild(sw);
+    }
+
+    gridLegendLabelsEl.replaceChildren();
+    for (const text of EFFORT_HEAT_LEGEND.labels) {
+      const el = document.createElement("span");
+      el.textContent = text;
+      gridLegendLabelsEl.appendChild(el);
+    }
+
+    if (gridLegendTooltipEl) {
+      gridLegendTooltipEl.setAttribute(
+        "data-tooltip-content-value",
+        EFFORT_HEAT_LEGEND.tooltip,
+      );
+    }
+    gridLegendNoteEl.textContent = EFFORT_HEAT_LEGEND.note;
+  }
+
+  function syncTellingenOverlayChrome() {
+    if (mode !== "points") return;
+    const heat = isHeatmapDisplayMode(pointsSettings.displayMode);
+    setPointsLayerVisible(true);
+    setLegendVisible(!heat);
+    setGridLegendVisible(heat);
+    if (heat) updateEffortLegend();
+  }
 
   function updateGridLegend({ metric, maxMetric }) {
     if (
@@ -2287,9 +2371,10 @@ export function initApp() {
     } else {
       if (map.hasLayer(gridLayer)) map.removeLayer(gridLayer);
       gridLayer.clearLayers();
-      setPointsLayerVisible(true);
-      setLegendVisible(true);
-      setGridLegendVisible(false);
+      if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
+        setPointRenderKind("heatmap");
+      }
+      syncTellingenOverlayChrome();
     }
 
     // Layout changes (sidebar show/hide) require a size invalidation.
@@ -2897,6 +2982,16 @@ export function initApp() {
     }
     updatePointsControlsVisibility();
     if (mode !== "points") return;
+    if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
+      setPointRenderKind("heatmap");
+    } else if (pointRenderKind === "heatmap") {
+      setPointRenderKind(
+        resolvePointRenderKind({
+          totalCount: latestPointEntryCount,
+          forceClusters: forceClustersForCellTiles,
+        }),
+      );
+    }
     schedulePointTileFetch({ immediate });
   }
 
@@ -2905,6 +3000,9 @@ export function initApp() {
     onPointsControlsChanged(),
   );
   pointsDisplayClusters.addEventListener("change", () =>
+    onPointsControlsChanged(),
+  );
+  pointsDisplayHeatmap.addEventListener("change", () =>
     onPointsControlsChanged(),
   );
   pointsClusterStyleBlended.addEventListener("change", () =>
@@ -3172,11 +3270,86 @@ export function initApp() {
     if (typeof pointsClusterLayer.clearLayers === "function")
       pointsClusterLayer.clearLayers();
     clearWorkerClusterLayer();
+    clearEffortHeat();
     workerClusterPointSignature = "";
     pointMarkerStateById.clear();
     pointStatsOverride = null;
     pointEntryByKeyForCurrentRender.clear();
     refreshRenderedPointStats();
+  }
+
+  function clearEffortHeat() {
+    if (typeof pointsHeatLayer.setLatLngs === "function") {
+      pointsHeatLayer.setLatLngs([]);
+    }
+  }
+
+  function refreshRenderedPointStatsFromEntries(entries) {
+    const rows = Array.isArray(entries) ? entries : [];
+    rendered = [];
+    for (const entry of rows) {
+      const lat = Number(entry?.lat);
+      const lng = Number(entry?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const isorg = pointEntryIsorg(entry);
+      rendered.push({
+        latlng: globalThis.L.latLng(lat, lng),
+        birdsTotal: 0,
+        count: entryWeight(entry),
+        isPrivate: !isorg,
+        isIsorg: isorg,
+        birdIds: new Set(),
+        birdNames: new Set(),
+        entry,
+      });
+    }
+    totals = {
+      entries:
+        pointTotalsOverride?.totalEntries ??
+        rendered.reduce((sum, row) => sum + entryWeight(row), 0),
+      birds: pointTotalsOverride?.totalBirds ?? 0,
+    };
+    updateViewportStats();
+    maybeMessageForPointCap();
+  }
+
+  function paintEffortHeat(entries) {
+    if (
+      !heatLayerAvailable ||
+      typeof pointsHeatLayer.setLatLngs !== "function"
+    ) {
+      setPointsSidebarMessage(
+        "Heatmap niet beschikbaar (leaflet.heat niet geladen).",
+      );
+      refreshRenderedPointStatsFromEntries(entries);
+      return;
+    }
+    const latlngs = effortHeatLatLngs(entries);
+    pointsHeatLayer.setOptions(
+      effortHeatLayerOptions(map.getZoom(), {
+        max: effortHeatMax(latlngs.map((row) => row[2])),
+      }),
+    );
+    pointsHeatLayer.setLatLngs(latlngs);
+    refreshRenderedPointStatsFromEntries(entries);
+  }
+
+  function syncEffortHeatStyle() {
+    if (pointRenderKind !== "heatmap") return;
+    if (
+      !heatLayerAvailable ||
+      typeof pointsHeatLayer.setOptions !== "function"
+    ) {
+      return;
+    }
+    const latlngs = effortHeatLatLngs(
+      Array.from(pointEntryByKeyForCurrentRender.values()),
+    );
+    pointsHeatLayer.setOptions(
+      effortHeatLayerOptions(map.getZoom(), {
+        max: effortHeatMax(latlngs.map((row) => row[2])),
+      }),
+    );
   }
 
   function clearPointTotalsState() {
@@ -3352,6 +3525,7 @@ export function initApp() {
   }
 
   function wantsCellDots() {
+    if (isHeatmapDisplayMode(pointsSettings.displayMode)) return false;
     return pointsSettings.displayMode !== "clusters";
   }
 
@@ -3362,6 +3536,9 @@ export function initApp() {
   }
 
   function cellPayloadRenderFlags(isCellPayload) {
+    if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
+      return { forceClusters: false, preferCellDots: false };
+    }
     return {
       forceClusters: Boolean(isCellPayload) && !wantsCellDots(),
       preferCellDots: Boolean(isCellPayload) && wantsCellDots(),
@@ -3380,19 +3557,17 @@ export function initApp() {
     forceClusters = false,
     preferCellDots = false,
   }) {
-    if (forceClusters) return "clusters";
-    if (preferCellDots) return "points";
-    if (
-      pointsSettings.displayMode === "auto" &&
-      hasMaxPointsInViewCap() &&
-      totalCount > pointsSettings.maxPointsInView
-    ) {
-      return "clusters";
-    }
-    return pointsSettings.displayMode === "clusters" ? "clusters" : "points";
+    return resolvePointsDisplayRenderKind({
+      displayMode: pointsSettings.displayMode,
+      totalCount,
+      maxPointsInView: pointsSettings.maxPointsInView,
+      forceClusters,
+      preferCellDots,
+    });
   }
 
   function maybeMessageForPointCap() {
+    if (isHeatmapDisplayMode(pointsSettings.displayMode)) return;
     if (!isPointCapExceeded || !hasMaxPointsInViewCap()) return;
     if (
       pointsSettings.displayMode === "auto" &&
@@ -3949,8 +4124,10 @@ export function initApp() {
         }),
       );
       const paintProgressively =
-        pointRenderKind === "points" &&
-        (pointsSettings.displayMode === "points" || !hasMaxPointsInViewCap());
+        pointRenderKind === "heatmap" ||
+        (pointRenderKind === "points" &&
+          (pointsSettings.displayMode === "points" ||
+            !hasMaxPointsInViewCap()));
       if (preferCellDots) {
         setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
       }
@@ -3992,7 +4169,7 @@ export function initApp() {
         const isCellPayload = tileKind === "cell" || tileKind === "mixed";
         let entries = Array.from(nextEntriesById.values());
         if (
-          pointsSettings.displayMode === "points" &&
+          shouldSlicePointsForCap(pointsSettings.displayMode) &&
           pointRenderKind === "points" &&
           tileKind !== "cell" &&
           isPointCapExceeded &&
@@ -4010,6 +4187,16 @@ export function initApp() {
           setPointsSidebarMessage(
             `Te veel punten in beeld — Automatisch toont clusters (${fmtInt(latestPointEntryCount)}).`,
           );
+        } else if (isHeatmapDisplayMode(pointsSettings.displayMode)) {
+          if (!heatLayerAvailable) {
+            setPointsSidebarMessage(
+              "Heatmap niet beschikbaar (leaflet.heat niet geladen).",
+            );
+          } else if (
+            !(workerClusterFailed && pointsSettings.clusterEngine === "worker")
+          ) {
+            setPointsSidebarMessage("");
+          }
         } else if (wantsCellDots() && isCellPayload) {
           setPointsSidebarMessage(CELL_TILE_POINTS_HINT);
         } else if (
@@ -4027,6 +4214,11 @@ export function initApp() {
         pointEntryByKeyForCurrentRender.clear();
         for (const entry of entriesForRender) {
           pointEntryByKeyForCurrentRender.set(pointMarkerIdKey(entry), entry);
+        }
+        if (pointRenderKind === "heatmap") {
+          paintEffortHeat(entriesForRender);
+          lastPaintedMapZoomFloor = z;
+          return;
         }
         upsertPointMarkers(entriesForRender, { pruneMissing });
         refreshRenderedPointStats();
@@ -4556,6 +4748,7 @@ export function initApp() {
     updatePointsControlsVisibility();
     if (mode === "points") {
       const zoomFloor = Math.max(6, Math.min(13, Math.floor(map.getZoom())));
+      if (pointRenderKind === "heatmap") syncEffortHeatStyle();
       if (
         lastPaintedMapZoomFloor != null &&
         zoomFloor !== lastPaintedMapZoomFloor

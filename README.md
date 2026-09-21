@@ -145,7 +145,7 @@ Doel: inzendingen (entries) van de Nationale Tuinvogeltelling op een kaart tonen
 
 Points mode keeps the top-bar filters (`Particulier`, `School`, `Year`) and adds render/performance controls in the Entries sidebar:
 
-- `Weergavemodus`: `Automatisch` (default), `Punten`, `Clusters`
+- `Weergave`: `Automatisch` (default), `Punten`, `Clusters`, `Heatmap` (tel-inspanning: waar is geteld)
 - `Clusterstijl`: `Samengevoegd`, `Gesplitst` (active when clustering is used)
 - `Max punten in beeld`: leeg = geen limiet (alles tonen)
 - `Tilebuffer`: `0`, `1` (default), `2`
@@ -157,6 +157,7 @@ Why canvas is default:
 
 - `Points` rendering uses canvas-first `circleMarker` drawing to reduce DOM pressure.
 - Markercluster (DOM-based) is only used when explicitly selected (`Clusters`) or when `Auto` chooses clustering for readability/performance.
+- `Heatmap` is an explicit weergave: a canvas KDE of telling locations (N inzendingen), not bird totals. Automatisch never selects it.
 
 ### Later (out of scope MVP)
 - Alle PC4 gebieden / heel NL (mogelijk scraping + eigen DB).

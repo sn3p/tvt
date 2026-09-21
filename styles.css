@@ -1743,3 +1743,7 @@ body:not([data-theme="light"]) .tvt-legend {
 .tvt-grid-legend-note:empty {
   display: none;
 }
+
+.leaflet-heatmap-layer {
+  pointer-events: none;
+}
