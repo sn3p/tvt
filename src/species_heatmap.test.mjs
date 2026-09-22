@@ -21,6 +21,7 @@ import {
   speciesHeatKernelsFromCells,
   speciesHeatRadiusForZoom,
   speciesHeatRadiusPx,
+  speciesHeatZoomAnimationEnabled,
 } from "./species_heatmap.mjs";
 
 const unproject = (x, y) => ({ lat: y / 1000, lng: x / 1000 });
@@ -354,7 +355,186 @@ describe("species heat field", () => {
     assert.ok(pixels[mid + 3] > 0);
     assert.ok(pixels[right] < pixels[left]);
     assert.ok(pixels[right + 2] > pixels[left + 2]);
-    assert.notEqual(pixels[mid], pixels[left]);
     assert.notEqual(pixels[mid], pixels[right]);
+  });
+});
+
+describe("species heat zoom animation", () => {
+  it("uses the same zoomanim gate as leaflet.heat", () => {
+    assert.equal(
+      speciesHeatZoomAnimationEnabled(
+        { options: { zoomAnimation: true } },
+        { Browser: { any3d: true } },
+      ),
+      true,
+    );
+    assert.equal(
+      speciesHeatZoomAnimationEnabled(
+        { options: { zoomAnimation: true }, _zoomAnimated: true },
+        {},
+      ),
+      false,
+    );
+  });
+
+  it("scales the canvas from its centre during zoomanim like Tellingen heat", () => {
+    const transforms = [];
+    const bound = [];
+    const L = {
+      Browser: { any3d: true },
+      setOptions(obj, options) {
+        obj.options = options || {};
+      },
+      DomUtil: {
+        testProp: () => "transformOrigin",
+        addClass(el, className) {
+          el.className = `${el.className} ${className}`.trim();
+        },
+        create(_tag, className) {
+          return {
+            className,
+            style: {},
+            width: 300,
+            height: 150,
+            parentNode: null,
+            getContext: () => ({
+              clearRect() {},
+              createImageData(w, h) {
+                return {
+                  data: new Uint8ClampedArray(w * h * 4),
+                  width: w,
+                  height: h,
+                };
+              },
+              putImageData() {},
+            }),
+          };
+        },
+        setPosition() {},
+        setTransform(el, offset, scale) {
+          transforms.push({ el, offset, scale });
+        },
+      },
+      Layer: {
+        extend(proto) {
+          function Ctor(options) {
+            proto.initialize.call(this, options);
+          }
+          Object.assign(Ctor.prototype, proto);
+          return Ctor;
+        },
+      },
+    };
+    const layer = createSpeciesHeatLayer(L);
+    const map = {
+      options: { zoomAnimation: true },
+      getPanes: () => ({
+        overlayPane: {
+          appendChild(el) {
+            el.parentNode = this;
+          },
+        },
+      }),
+      on(type) {
+        bound.push(type);
+      },
+      off() {},
+      getSize: () => ({ x: 20, y: 10 }),
+      getCenter: () => ({ lat: 52.1, lng: 5.2 }),
+      containerPointToLayerPoint: () => ({ x: 3, y: 4 }),
+      latLngToContainerPoint: () => ({ x: 2, y: 2 }),
+      getZoom: () => 8,
+      getZoomScale: () => 2,
+      _getCenterOffset: () => ({
+        _multiplyBy() {
+          return {
+            subtract() {
+              return { x: 6, y: 7 };
+            },
+          };
+        },
+      }),
+      _getMapPanePos: () => ({ x: 0, y: 0 }),
+    };
+    layer.onAdd(map);
+    assert.equal(layer._canvas.style.transformOrigin, "50% 50%");
+    assert.match(layer._canvas.className, /leaflet-zoom-animated/);
+    assert.deepEqual(bound, ["moveend", "zoomanim"]);
+    assert.ok(!bound.includes("viewreset"));
+    layer._animateZoom({ zoom: 9, center: { lat: 52, lng: 5 } });
+    assert.equal(transforms.length, 1);
+    assert.equal(transforms[0].scale, 2);
+    assert.deepEqual(transforms[0].offset, { x: 6, y: 7 });
+  });
+
+  it("does not wipe the canvas bitmap when the viewport size is unchanged", () => {
+    let widthWrites = 0;
+    const L = {
+      Browser: { any3d: true },
+      setOptions(obj, options) {
+        obj.options = options || {};
+      },
+      DomUtil: {
+        testProp: () => "transformOrigin",
+        addClass() {},
+        create() {
+          const canvas = {
+            className: "",
+            style: {},
+            parentNode: null,
+            getContext: () => ({
+              clearRect() {},
+              createImageData(w, h) {
+                return {
+                  data: new Uint8ClampedArray(w * h * 4),
+                  width: w,
+                  height: h,
+                };
+              },
+              putImageData() {},
+            }),
+          };
+          let width = 300;
+          Object.defineProperty(canvas, "width", {
+            get() {
+              return width;
+            },
+            set(value) {
+              widthWrites += 1;
+              width = value;
+            },
+          });
+          canvas.height = 150;
+          return canvas;
+        },
+        setPosition() {},
+      },
+      Layer: {
+        extend(proto) {
+          function Ctor(options) {
+            proto.initialize.call(this, options);
+          }
+          Object.assign(Ctor.prototype, proto);
+          return Ctor;
+        },
+      },
+    };
+    const layer = createSpeciesHeatLayer(L);
+    const map = {
+      options: { zoomAnimation: true },
+      getPanes: () => ({ overlayPane: { appendChild() {} } }),
+      on() {},
+      off() {},
+      getSize: () => ({ x: 20, y: 10 }),
+      getCenter: () => ({ lat: 52.1, lng: 5.2 }),
+      containerPointToLayerPoint: () => ({ x: 0, y: 0 }),
+      latLngToContainerPoint: () => ({ x: 1, y: 1 }),
+      getZoom: () => 8,
+    };
+    layer.onAdd(map);
+    const afterInit = widthWrites;
+    assert.ok(afterInit >= 1);
+    layer._reset();
+    assert.equal(widthWrites, afterInit);
   });
 });

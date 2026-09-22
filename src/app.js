@@ -44,7 +44,6 @@ import {
 import {
   createSpeciesHeatLayer,
   detachSpeciesHeatLayer,
-  resetSpeciesHeatKernels,
   speciesHeatKernelsFromCells,
 } from "./species_heatmap.mjs";
 import {
@@ -1707,30 +1706,20 @@ export function initApp() {
   function prepareSpeciesHeatForCompute() {
     if (effectiveSpeciesStyle() !== "heatmap") {
       clearSpeciesHeat();
-      return;
     }
-    if (
-      speciesHeatLayer &&
-      speciesHeatLayer._map &&
-      typeof speciesHeatLayer.setKernels === "function"
-    ) {
-      resetSpeciesHeatKernels(speciesHeatLayer, globalThis.L);
-      speciesHeatLayer.setKernels([]);
-      return;
-    }
-    clearSpeciesHeat();
   }
 
   async function computeBackendSpeciesGrid() {
     gridLayer.clearLayers();
-    prepareSpeciesHeatForCompute();
     if (!selectedSpecies) {
+      clearSpeciesHeat();
       speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
       setComputing(false);
       refreshSpeciesLegend();
       updateHud();
       return;
     }
+    prepareSpeciesHeatForCompute();
 
     const bounds = currentSpeciesBounds();
     if (!bounds) {

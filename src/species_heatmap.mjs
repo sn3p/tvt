@@ -320,6 +320,26 @@ export function detachSpeciesHeatLayer(layer, map, L) {
   return layer;
 }
 
+/** Same gate leaflet.heat@0.2.0 uses for zoomanim / leaflet-zoom-animated. */
+export function speciesHeatZoomAnimationEnabled(map, L) {
+  return Boolean(map?.options?.zoomAnimation && L?.Browser?.any3d);
+}
+
+function applySpeciesHeatCanvasOrigin(canvas, L) {
+  if (!canvas?.style) return canvas;
+  const testProp = L?.DomUtil?.testProp;
+  const originProp =
+    typeof testProp === "function"
+      ? testProp([
+          "transformOrigin",
+          "WebkitTransformOrigin",
+          "msTransformOrigin",
+        ])
+      : "transformOrigin";
+  if (originProp) canvas.style[originProp] = "50% 50%";
+  return canvas;
+}
+
 export function createSpeciesHeatLayer(L) {
   if (!canCreateSpeciesHeatLayer(L)) return null;
   const SpeciesHeat = L.Layer.extend({
@@ -335,18 +355,18 @@ export function createSpeciesHeatLayer(L) {
     },
     onAdd(map) {
       this._map = map;
-      this._canvas = L.DomUtil.create(
-        "canvas",
-        `leaflet-layer leaflet-zoom-animated leaflet-heatmap-layer ${SPECIES_HEAT_LAYER_CLASS}`,
-      );
-      this._canvas.style.pointerEvents = "none";
+      if (!this._canvas) this._initCanvas();
       const pane = speciesHeatPane(map);
-      if (pane && typeof pane.appendChild === "function") {
+      if (
+        pane &&
+        typeof pane.appendChild === "function" &&
+        this._canvas.parentNode !== pane
+      ) {
         pane.appendChild(this._canvas);
       }
       if (typeof map.on === "function") {
-        map.on("moveend resize viewreset", this._reset, this);
-        if (map._zoomAnimated) {
+        map.on("moveend", this._reset, this);
+        if (speciesHeatZoomAnimationEnabled(map, L)) {
           map.on("zoomanim", this._animateZoom, this);
         }
       }
@@ -358,34 +378,58 @@ export function createSpeciesHeatLayer(L) {
         this._canvas.parentNode.removeChild(this._canvas);
       }
       if (map && typeof map.off === "function") {
-        map.off("moveend resize viewreset", this._reset, this);
+        map.off("moveend", this._reset, this);
         map.off("zoomanim", this._animateZoom, this);
       }
-      this._canvas = null;
       this._map = null;
-      this._width = null;
-      this._height = null;
     },
     setKernels(kernels, { viz, cellSizeM } = {}) {
       this._kernels = Array.isArray(kernels) ? kernels : [];
       if (viz) this._viz = parseSpeciesViz(viz);
       if (cellSizeM != null) this._cellSizeM = Number(cellSizeM) || 0;
-      if (this._map && this._canvas) this._redraw();
+      if (this._map && this._canvas && !this._map._animating) this._redraw();
+    },
+    _initCanvas() {
+      this._canvas = L.DomUtil.create(
+        "canvas",
+        `leaflet-heatmap-layer leaflet-layer ${SPECIES_HEAT_LAYER_CLASS}`,
+      );
+      this._canvas.style.pointerEvents = "none";
+      applySpeciesHeatCanvasOrigin(this._canvas, L);
+      const size =
+        typeof this._map?.getSize === "function"
+          ? this._map.getSize()
+          : { x: 0, y: 0 };
+      this._canvas.width = this._width = Number(size?.x) || 0;
+      this._canvas.height = this._height = Number(size?.y) || 0;
+      const animated = speciesHeatZoomAnimationEnabled(this._map, L);
+      const zoomClass = `leaflet-zoom-${animated ? "animated" : "hide"}`;
+      if (typeof L.DomUtil.addClass === "function") {
+        L.DomUtil.addClass(this._canvas, zoomClass);
+      } else {
+        this._canvas.className = `${this._canvas.className} ${zoomClass}`.trim();
+      }
     },
     _animateZoom(e) {
       if (!this._map || !this._canvas) return;
       if (typeof this._map.getZoomScale !== "function") return;
       if (typeof this._map._getCenterOffset !== "function") return;
-      if (typeof L.DomUtil.setTransform !== "function") return;
-      try {
-        const scale = this._map.getZoomScale(e.zoom);
-        const offset = this._map
-          ._getCenterOffset(e.center)
-          ._multiplyBy(-scale)
-          .subtract(this._map._getMapPanePos());
+      const scale = this._map.getZoomScale(e.zoom);
+      const offset = this._map
+        ._getCenterOffset(e.center)
+        ._multiplyBy(-scale)
+        .subtract(this._map._getMapPanePos());
+      if (typeof L.DomUtil.setTransform === "function") {
         L.DomUtil.setTransform(this._canvas, offset, scale);
-      } catch {
-        // Ignore zoom-animation internals; _reset on zoomend redraws.
+        return;
+      }
+      const transform = L.DomUtil.TRANSFORM;
+      if (transform && this._canvas.style) {
+        const translate =
+          typeof L.DomUtil.getTranslateString === "function"
+            ? L.DomUtil.getTranslateString(offset)
+            : `translate(${offset.x}px,${offset.y}px)`;
+        this._canvas.style[transform] = `${translate} scale(${scale})`;
       }
     },
     _reset() {
@@ -401,8 +445,12 @@ export function createSpeciesHeatLayer(L) {
       const size = this._map.getSize();
       const width = Number(size?.x) || 0;
       const height = Number(size?.y) || 0;
-      this._canvas.width = this._width = width;
-      this._canvas.height = this._height = height;
+      if (this._width !== width) {
+        this._canvas.width = this._width = width;
+      }
+      if (this._height !== height) {
+        this._canvas.height = this._height = height;
+      }
       this._redraw();
     },
     _redraw() {
