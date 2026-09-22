@@ -22,7 +22,9 @@ import {
 import { WorkerClusterSource } from "./worker_cluster_source.js";
 import {
   BASEMAPS,
-  DEFAULT_BASEMAP,
+  defaultBasemapForMode,
+  resolveBasemapForMode,
+  basemapStorageKeyForMode,
   canCreateBasemapLayer,
   createBasemapLayer,
 } from "./basemap.mjs";
@@ -1066,16 +1068,76 @@ export function initApp() {
   }
 
   const baseLayers = {};
-  let defaultBasemapLayer = null;
   for (const spec of BASEMAPS) {
     if (!canCreateBasemapLayer(spec, globalThis.L)) continue;
-    const layer = tileLayerFromBasemap(spec);
-    baseLayers[spec.label] = layer;
-    if (spec === DEFAULT_BASEMAP) defaultBasemapLayer = layer;
+    baseLayers[spec.label] = tileLayerFromBasemap(spec);
   }
-  const initialBasemap =
-    defaultBasemapLayer || Object.values(baseLayers)[0];
-  if (initialBasemap) initialBasemap.addTo(map);
+  let applyingBasemap = false;
+
+  function readStoredBasemapId(viewMode) {
+    try {
+      return window.localStorage.getItem(basemapStorageKeyForMode(viewMode));
+    } catch {
+      return null;
+    }
+  }
+
+  function persistBasemapId(viewMode, id) {
+    const value = String(id || "").trim();
+    if (!value) return;
+    try {
+      window.localStorage.setItem(basemapStorageKeyForMode(viewMode), value);
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function specFromBasemapEvent(e) {
+    if (e?.name && baseLayers[e.name]) {
+      return BASEMAPS.find((spec) => spec.label === e.name) || null;
+    }
+    for (const spec of BASEMAPS) {
+      if (baseLayers[spec.label] === e?.layer) return spec;
+    }
+    return null;
+  }
+
+  function layerForBasemapSpec(spec) {
+    if (!spec) return null;
+    return baseLayers[spec.label] || null;
+  }
+
+  function applyBasemapForMode(viewMode) {
+    const spec = resolveBasemapForMode(viewMode, readStoredBasemapId(viewMode));
+    const nextLayer =
+      layerForBasemapSpec(spec) ||
+      layerForBasemapSpec(defaultBasemapForMode(viewMode)) ||
+      Object.values(baseLayers)[0];
+    if (!nextLayer) return;
+    applyingBasemap = true;
+    try {
+      for (const layer of Object.values(baseLayers)) {
+        if (layer !== nextLayer && map.hasLayer(layer)) map.removeLayer(layer);
+      }
+      if (!map.hasLayer(nextLayer)) nextLayer.addTo(map);
+    } finally {
+      applyingBasemap = false;
+    }
+  }
+
+  applyBasemapForMode(
+    (() => {
+      try {
+        const m = (new URL(window.location.href).searchParams.get("mode") || "")
+          .trim()
+          .toLowerCase();
+        if (m === "species" || m === "soorten") return "species";
+        return "points";
+      } catch {
+        return "points";
+      }
+    })(),
+  );
   const basemapControl = globalThis.L.control.layers(baseLayers, {}, {
     position: "bottomleft",
     collapsed: true,
@@ -1088,6 +1150,12 @@ export function initApp() {
     basemapToggle.setAttribute("aria-label", "Basiskaart");
     basemapToggle.setAttribute("title", "Basiskaart");
   }
+  map.on("baselayerchange", (e) => {
+    if (applyingBasemap) return;
+    const spec = specFromBasemapEvent(e);
+    if (!spec) return;
+    persistBasemapId(mode, spec.id);
+  });
 
   function clusterToneForCounts({ privateCount, isorgCount }) {
     if (isorgCount === 0) return "private";
@@ -2426,6 +2494,7 @@ export function initApp() {
     const prevMode = mode;
     mode = nextMode === "species" ? "species" : "points";
     syncModeToUrl(mode);
+    applyBasemapForMode(mode);
 
     modePointsBtn.setAttribute(
       "aria-pressed",
