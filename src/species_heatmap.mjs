@@ -218,19 +218,69 @@ export function stampSpeciesHeatKernel(
   }
 }
 
+export function acquireSpeciesHeatFieldBuffers(width, height, buffers, ctx) {
+  const w = Math.max(0, Math.floor(Number(width)) || 0);
+  const h = Math.max(0, Math.floor(Number(height)) || 0);
+  const n = w * h;
+  const sameSize =
+    buffers &&
+    buffers.n === n &&
+    buffers.present instanceof Float32Array &&
+    buffers.present.length === n &&
+    buffers.value instanceof Float32Array &&
+    buffers.value.length === n &&
+    buffers.absent instanceof Float32Array &&
+    buffers.absent.length === n;
+  if (!sameSize) {
+    const next = {
+      n,
+      present: new Float32Array(n),
+      value: new Float32Array(n),
+      absent: new Float32Array(n),
+      image:
+        n > 0 && typeof ctx?.createImageData === "function"
+          ? ctx.createImageData(w, h)
+          : null,
+    };
+    if (!buffers) return next;
+    buffers.n = next.n;
+    buffers.present = next.present;
+    buffers.value = next.value;
+    buffers.absent = next.absent;
+    buffers.image = next.image;
+    return buffers;
+  }
+  buffers.present.fill(0);
+  buffers.value.fill(0);
+  buffers.absent.fill(0);
+  const imageOk =
+    buffers.image &&
+    buffers.image.width === w &&
+    buffers.image.height === h &&
+    buffers.image.data?.length === n * 4;
+  if (imageOk) {
+    buffers.image.data.fill(0);
+  } else if (n > 0 && typeof ctx?.createImageData === "function") {
+    buffers.image = ctx.createImageData(w, h);
+  } else {
+    buffers.image = null;
+  }
+  return buffers;
+}
+
 export function paintSpeciesHeatField(
   ctx,
   width,
   height,
   projected,
-  { viz = "absoluut", radius = 16 } = {},
+  { viz = "absoluut", radius = 16, buffers } = {},
 ) {
   if (!ctx || !(width > 0) || !(height > 0)) return;
   if (typeof ctx.createImageData !== "function") return;
-  const n = width * height;
-  const present = new Float32Array(n);
-  const value = new Float32Array(n);
-  const absent = new Float32Array(n);
+  const field = acquireSpeciesHeatFieldBuffers(width, height, buffers, ctx);
+  const { present, value, absent, image } = field;
+  if (!image?.data) return;
+  const n = field.n;
   const r = Number(radius) || 16;
   for (const point of Array.isArray(projected) ? projected : []) {
     const x = Number(point?.x);
@@ -250,7 +300,6 @@ export function paintSpeciesHeatField(
       Boolean(point?.isAbsent),
     );
   }
-  const image = ctx.createImageData(width, height);
   const data = image.data;
   const relatief = parseSpeciesViz(viz) === SPECIES_VIZ_RELATIEF;
   for (let i = 0; i < n; i++) {
@@ -350,6 +399,7 @@ export function createSpeciesHeatLayer(L) {
         this.options = options || {};
       }
       this._kernels = [];
+      this._fieldBuffers = {};
       this._viz = "absoluut";
       this._cellSizeM = 0;
     },
@@ -494,6 +544,7 @@ export function createSpeciesHeatLayer(L) {
       paintSpeciesHeatField(ctx, width, height, projected, {
         viz: this._viz,
         radius,
+        buffers: this._fieldBuffers,
       });
     },
   });

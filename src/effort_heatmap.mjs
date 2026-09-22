@@ -169,6 +169,7 @@ export function cancelEffortHeatRedraw(layer, L) {
   return layer;
 }
 
+/** Drop stored latlngs without redraw. Does not wipe an attached canvas. */
 export function resetEffortHeatData(layer, L) {
   cancelEffortHeatRedraw(layer, L);
   if (layer) layer._latlngs = [];

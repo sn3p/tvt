@@ -9,6 +9,7 @@ import {
 import { occupancySequentialColor } from "./species_sequential.mjs";
 import {
   SPECIES_HEAT_LAYER_CLASS,
+  acquireSpeciesHeatFieldBuffers,
   canCreateSpeciesHeatLayer,
   colorWithAlpha,
   createSpeciesHeatLayer,
@@ -356,6 +357,74 @@ describe("species heat field", () => {
     assert.ok(pixels[right] < pixels[left]);
     assert.ok(pixels[right + 2] > pixels[left + 2]);
     assert.notEqual(pixels[mid], pixels[right]);
+  });
+
+  it("reuses field buffers while the viewport size is unchanged", () => {
+    let imageAllocations = 0;
+    const buffers = {};
+    const ctx = {
+      createImageData(w, h) {
+        imageAllocations += 1;
+        return {
+          data: new Uint8ClampedArray(w * h * 4),
+          width: w,
+          height: h,
+        };
+      },
+      putImageData() {},
+    };
+    paintSpeciesHeatField(
+      ctx,
+      8,
+      8,
+      [{ x: 4, y: 4, amount: 1, isAbsent: false }],
+      { viz: "absoluut", radius: 2, buffers },
+    );
+    const present = buffers.present;
+    const image = buffers.image;
+    assert.equal(imageAllocations, 1);
+    assert.equal(present.length, 64);
+    assert.ok(present.some((n) => n > 0));
+    assert.ok(image.data.some((n) => n > 0));
+
+    paintSpeciesHeatField(ctx, 8, 8, [], {
+      viz: "absoluut",
+      radius: 2,
+      buffers,
+    });
+    assert.equal(buffers.present, present);
+    assert.equal(buffers.image, image);
+    assert.equal(imageAllocations, 1);
+    assert.ok(present.every((n) => n === 0));
+    assert.ok(image.data.every((n) => n === 0));
+
+    paintSpeciesHeatField(ctx, 4, 4, [], {
+      viz: "absoluut",
+      radius: 2,
+      buffers,
+    });
+    assert.notEqual(buffers.present, present);
+    assert.equal(buffers.present.length, 16);
+    assert.equal(imageAllocations, 2);
+  });
+
+  it("zeros reused typed arrays without allocating when size matches", () => {
+    const ctx = {
+      createImageData(w, h) {
+        return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+      },
+    };
+    const first = acquireSpeciesHeatFieldBuffers(3, 2, null, ctx);
+    first.present[0] = 9;
+    first.value[1] = 8;
+    first.absent[2] = 7;
+    first.image.data[0] = 255;
+    const second = acquireSpeciesHeatFieldBuffers(3, 2, first, ctx);
+    assert.equal(second, first);
+    assert.equal(first.present[0], 0);
+    assert.equal(first.value[1], 0);
+    assert.equal(first.absent[2], 0);
+    assert.equal(first.image.data[0], 0);
   });
 });
 

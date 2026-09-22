@@ -60,7 +60,6 @@ import {
   isHeatmapDisplayMode,
   parsePointsDisplayMode,
   pointsDisplayModeFromRadios,
-  resetEffortHeatData,
   resolvePointsDisplayRenderKind,
   setEffortHeatLatLngs,
   setEffortHeatOptions,
@@ -1605,6 +1604,7 @@ export function initApp() {
   function renderBackendSpeciesGrid(json) {
     const cells = Array.isArray(json?.cells) ? json.cells : [];
     if (!cells.length) {
+      blankSpeciesHeat();
       updateGridLegend({
         metric,
         maxMetric: 0,
@@ -1710,6 +1710,7 @@ export function initApp() {
     updateLiftLegend({ baseline });
 
     if (!cells.length) {
+      blankSpeciesHeat();
       setComputing(false);
       updateHud();
       return;
@@ -1771,10 +1772,24 @@ export function initApp() {
     }
   }
 
+  function blankSpeciesHeat() {
+    if (
+      speciesHeatLayer &&
+      typeof speciesHeatLayer.setKernels === "function"
+    ) {
+      speciesHeatLayer.setKernels([]);
+      return;
+    }
+    clearSpeciesHeat();
+  }
+
   function prepareSpeciesHeatForCompute() {
     if (effectiveSpeciesStyle() !== "heatmap") {
       clearSpeciesHeat();
+      return;
     }
+    // Keep the current glow while a heatmap request is in flight so pan/zoom
+    // does not flash empty. Empty and invalid responses call blankSpeciesHeat.
   }
 
   async function computeBackendSpeciesGrid() {
@@ -1791,12 +1806,14 @@ export function initApp() {
 
     const bounds = currentSpeciesBounds();
     if (!bounds) {
+      blankSpeciesHeat();
       setComputing(false);
       return;
     }
 
     const year = Number(yearInput.value || 0) || 0;
     if (!year) {
+      blankSpeciesHeat();
       setComputing(false);
       return;
     }
@@ -3435,7 +3452,7 @@ export function initApp() {
   }
 
   function clearEffortHeat() {
-    resetEffortHeatData(pointsHeatLayer, globalThis.L);
+    detachEffortHeatLayer(pointsHeatLayer, map, globalThis.L);
   }
 
   function refreshRenderedPointStatsFromEntries(entries) {

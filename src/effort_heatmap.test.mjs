@@ -275,6 +275,27 @@ describe("effort heat options and legend", () => {
     assert.equal(setLatLngsCalls, 0);
     assert.equal(layer._frame, null);
     assert.deepEqual(layer._latlngs, []);
+    assert.ok(layer._map);
+  });
+
+  it("hides leftover heat pixels by removing the layer from the map", () => {
+    const removed = [];
+    const map = {
+      hasLayer: () => true,
+      removeLayer(layer) {
+        removed.push(layer);
+        layer._map = null;
+      },
+    };
+    const layer = {
+      _map: map,
+      _latlngs: [[52, 5, 4]],
+      _canvas: { width: 8, height: 8 },
+    };
+    detachEffortHeatLayer(layer, map, {});
+    assert.equal(removed[0], layer);
+    assert.equal(layer._map, null);
+    assert.deepEqual(layer._latlngs, []);
   });
 
   it("cancels pending redraw from heat layer onRemove", () => {
