@@ -31,8 +31,10 @@ jobs:
           set -euo pipefail
           node --check src/app.js
           node --check src/basemap.mjs
+          node --check src/effort_heatmap.mjs
           node --check src/popup_outside_click.js
           node --check src/sidebar_open.js
+          node --check src/species_heatmap.mjs
           node --check src/species_sequential.mjs
           node --test src/popup_outside_click.test.js
           node --test src/sidebar_open.test.js
@@ -44,9 +46,21 @@ jobs:
           test -f _site/main.js
           test -d _site/src
           node --test src/basemap.test.mjs
+          node --test src/effort_heatmap.test.mjs
+          node --test src/species_heatmap.test.mjs
           node --test src/species_lift.test.mjs
           node --test src/species_sequential.test.mjs
           grep -q 'https://tvt-api.matthijskuiper.nl/api/v1' _site/index.html
+          grep -q 'id="pointsDisplayHeatmap"' _site/index.html
+          grep -q 'leaflet.heat@0.2.0' _site/index.html
+          if grep -nF 'voorlopig cirkels' _site/index.html; then
+            echo 'Soorten Heatmap tooltip must not describe placeholder circles' >&2
+            exit 1
+          fi
+          if grep -nF 'Weergavemodus' _site/index.html; then
+            echo 'Tellingen label must be Weergave, not Weergavemodus' >&2
+            exit 1
+          fi
           grep -F 'http://127.0.0.1:3000/api/v1' index.html
           grep -F 'http://127.0.0.1:3000/api/v1' README.md
           if grep -nF 'http://localhost:3000/api/v1' README.md; then

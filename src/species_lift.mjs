@@ -54,21 +54,25 @@ function rgbString(rgb) {
   return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
 
-export function colorFromDivergingT(t) {
+export function rgbFromDivergingT(t) {
   const x = Math.max(-1, Math.min(1, Number(t) || 0));
   if (x < 0) {
     const w = x + 1;
-    return rgbString([
+    return [
       lerpChannel(LIFT_COLOR_LOW[0], LIFT_COLOR_MID[0], w),
       lerpChannel(LIFT_COLOR_LOW[1], LIFT_COLOR_MID[1], w),
       lerpChannel(LIFT_COLOR_LOW[2], LIFT_COLOR_MID[2], w),
-    ]);
+    ];
   }
-  return rgbString([
+  return [
     lerpChannel(LIFT_COLOR_MID[0], LIFT_COLOR_HIGH[0], x),
     lerpChannel(LIFT_COLOR_MID[1], LIFT_COLOR_HIGH[1], x),
     lerpChannel(LIFT_COLOR_MID[2], LIFT_COLOR_HIGH[2], x),
-  ]);
+  ];
+}
+
+export function colorFromDivergingT(t) {
+  return rgbString(rgbFromDivergingT(t));
 }
 
 export function colorForLiftCell({ occupancy, lift }) {

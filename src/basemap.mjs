@@ -55,6 +55,35 @@ export const BASEMAPS = [
 ];
 
 export const DEFAULT_BASEMAP = BASEMAP_OSM_HOT;
+export const DEFAULT_BASEMAP_POINTS = BASEMAP_OSM_HOT;
+export const DEFAULT_BASEMAP_SPECIES = BASEMAP_ESRI_GRAY;
+
+export const BASEMAP_STORAGE_KEYS = {
+  points: "tvt:basemap:points",
+  species: "tvt:basemap:species",
+};
+
+export function basemapStorageKeyForMode(mode) {
+  return mode === "species"
+    ? BASEMAP_STORAGE_KEYS.species
+    : BASEMAP_STORAGE_KEYS.points;
+}
+
+export function defaultBasemapForMode(mode) {
+  return mode === "species"
+    ? DEFAULT_BASEMAP_SPECIES
+    : DEFAULT_BASEMAP_POINTS;
+}
+
+export function parseBasemapId(raw) {
+  const id = String(raw || "").trim();
+  if (!id) return null;
+  return BASEMAPS.find((spec) => spec.id === id) || null;
+}
+
+export function resolveBasemapForMode(mode, storedId) {
+  return parseBasemapId(storedId) || defaultBasemapForMode(mode);
+}
 
 export function leafletBaseLayers() {
   return Object.fromEntries(BASEMAPS.map((spec) => [spec.label, spec]));

@@ -6,11 +6,18 @@ import {
   BASEMAP_OPENFREEMAP_POSITRON,
   BASEMAP_OSM_HOT,
   BASEMAPS,
+  BASEMAP_STORAGE_KEYS,
   DEFAULT_BASEMAP,
+  DEFAULT_BASEMAP_POINTS,
+  DEFAULT_BASEMAP_SPECIES,
   KIND_MAPLIBRE,
+  basemapStorageKeyForMode,
   canCreateBasemapLayer,
   createBasemapLayer,
+  defaultBasemapForMode,
   leafletBaseLayers,
+  parseBasemapId,
+  resolveBasemapForMode,
 } from "./basemap.mjs";
 
 describe("basemap tile set", () => {
@@ -19,6 +26,39 @@ describe("basemap tile set", () => {
     assert.equal(BASEMAPS[0], BASEMAP_OSM_HOT);
     assert.match(DEFAULT_BASEMAP.url, /tile\.openstreetmap\.fr\/hot/);
     assert.doesNotMatch(DEFAULT_BASEMAP.url, /cartocdn|carto\.com|\?key=/);
+  });
+
+  it("defaults Tellingen to OSM HOT and Soorten to Esri Light Gray", () => {
+    assert.equal(DEFAULT_BASEMAP_POINTS, BASEMAP_OSM_HOT);
+    assert.equal(DEFAULT_BASEMAP_SPECIES, BASEMAP_ESRI_GRAY);
+    assert.equal(defaultBasemapForMode("points"), BASEMAP_OSM_HOT);
+    assert.equal(defaultBasemapForMode("species"), BASEMAP_ESRI_GRAY);
+    assert.equal(defaultBasemapForMode("tellingen"), BASEMAP_OSM_HOT);
+  });
+
+  it("stores a manual pick per view, not one shared key", () => {
+    assert.equal(basemapStorageKeyForMode("points"), BASEMAP_STORAGE_KEYS.points);
+    assert.equal(
+      basemapStorageKeyForMode("species"),
+      BASEMAP_STORAGE_KEYS.species,
+    );
+    assert.notEqual(
+      BASEMAP_STORAGE_KEYS.points,
+      BASEMAP_STORAGE_KEYS.species,
+    );
+    assert.equal(parseBasemapId("brt-grijs"), BASEMAP_BRT_GRIJS);
+    assert.equal(parseBasemapId("nope"), null);
+    assert.equal(parseBasemapId(""), null);
+    assert.equal(
+      resolveBasemapForMode("points", "brt-grijs"),
+      BASEMAP_BRT_GRIJS,
+    );
+    assert.equal(
+      resolveBasemapForMode("species", "osm-hot"),
+      BASEMAP_OSM_HOT,
+    );
+    assert.equal(resolveBasemapForMode("species", null), BASEMAP_ESRI_GRAY);
+    assert.equal(resolveBasemapForMode("points", "nope"), BASEMAP_OSM_HOT);
   });
 
   it("lists OSM HOT first, then the other try-out layers", () => {
