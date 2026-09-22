@@ -4793,10 +4793,48 @@ export function initApp() {
     );
   }
 
+  function abortSpeciesDataLoads() {
+    speciesCatalogSeq += 1;
+    speciesGridSeq += 1;
+    if (speciesCatalogFetchTimer) {
+      window.clearTimeout(speciesCatalogFetchTimer);
+      speciesCatalogFetchTimer = 0;
+    }
+    if (computeTimer) {
+      window.clearTimeout(computeTimer);
+      computeTimer = 0;
+    }
+    if (speciesCatalogAbortController) {
+      speciesCatalogAbortController.abort();
+      speciesCatalogAbortController = null;
+    }
+    if (speciesGridAbortController) {
+      speciesGridAbortController.abort();
+      speciesGridAbortController = null;
+    }
+  }
+
+  function clearSpeciesYearOverlays() {
+    abortSpeciesDataLoads();
+    rendered = [];
+    speciesCatalogRows = [];
+    speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
+    speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
+    gridLayer.clearLayers();
+    clearSpeciesHeat();
+    setComputing(false);
+    renderSpeciesList({ query: speciesSearchInput.value });
+    updateViewportStats();
+  }
+
   async function loadForYear(year) {
     const seq = ++loadSeq;
     const y = Number(year || 0) || 0;
-    if (!y) return;
+    if (!y) {
+      clearSpeciesYearOverlays();
+      setStatsPlainText("Selecteer een jaar.");
+      return;
+    }
 
     setStatsLoading(`Dataset ${y} laden…`);
 
@@ -4811,15 +4849,7 @@ export function initApp() {
         : [];
 
       if (yearsAvailable.length > 0 && !yearsAvailable.includes(y)) {
-        rendered = [];
-        speciesCatalogRows = [];
-        speciesCatalogStats = { entryCount: 0, privateCount: 0, isorgCount: 0 };
-        speciesGridSummary = { total: 0, with: 0, sum: 0, avg: 0 };
-        gridLayer.clearLayers();
-        clearSpeciesHeat();
-        setComputing(false);
-        renderSpeciesList({ query: speciesSearchInput.value });
-        updateViewportStats();
+        clearSpeciesYearOverlays();
         setStatsPlainText(`Geen dataset beschikbaar voor ${y}.`);
         return;
       }
